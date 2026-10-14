@@ -1,10 +1,13 @@
-import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NestMiddleware,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { Redis } from 'ioredis';
 import { AuthService } from 'src/auth/auth.service';
 import { RedisService } from '@liaoliaots/nestjs-redis';
-
 
 @Injectable()
 export class RedisTokenMiddleware implements NestMiddleware {
@@ -13,9 +16,9 @@ export class RedisTokenMiddleware implements NestMiddleware {
   constructor(
     private jwtService: JwtService,
     private authService: AuthService,
-    private readonly redisService: RedisService
+    private readonly redisService: RedisService,
   ) {
-    this.redis = this.redisService.getOrNil('default')
+    this.redis = this.redisService.getOrNil('default');
     if (!this.redis) {
       console.warn('Redis client not found. Skipping cache initialization.');
     }
@@ -27,7 +30,6 @@ export class RedisTokenMiddleware implements NestMiddleware {
   }
 
   async use(req: Request, res: Response, next: NextFunction) {
-
     // kill the service
     // throw new UnauthorizedException('Missing or invalid token');
 
@@ -38,7 +40,9 @@ export class RedisTokenMiddleware implements NestMiddleware {
       token = authHeader.replace('Bearer ', '').trim();
     } else if (req.query?.token) {
       const qToken = String(req.query.token).trim();
-      token = qToken.startsWith('Bearer ') ? qToken.replace(/^Bearer\s+/, '').trim() : qToken;
+      token = qToken.startsWith('Bearer ')
+        ? qToken.replace(/^Bearer\s+/, '').trim()
+        : qToken;
     }
 
     if (!token) {
@@ -48,17 +52,24 @@ export class RedisTokenMiddleware implements NestMiddleware {
     const cacheKey = `token:${token}`;
 
     try {
-      const payload = this.jwtService.verify(token, { ignoreExpiration: false }); // throws if invalid
+      const payload = this.jwtService.verify(token, {
+        ignoreExpiration: false,
+      }); // throws if invalid
+      // External member JWTs no longer resolve local profiles. Member auth has its own signing key.
+      if (
+        payload.iss !== 'https://mimate.otesuto.com/admin-auth/login' ||
+        payload.aud !== 'cms' ||
+        payload.kind !== 'admin-access'
+      ) {
+        throw new UnauthorizedException('Missing or invalid token');
+      }
 
-
-
-      const dbUser = await this.authService.getUserMMID(payload.id)
+      const dbUser = await this.authService.getLocalMember(payload.id);
 
       if (!dbUser) throw new UnauthorizedException('User not found');
 
       // if member suspended, throw error
       if (dbUser.is_suspended) {
-
         let message = 'Your account has been suspended, please contact support';
 
         throw new UnauthorizedException(message);

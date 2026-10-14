@@ -2,7 +2,9 @@
 
 Status: initial source audit, 2026-10-13; updated 2026-10-14.
 Member auth now uses additive tables in the isolated database; see [MEMBER_AUTH.md](MEMBER_AUTH.md).
-Broader legacy identity consolidation below remains pending.
+Update 2026-10-14: the mmid connection and external identity/vehicle queries are
+removed. CMS resolves local IDs; no tables/data were dropped. The inventory below
+is historical. Member profile/social integration remains pending.
 
 User decisions: create a new database, leave old databases intact; email-only OTP.
 Assumption communicated: OTP verifies registration and password recovery.

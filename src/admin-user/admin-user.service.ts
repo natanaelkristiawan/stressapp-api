@@ -6,14 +6,11 @@ import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 import { Datatable, DataUser } from './interfaces/datatable.interface';
 import * as ExcelJS from 'exceljs';
 import { Activity } from 'src/entity/activity.entity';
-import { UserEntity } from 'src/entity/user.entity';
 import { ActivityService } from 'src/activity/activity.service';
 import { QuestPoint } from 'src/entity/quest-point.entity';
 import { QuestPointDetail } from 'src/entity/quest-point-detail.entity';
 import { format, addHours } from 'date-fns';
 import { DataSource } from 'typeorm';
-import { UserVehicleEntity } from 'src/entity/vehicle.entity';
-import { CarEntity } from 'src/entity/car.entity';
 import { QuestService } from 'src/quest/quest.service';
 import { DeductPointDto } from './dtos/deduct-point.dto';
 @Injectable()
@@ -52,20 +49,11 @@ export class AdminUserService {
     @InjectRepository(Activity, 'mimate')
     private readonly activityRepository: Repository<Activity>,
 
-    @InjectRepository(UserEntity, 'mmid')
-    private readonly userRepository: Repository<UserEntity>,
-
     @InjectRepository(QuestPoint, 'mimate')
     private readonly questPointRepository: Repository<QuestPoint>,
 
     @InjectRepository(QuestPointDetail, 'mimate')
     private readonly questPointDetailRepository: Repository<QuestPointDetail>,
-
-    @InjectRepository(UserVehicleEntity, 'mmid')
-    private readonly userVehicleRepository: Repository<UserVehicleEntity>,
-
-    @InjectRepository(CarEntity, 'mmid')
-    private readonly carRepository: Repository<CarEntity>,
 
 
     private readonly activityService: ActivityService,
@@ -178,26 +166,8 @@ export class AdminUserService {
 
     const data = queryResult.entities;
 
-    // 1) Fetch all vehicles for these users in ONE query
-    const userIds = Array.from(
-      new Set(
-        data
-          .map((u: any) => u.userId) // keep your existing key; change to u.id if needed
-          .filter((id: any): id is number => id !== null && id !== undefined)
-      )
-    );
-
-    const vehicles = await this.userVehicleRepository.find({
-      where: { user_id: In(userIds) },
-      relations: { car: true },
-    });
-    // 2) Group vehicles by user_id → list of brand names
+    // Vehicle details belonged to the retired external identity system.
     const vehicleMap = new Map<number, string[]>();
-    for (const v of vehicles) {
-      const brand = (v.car?.brand_name ?? '').trim();
-      if (!vehicleMap.has(v.user_id)) vehicleMap.set(v.user_id, []);
-      if (brand) vehicleMap.get(v.user_id)!.push(brand);
-    }
 
     // 3) Fetch latest quest points for these users in ONE query to guarantee latest points
     const memberIds = Array.from(
@@ -390,7 +360,7 @@ export class AdminUserService {
   async exportUserListCsv(dto: AdminUserExportDto): Promise<{ buffer: Buffer; filename: string }> {
     const { search, start_date, end_date } = dto;
 
-    // Build base query (phone fetched separately from mmid users table)
+    // Build the export from local profiles only.
     const baseQuery = this.userMimateRepository
       .createQueryBuilder('user')
       .leftJoinAndSelect('user.questPoint', 'questPoint');
@@ -457,24 +427,9 @@ export class AdminUserService {
         break;
       }
 
-      // Batch-fetch phone from mmid users table (externalId = users.id)
-      const externalIds = chunk.map((u) => u.externalId).filter((id): id is string => id != null && id !== '');
-      const numericIds = externalIds.map((id) => parseInt(id, 10)).filter((id) => !Number.isNaN(id));
-      const phoneMap: Record<number, string> = {};
-      if (numericIds.length > 0) {
-        const users = await this.userRepository.find({
-          where: { id: In(numericIds) },
-          select: ['id', 'phone'],
-        });
-        for (const u of users) {
-          phoneMap[u.id] = u.phone ?? '';
-        }
-      }
-
       // Process and add chunk to CSV immediately
       for (const user of chunk) {
-        const externalIdNum = user.externalId != null ? parseInt(String(user.externalId), 10) : NaN;
-        const phone = !Number.isNaN(externalIdNum) ? phoneMap[externalIdNum] ?? '' : '';
+        const phone = ''; // No local phone source; do not query external identity tables.
         const rowData = [
           this.getMemberName(user.name, user.mmid_fullname, user.id),
           user.email,
@@ -749,19 +704,6 @@ export class AdminUserService {
 
     // save user
     await this.userMimateRepository.save(user);
-
-    // find mmid user
-    const mmidUser = await this.userRepository.findOne({ where: { id: user.userId } });
-
-    if (mmidUser) {
-      mmidUser.mimate_fullname = dto.name;
-      mmidUser.birthdate = dto.dob.toISOString();
-      mmidUser.gender = dto.gender;
-      mmidUser.fullname = dto.username;
-
-      // update mimate user
-      await this.userRepository.save(mmidUser);
-    }
 
     return await this.getUserById(id);
 

@@ -16,7 +16,7 @@ If PM2 runs inside a container, use the appropriate shared Docker network instea
 The API port is **3111**. Set PORT=3111 in server .env; PM2 deployment enforces
 the same port. Update the existing Nginx API upstream accordingly.
 
-Keep DB_USERNAME, DB_PASSWORD and the selected database names aligned with the
+Keep DB_USERNAME, DB_PASSWORD and DB_DATABASE_MIMATE aligned with the
 existing database. Do not create a new database or change connection targets merely
 to deploy an API update. Preserve JWT_SECRET and other existing runtime settings.
 
@@ -64,3 +64,6 @@ password is necessary in BULL_PASSWORD. Preserve the password exactly and apply
 dotenv quoting when it contains comment characters such as #.
 Push and redeploy to include credential support; editing .env alone on the old
 build is insufficient. The server Redis login remains to be verified.
+
+The API now uses only DB_DATABASE_MIMATE. Remove the unused DB_DATABASE_MMID
+setting from server .env when redeploying. No second database is required.

@@ -8,8 +8,6 @@ import { VoteMemberEntity } from 'src/entity/vote-member.entity';
 import { PostEntity } from 'src/entity/post.entity';
 import { VoteEntity } from 'src/entity/vote.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
-import { UserVehicleEntity } from 'src/entity/vehicle.entity';
-import { CarEntity } from 'src/entity/car.entity';
 
 @Module({
   imports: [
@@ -17,7 +15,6 @@ import { CarEntity } from 'src/entity/car.entity';
       [VoteMemberEntity, PostEntity, VoteEntity, UserMimateEntity],
       'mimate',
     ),
-    TypeOrmModule.forFeature([UserVehicleEntity, CarEntity], 'mmid'),
     BullModule.registerQueue({ name: 'vote-totals-queue' }),
   ],
   exports:[MemberVoteService],

@@ -1,7 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
-import { UserEntity } from 'src/entity/user.entity';
 import { In, IsNull, Not, Repository } from 'typeorm';
 import { MemberFollowInterface, profile } from './interfaces/profile.interface';
 import { UpdateProfileDto } from './dtos/update-profile.dto';
@@ -13,8 +12,6 @@ import { DateHelper } from 'src/common/helpers/date.helper';
 import { PostEntity } from 'src/entity/post.entity';
 import { CommentEntity } from 'src/entity/comment.entity';
 import { ReactionEntity } from 'src/entity/reaction.entity';
-import { UserVehicleEntity } from 'src/entity/vehicle.entity';
-import { CarEntity } from 'src/entity/car.entity';
 
 @Injectable()
 export class ProfileService {
@@ -27,15 +24,6 @@ export class ProfileService {
 
         @InjectRepository(UserFollowEntity, 'mimate')
         private followRepository: Repository<UserFollowEntity>,
-
-        @InjectRepository(UserEntity, 'mmid')
-        private userMmidRepository: Repository<UserEntity>,
-
-        @InjectRepository(UserVehicleEntity, 'mmid')
-        private userVehicleRepository: Repository<UserVehicleEntity>,
-
-        @InjectRepository(CarEntity, 'mmid')
-        private carRepository: Repository<CarEntity>,
 
 
         @InjectRepository(MemberSpaceEntity, 'mimate')
@@ -138,14 +126,7 @@ export class ProfileService {
 
         let vehicleList: string[] = []
 
-        const vehicles = await this.userVehicleRepository.find({
-            where: { user_id: userMimate.userId },
-            relations: { car: true }, // same as ['car'], but typed
-        });
-
-
-        vehicleList = vehicles.map(v => v.car?.brand_name || '');
-
+        // External vehicle enrichment is retired; retain the response field for legacy clients.
 
         let response: profile = {
             id: memberId,

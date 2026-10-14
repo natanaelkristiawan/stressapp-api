@@ -50,7 +50,8 @@ member JWTs from legacy/admin authentication. A JWT never replaces database
 session/account checks.
 Member auth requests bypass legacy activity/request-body logging.
 Account status/verification/session expiry are checked in the database for `/me`.
-Legacy JWT middleware verifies expiry before consulting identity services.
+CMS middleware verifies expiry/scope before looking up a local profile; no external
+identity synchronization or second database connection remains.
 Unexpected server errors use a generic message.
 
 ## Database and local run
@@ -63,7 +64,8 @@ The physical tokenHash primary-key column is retained for compatibility; for new
 JWT sessions it stores the random session ID referenced by the JWT sid claim.
 It does not remove legacy tables, connections, entities or retained databases.
 The auth migration datasource includes only member auth entities/migrations,
-avoiding the conflicting legacy `users` mappings.
+avoiding unrelated legacy schema migrations. The retired external users mapping
+is also excluded from the general datasource.
 
 From `stressapp-api`, with the existing private server .env configured:
 
@@ -107,8 +109,8 @@ set comma-separated `CORS_ORIGINS` for other authorized web origins.
 
 Google button explains that Google login is a later step. Other mobile feature
 screens still contain mocks, and new member sessions intentionally do not
-authenticate legacy member endpoints or CMS routes. Adapting profile/social
-identity consumers and removing the external datasource is the next separate step.
+authenticate legacy member endpoints or CMS routes. Member profile/social integration remains a separate step. The external datasource
+has been removed; CMS uses local profile IDs and requires a fresh login.
 Expo package.json declares SDK 57; AGENTS.md's SDK 54 instruction was read,
 but no Expo dependencies were changed. SDK 57 hosted SecureStore docs were
 unavailable during implementation; existing installed APIs were reused and type-checked.
@@ -142,3 +144,21 @@ useFormState subscription, verified with the enabled React Compiler.
 Run `node test/member-auth-refresh.cjs` from stressapp for adapter/store refresh
 checks with HTTP and native keychain boundaries mocked. No native runtime claim
 is implied by this check. Function comments explain purposes, results and errors.
+
+## Single database (2026-10-14)
+
+Only the mimate datasource remains, configured by DB_DATABASE_MIMATE.
+DB_DATABASE_MMID is no longer read and can be removed from the server .env.
+No database/table/data deletion or schema synchronization was executed.
+CMS tokens now carry local backup_members IDs and explicit CMS scope; old
+external-ID tokens are rejected, so existing CMS sessions must log in again.
+
+Removed external vehicle enrichment from profile/admin/vote exports and external
+phone lookup from CSV exports; legacy fields remain empty for compatibility.
+Admin profile updates no longer write external users. Quest profile-completion
+checks use the local name/bio/hobby. Historical external entity definitions remain
+in source but are not registered in runtime or general migration metadata.
+
+Normal startup excludes the standalone seeder. After building, run
+`node test/single-database.cjs` to inspect datasource/providers/entity relations
+without connecting to a database. Local identity tests are in auth.local.spec.ts.

@@ -18,7 +18,7 @@ export class AdminAuthService {
 
   async validateUser(email: string, password: string): Promise<UserAdmin> {
     const user = await this.usersRepository.findOne({ where: { email }, relations: ['userMimate'] });
-    if (user && await bcrypt.compare(password, user.password)) {
+    if (user?.userMimate && await bcrypt.compare(password, user.password)) {
       return user;
     }
     throw new UnauthorizedException('Invalid credentials');
@@ -28,6 +28,8 @@ export class AdminAuthService {
     const now = Math.floor(Date.now() / 1000);
     const payload = {
       iss: 'https://mimate.otesuto.com/admin-auth/login',
+      aud: 'cms',
+      kind: 'admin-access',
       iat: now,
       exp: now + 86400, // 1 day
       nbf: now,
@@ -35,7 +37,8 @@ export class AdminAuthService {
       email: user.email,
       phone: '', // You can load this from DB if available
       sub: require('crypto').createHash('sha256').update(user.email).digest('hex'),
-      id: user.userMimate.userId,
+      // Local CMS profile ID; no external identity database is consulted.
+      id: user.userMimate.id,
     };
  
     return this.jwtService.sign(payload)

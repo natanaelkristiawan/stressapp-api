@@ -7,7 +7,6 @@ import { VoteMemberEntity } from 'src/entity/vote-member.entity';
 import { PostEntity } from 'src/entity/post.entity';
 import { VoteEntity } from 'src/entity/vote.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
-import { UserVehicleEntity } from 'src/entity/vehicle.entity';
 import { MemberVote, VoteDetailResponse, VoteOptionMembersResponse } from './interfaces/member-vote.interface';
 
 @Injectable()
@@ -21,8 +20,6 @@ export class MemberVoteService {
     private readonly voteRepository: Repository<VoteEntity>,
     @InjectRepository(UserMimateEntity, 'mimate')
     private readonly memberRepository: Repository<UserMimateEntity>,
-    @InjectRepository(UserVehicleEntity, 'mmid')
-    private readonly userVehicleRepository: Repository<UserVehicleEntity>,
     @InjectQueue('vote-totals-queue')
     private readonly voteTotalsQueue: Queue,
   ) {}
@@ -243,7 +240,7 @@ export class MemberVoteService {
 
   /**
    * Builds vote report CSV with columns: Username, umur, domisili, gender, kendaraan, hobi, hasil vote, jumlah vote.
-   * Uses backup_members (UserMimateEntity) and users/user_vehicles/cars (mmid) for member detail.
+   * Uses local backup_members profiles; external vehicle details are unavailable.
    */
   async getVoteReportCsv(post_id: number): Promise<{ csv: string; filename: string }> {
     const detail = await this.getVoteDetailByPostId(post_id, undefined);
@@ -264,25 +261,8 @@ export class MemberVoteService {
       order: { created_at: 'DESC' },
     });
 
-    const userIds = voteMembers
-      .map((vm) => vm.member?.userId)
-      .filter((id): id is number => id != null && id > 0);
-    const uniqueUserIds = [...new Set(userIds)];
-
-    const vehicles =
-      uniqueUserIds.length > 0
-        ? await this.userVehicleRepository.find({
-            where: { user_id: In(uniqueUserIds) },
-            relations: ['car'],
-          })
-        : [];
+    // Keep the legacy report shape without querying retired external vehicle tables.
     const vehicleMap = new Map<number, string>();
-    for (const v of vehicles) {
-      if (v.user_id == null) continue;
-      const name = v.car?.brand_name ?? '';
-      const existing = vehicleMap.get(v.user_id) ?? '';
-      vehicleMap.set(v.user_id, existing ? `${existing}, ${name}` : name);
-    }
 
     const header = ['Username', 'umur', 'domisili', 'gender', 'kendaraan', 'hobi', 'hasil vote', 'jumlah vote'];
     rows.push(header.map(escape).join(','));

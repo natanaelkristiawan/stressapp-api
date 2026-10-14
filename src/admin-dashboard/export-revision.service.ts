@@ -10,7 +10,6 @@ import * as ExcelJS from 'exceljs';
 import { DataUser } from "src/admin-user/interfaces/datatable.interface";
 import { DataPost } from "src/admin-post/interfaces/datatable.interface";
 import { CardRevisionService } from "./card-revision.service";
-import { UserVehicleEntity } from "src/entity/vehicle.entity";
 import { RequestLogEntity } from "src/entity/log.entity";
 
 
@@ -38,9 +37,6 @@ export class ExportRevisionService {
 
         @InjectRepository(UserMimateEntity, 'mimate')
         private readonly memberRepository: Repository<UserMimateEntity>,
-
-        @InjectRepository(UserVehicleEntity, 'mmid')
-        private readonly userVehicleRepository: Repository<UserVehicleEntity>,
 
         @InjectRepository(SpaceEntity, 'mimate')
         private readonly spaceRepository: Repository<SpaceEntity>,
@@ -98,34 +94,10 @@ export class ExportRevisionService {
 
 
 
-        const userIds = Array.from(
-            new Set(
-                data
-                    .map((u) => u.id)
-                    .filter((id): id is number => id !== null && id !== undefined)
-            )
-        );
-
         let vehicleMap = new Map<number, string[]>();
 
-        if (userIds.length > 0) {
-            const vehicles = await this.userVehicleRepository.find({
-                where: { user_id: In(userIds) },
-                relations: { car: true }, // same as ['car'], but typed
-            });
+        // External vehicle enrichment is retired; compatibility cells remain empty.
 
-            vehicleMap = new Map<number, string[]>();
-            for (const v of vehicles) {
-                const brand = (v.car?.brand_name ?? '').trim();
-                if (!vehicleMap.has(v.user_id)) vehicleMap.set(v.user_id, []);
-                if (brand) vehicleMap.get(v.user_id)!.push(brand);
-            }
-
-            // optional: dedupe & sort each user's brand list
-            for (const [uid, list] of vehicleMap) {
-                vehicleMap.set(uid, Array.from(new Set(list)).sort());
-            }
-        }
 
 
 

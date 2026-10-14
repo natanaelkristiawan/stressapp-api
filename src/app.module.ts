@@ -9,7 +9,6 @@ import { AuthModule } from './auth/auth.module';
 import { RedisModule } from '@liaoliaots/nestjs-redis';
 import { JwtModule } from '@nestjs/jwt';
 import { RedisTokenMiddleware } from './middleware/redis-token.middleware';
-import { UserEntity } from './entity/user.entity';
 import { UserMimateEntity } from './entity/user-mimate.entity';
 import { PostModule } from './post/post.module';
 import { PostEntity } from './entity/post.entity';
@@ -72,11 +71,8 @@ import { MoengageModule } from './moengage/moengage.module';
 import { Visitor } from './entity/visitor.entity';
 import { VoteEntity } from './entity/vote.entity';
 import { VoteMemberEntity } from './entity/vote-member.entity';
-import { UserVehicleEntity } from './entity/vehicle.entity';
-import { CarEntity } from './entity/car.entity';
 import { CaptureBsiModule } from './capture-bsi/capture-bsi.module';
 import { MemberVoteModule } from './member-vote/member-vote.module';
-import { SeedModule } from './database/seeds/seed.module';
 import { AdminSettingModule } from './admin-setting/admin-setting.module';
 import { SettingEntity } from './entity/setting.entity';
 import { LogLastActiveManual } from './entity/log-last-active-manual.entity';
@@ -107,20 +103,6 @@ import { CronModule } from './cron/cron.module';
       synchronize: false, // Should not be true in production
 
     }),
-
-    TypeOrmModule.forRoot({
-      name: 'mmid',
-      type: 'mysql',
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT),
-      username: process.env.DB_USERNAME,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_DATABASE_MMID,
-      entities: [UserEntity, UserVehicleEntity, CarEntity], // Your entities
-      synchronize: false, // Should not be true in production
-    }),
-
-
 
     BullModule.forRoot({
       connection: {
@@ -192,7 +174,6 @@ import { CronModule } from './cron/cron.module';
     AdminHighlightModule,
     AdminPostTrendingModule,
     AdminPostReportModule,
-    SeedModule,
     RedisModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

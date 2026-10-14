@@ -14,7 +14,6 @@ import { PostEntity } from 'src/entity/post.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 import { ReactionEntity } from 'src/entity/reaction.entity';
 import { Activity } from 'src/entity/activity.entity';
-import { UserEntity } from 'src/entity/user.entity';
 import { AdminSettingService } from 'src/admin-setting/admin-setting.service'
 
 
@@ -66,9 +65,6 @@ export class QuestService {
 
         @InjectRepository(Activity, 'mimate')
         private activityRepository: Repository<Activity>,
-
-        @InjectRepository(UserEntity, 'mmid')
-        private userRepository: Repository<UserEntity>,
 
 
         private readonly leaderboard: LeaderboardService,
@@ -532,19 +528,10 @@ export class QuestService {
             return false
         }
 
-        // find in mmid database
-        let user = await this.userRepository.findOne({ where: { id: profile.userId } })
-
-        if (!user) {
-            return false
+        // Profile completion now uses the locally owned fields.
+        if (!profile.bio || !profile.hobby || !profile.name) {
+            return false;
         }
-
-        // check if null or empty
-        if (!user.mimate_bio || !user.mimate_hobby || !user.mimate_fullname) {
-            return false
-        }
-
-
 
         let isAlreadyGetPoint = await this.questAlreadyGetPoint({ memberId: memberId, questId: detailQuest.id });
         if (isAlreadyGetPoint) {

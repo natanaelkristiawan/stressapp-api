@@ -11,7 +11,6 @@ import { PostEntity } from 'src/entity/post.entity';
 import { CommentEntity } from 'src/entity/comment.entity';
 import { ReactionEntity } from 'src/entity/reaction.entity';
 import { Activity } from 'src/entity/activity.entity';
-import { UserEntity } from 'src/entity/user.entity';
 import { QuestBackup } from 'src/entity/quest-backup.entity';
 import { QuestBackupLog } from 'src/entity/quest-backup-log.entity';
 import { AdminQuestModule } from 'src/admin-quest/admin-quest.module';
@@ -21,7 +20,6 @@ import { AdminSettingModule } from 'src/admin-setting/admin-setting.module';
   imports: [
     LeaderboardModule,
     TypeOrmModule.forFeature([Quest, QuestPoint, QuestPointDetail, UserMimateEntity, PostEntity, CommentEntity, ReactionEntity, Activity, QuestBackup, QuestBackupLog], 'mimate'),
-    TypeOrmModule.forFeature([UserEntity], 'mmid'),
     AdminQuestModule,
     AdminSettingModule
   ],

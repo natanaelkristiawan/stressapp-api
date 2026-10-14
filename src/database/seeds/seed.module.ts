@@ -1,3 +1,4 @@
+import { AppDataSource } from '../data-source';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -7,17 +8,8 @@ import { Quest } from 'src/entity/quest.entity';
 @Module({
     imports: [
         ConfigModule.forRoot({ envFilePath: ['.env'], isGlobal: true }),
-        TypeOrmModule.forRoot({
-            name: 'mimate',
-            type: 'mysql',
-            host: process.env.DB_HOST,
-            port: parseInt(process.env.DB_PORT),
-            username: process.env.DB_USERNAME,
-            password: process.env.DB_PASSWORD,
-            database: process.env.DB_DATABASE_MIMATE,
-            // Auto-loads all entities so you don't have to list relations manually:
-            entities: [__dirname + '/../../**/*.entity{.ts,.js}'],
-        }),
+        // Standalone seed command shares the local datasource entity filtering.
+        TypeOrmModule.forRoot({ ...AppDataSource.options, name: 'mimate', synchronize: false }),
         TypeOrmModule.forFeature([Quest], 'mimate'),
     ],
     providers: [SeedService],

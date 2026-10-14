@@ -15,15 +15,12 @@ import { ExportRevisionService } from './export-revision.service';
 import { Visitor } from 'src/entity/visitor.entity';
 import { ExportPostService } from './export-post.service';
 import {RequestLogEntity} from "src/entity/log.entity"
-import { UserEntity } from 'src/entity/user.entity';
-import { UserVehicleEntity } from 'src/entity/vehicle.entity';
 
 @Module({
   providers: [AdminDashboardService, ReportPostService, CardRevisionService, ExportRevisionService, ExportPostService],
   controllers: [AdminDashboardController],
   imports: [
       TypeOrmModule.forFeature([Activity, UserMimateEntity, SpaceEntity, PostEntity, CommentEntity, ReactionEntity, DataSource, Visitor, RequestLogEntity], 'mimate'),
-      TypeOrmModule.forFeature([UserEntity, UserVehicleEntity], 'mmid')
   ]
 })
 export class AdminDashboardModule {}

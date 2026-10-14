@@ -3,7 +3,6 @@ import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
-import { UserEntity } from 'src/entity/user.entity';
 import { AssetsEntity } from 'src/entity/asset.entity';
 import { PostTagsEntity } from 'src/entity/post-tags.entity';
 import { PostEntity } from 'src/entity/post.entity';
@@ -16,8 +15,6 @@ import { MemberSpaceEntity } from 'src/entity/member-spaces.entity';
 import { QueueModule } from 'src/queue/queue.module';
 import { CommentEntity } from 'src/entity/comment.entity';
 import { ActivityModule } from 'src/activity/activity.module';
-import { UserVehicleEntity } from 'src/entity/vehicle.entity';
-import { CarEntity } from 'src/entity/car.entity';
 import { QuestModule } from 'src/quest/quest.module';
 import { MemberVoteModule } from 'src/member-vote/member-vote.module';
 import { UserAdmin } from 'src/entity/user-admin.entity';
@@ -25,7 +22,6 @@ import { UserAdmin } from 'src/entity/user-admin.entity';
 @Module({
   imports:[
     TypeOrmModule.forFeature([UserMimateEntity, PostEntity, TagsEntity,  PostTagsEntity, AssetsEntity, SpaceEntity, ReactionEntity, UserFollowEntity, MemberSpaceEntity, CommentEntity, UserAdmin], 'mimate'),
-    TypeOrmModule.forFeature([UserEntity, UserVehicleEntity, CarEntity], 'mmid'),
     QueueModule,
     ActivityModule,
     QuestModule,
