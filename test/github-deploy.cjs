@@ -11,7 +11,7 @@ function run(overrides = {}) {
   fs.writeFileSync(log, '');
   const result = spawnSync('bash', [path.join(root, 'deployment/github-deploy.sh')], {
     env: { ...process.env, HOME: root, NVM_DIR: path.join(root, 'no-nvm'), PATH: `${root}/bin:${process.env.PATH}`,
-      API_PM2_NAME: 'test-api', FAKE_EXISTING: '1', FAKE_FAILURE: '', FAKE_LOG: log, ...overrides },
+      FAKE_EXISTING: '1', FAKE_FAILURE: '', FAKE_LOG: log, ...overrides },
     encoding: 'utf8',
   });
   return { status: result.status, calls: fs.readFileSync(log, 'utf8') };
@@ -34,7 +34,7 @@ exit 0
   const success = run(); assert.equal(success.status, 0);
   assert(success.calls.indexOf('yarn build') < success.calls.indexOf('migration:run'));
   assert(success.calls.indexOf('migration:run') < success.calls.indexOf('pm2 reload'));
-  assert(success.calls.includes('pm2 reload test-api --update-env'));
+  assert(success.calls.includes('pm2 reload stressapp-api --update-env'));
   assert(success.calls.includes('PORT=3111'), 'PM2 receives the confirmed API port');
   assert.equal(run({ FAKE_EXISTING: '0' }).status, 0);
   assert(run({ FAKE_EXISTING: '0' }).calls.includes('pm2 start ecosystem.config.cjs'));
@@ -43,7 +43,8 @@ exit 0
     assert.notEqual(result.status, 0); assert(!result.calls.includes('pm2 '), 'Failed preparation must not reload PM2');
   }
   assert.notEqual(run({ FAKE_FAILURE: 'health' }).status, 0);
-  assert.notEqual(run({ API_PM2_NAME: '' }).status, 0);
+  assert.equal(run({ API_PM2_NAME: 'ignored-name' }).status, 0);
+  assert(run({ API_PM2_NAME: 'ignored-name' }).calls.includes('pm2 reload stressapp-api --update-env'), 'External name cannot override the static process');
   fs.unlinkSync(path.join(root, '.env'));
   assert.notEqual(run().status, 0);
   console.log('PASS: install/build/migration/reload order, existing/first-start PM2, failed build/migration/health and missing configuration.');

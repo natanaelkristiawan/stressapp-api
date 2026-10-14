@@ -14,7 +14,6 @@ In the **API repository**, open Settings → Secrets and variables → Actions.
 | Secret | `SERVER_HOST` | Same server host used for app/CMS |
 | Secret | `SERVER_USER` | SSH account owning the API checkout/PM2 process |
 | Secret | `SERVER_SSH_KEY` | Same authorized SSH private key used for app/CMS |
-| Variable | `API_PM2_NAME` | Exact existing API process name from `pm2 list` |
 | Variable, optional | `SERVER_PORT` | SSH port; defaults to `22` |
 | Secret, optional | `SERVER_FINGERPRINT` | Server SSH host-key SHA256 fingerprint |
 
@@ -22,10 +21,10 @@ Secrets in another repository are not automatically available in this repository
 add them here or grant access through organization secrets. Never commit the
 server `.env`, private keys or credentials.
 
-`API_PM2_NAME` is required to avoid guessing the identity of the deployed process.
-For a first deployment without an existing process, choose `stressapp-api`.
-Existing processes are reloaded by name, keeping their PM2 configuration.
-The included ecosystem file is used only if the named process does not yet exist.
+The PM2 process name is fixed to **stressapp-api**; no GitHub name variable is
+required. Deployment reloads that process or starts it from the ecosystem config.
+If the server currently uses another name for this API, align it once before
+deploying so a second API process does not compete for port 3111.
 
 For connections to your existing Docker MySQL/Redis and Resend email, see
 [SERVER_INFRA.md](SERVER_INFRA.md).

@@ -3,7 +3,6 @@
 # Returns shell status 0 only after the API health endpoint responds successfully.
 set -eo pipefail
 cd "$(dirname "$0")/.."
-: "${API_PM2_NAME:?Set API_PM2_NAME to the existing API process name}"
 [[ -f .env ]] || { echo 'Create the production .env on the server before deploying.' >&2; exit 1; }
 
 # SSH sessions may not load NVM from the interactive shell profile.
@@ -25,8 +24,8 @@ yarn build
 # Use only member auth migrations; the legacy datasource has conflicting users mappings.
 node node_modules/typeorm/cli.js -d dist/member-auth/data-source.js migration:run
 
-if pm2 describe "$API_PM2_NAME" >/dev/null 2>&1; then
-  pm2 reload "$API_PM2_NAME" --update-env
+if pm2 describe stressapp-api >/dev/null 2>&1; then
+  pm2 reload stressapp-api --update-env
 else
   pm2 start ecosystem.config.cjs --update-env
 fi

@@ -3,7 +3,7 @@
 module.exports = {
   apps: [
     {
-      name: process.env.API_PM2_NAME || 'stressapp-api',
+      name: 'stressapp-api',
       cwd: __dirname,
       script: './dist/main.js',
       env: { NODE_ENV: 'production', PORT: 3111 },
