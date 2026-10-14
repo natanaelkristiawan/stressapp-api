@@ -27,8 +27,13 @@ For a first deployment without an existing process, choose `stressapp-api`.
 Existing processes are reloaded by name, keeping their PM2 configuration.
 The included ecosystem file is used only if the named process does not yet exist.
 
-For Docker MySQL/Redis/Mailpit setup supporting this host PM2 deployment, see
+For connections to your existing Docker MySQL/Redis and Resend email, see
 [SERVER_INFRA.md](SERVER_INFRA.md).
+
+The confirmed API port is **3111**. Deployment exports PORT=3111 for existing
+PM2 processes and first starts. Set PORT=3111 in the server .env and point the
+Nginx API upstream to this port. No remote Nginx/server configuration is changed
+by this repository edit.
 
 ## Server requirements
 

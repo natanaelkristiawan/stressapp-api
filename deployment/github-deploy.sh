@@ -17,6 +17,8 @@ command -v yarn >/dev/null
 command -v pm2 >/dev/null
 
 export NODE_ENV=production
+# Apply the confirmed API port to existing PM2 processes as well as first starts.
+export PORT=3111
 # Keep dev dependencies for the Nest compiler and TypeORM CLI; do not mutate the lockfile.
 yarn install --frozen-lockfile --production=false --non-interactive
 yarn build
@@ -29,12 +31,12 @@ else
   pm2 start ecosystem.config.cjs --update-env
 fi
 
-# Read PORT privately from the deployed .env; never print credentials or environment contents.
+# Use the same exported port as PM2; never print credentials or environment contents.
 node <<'JS'
 require('dotenv').config();
 /** Waits for local API readiness. Returns Promise<void>; failure exits deployment with status 1. */
 async function checkHealth() {
-  const port = Number(process.env.PORT || 3000);
+  const port = Number(process.env.PORT || 3111);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid API PORT configuration.');
   for (let attempt = 0; attempt < 15; attempt++) {
     try {

@@ -65,18 +65,18 @@ It does not remove legacy tables, connections, entities or retained databases.
 The auth migration datasource includes only member auth entities/migrations,
 avoiding the conflicting legacy `users` mappings.
 
-From `stressapp-api`:
+From `stressapp-api`, with the existing private server .env configured:
 
 ```sh
-docker compose --env-file .env.docker up -d --build
-docker compose --env-file .env.docker exec -T api node node_modules/typeorm/cli.js -d dist/member-auth/data-source.js migration:run
+yarn install --frozen-lockfile --production=false
+yarn build
+node node_modules/typeorm/cli.js -d dist/member-auth/data-source.js migration:run
 ```
 
-Local API: http://localhost:3100. Mailpit inbox: http://localhost:8026.
-Default SMTP is Mailpit and does not send to real internet inboxes. For real
-SMTP, set `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_SECURE`, `EMAIL_USERNAME`,
-`EMAIL_PASSWORD`, and `EMAIL_FROM` privately in the deployment environment.
-Use TLS as required by the provider; certificate verification stays enabled.
+The API runs with PM2. MySQL/Redis containers are installed and managed separately;
+this repository no longer supplies their Compose setup. See [server connections](SERVER_INFRA.md)
+and [GitHub PM2 deployment](GITHUB_DEPLOY.md). Production email uses Resend SMTP.
+Preserve the existing JWT secret, database data and server credentials.
 
 ## Mobile
 
@@ -98,8 +98,8 @@ the implemented home screen; server onboarding/profile persistence is a later fe
 Member changes reset forum interests and remount the scoped mood provider.
 
 Copy `stressapp/.env.example` into local Expo configuration as appropriate.
-Default URL is `http://localhost:3100` for web/iOS simulator and
-`http://10.0.2.2:3100` for Android emulator. A physical phone needs a reachable API
+Default URL is `http://localhost:3111` for web/iOS simulator and
+`http://10.0.2.2:3111` for Android emulator. A physical phone needs a reachable API
 URL in `EXPO_PUBLIC_API_URL`; the Docker port currently binds to host loopback.
 Restart Metro after changing Expo environment variables. Use HTTPS outside local testing.
 CORS defaults allow the web preview on localhost/127.0.0.1 port 8081;
@@ -124,9 +124,11 @@ reset-proof expiry, session expiry/revocation, suspended accounts and admin isol
 Test emails remain in Mailpit. Each local test run uses a distinct loopback
 client address while preserving the configured rate limits. Counters expire automatically.
 
-```sh
-docker compose --env-file .env.docker exec -T api node test/member-auth.integration.cjs
-```
+The API integration script requires a separately provisioned disposable MySQL,
+Redis and Mailpit environment, with DB_HOST=mysql. It intentionally refuses the
+host PM2 production database. Historical Docker verification remains recorded
+in the auth journey; removed Compose files are not current setup instructions.
+
 
 Local checks: `npm run build` in API; `npx tsc --noEmit` and targeted ESLint in mobile.
 Physical-device/native runtime behavior and production email delivery require

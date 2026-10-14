@@ -19,10 +19,11 @@ function run(overrides = {}) {
 try {
   fs.mkdirSync(path.join(root, 'deployment')); fs.mkdirSync(path.join(root, 'bin'));
   fs.copyFileSync(path.join(__dirname, '../deployment/github-deploy.sh'), path.join(root, 'deployment/github-deploy.sh'));
-  fs.writeFileSync(path.join(root, '.env'), 'PORT=3000\n');
+  fs.writeFileSync(path.join(root, '.env'), 'PORT=3111\n');
   for (const name of ['node', 'yarn', 'pm2']) {
     fs.writeFileSync(path.join(root, 'bin', name), `#!/bin/bash
 printf '%s\\n' "${name} $*" >> "$FAKE_LOG"
+if [[ '${name}' == pm2 ]]; then printf '%s\\n' "PORT=$PORT" >> "$FAKE_LOG"; fi
 if [[ '${name}' == yarn && "$1" == build && "$FAKE_FAILURE" == build ]]; then exit 11; fi
 if [[ '${name}' == node && "$1" == node_modules/typeorm/cli.js && "$FAKE_FAILURE" == migration ]]; then exit 12; fi
 if [[ '${name}' == pm2 && "$1" == describe && "$FAKE_EXISTING" == 0 ]]; then exit 1; fi
@@ -34,6 +35,7 @@ exit 0
   assert(success.calls.indexOf('yarn build') < success.calls.indexOf('migration:run'));
   assert(success.calls.indexOf('migration:run') < success.calls.indexOf('pm2 reload'));
   assert(success.calls.includes('pm2 reload test-api --update-env'));
+  assert(success.calls.includes('PORT=3111'), 'PM2 receives the confirmed API port');
   assert.equal(run({ FAKE_EXISTING: '0' }).status, 0);
   assert(run({ FAKE_EXISTING: '0' }).calls.includes('pm2 start ecosystem.config.cjs'));
   for (const failure of ['build', 'migration']) {

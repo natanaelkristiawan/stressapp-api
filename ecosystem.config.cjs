@@ -6,7 +6,7 @@ module.exports = {
       name: process.env.API_PM2_NAME || 'stressapp-api',
       cwd: __dirname,
       script: './dist/main.js',
-      env: { NODE_ENV: 'production' },
+      env: { NODE_ENV: 'production', PORT: 3111 },
     },
   ],
 };
