@@ -39,8 +39,8 @@ by this repository edit.
 - The API checkout exists at the confirmed path and is on `main`, with `origin`
   pointing to the API repository. It must be able to pull without an interactive
   password prompt. Local modifications/diverged branches must be resolved first.
-- Node.js 22, Yarn Classic 1.x and PM2 are available to the SSH user. `.nvmrc`
-  selects Node 22; the script loads NVM when installed. Install Node 22 once on the
+- Node.js 24, Yarn Classic 1.x and PM2 are available to the SSH user. `.nvmrc`
+  selects Node 24; the script loads NVM when installed. Install Node 24 once on the
   server if it is missing. The script does not silently install/change runtime versions.
 - The server `.env` contains the existing production port, database, Redis,
   JWT, SMTP and other runtime configuration. It remains on the server.

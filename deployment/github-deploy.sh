@@ -11,7 +11,7 @@ if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
   nvm use
 fi
 set -u
-node -e 'if (Number(process.versions.node.split(".")[0]) !== 22) { console.error("Deployment requires Node.js 22; see .nvmrc."); process.exit(1); }'
+node -e 'if (Number(process.versions.node.split(".")[0]) !== 24) { console.error("Deployment requires Node.js 24; see .nvmrc."); process.exit(1); }'
 command -v yarn >/dev/null
 command -v pm2 >/dev/null
 
