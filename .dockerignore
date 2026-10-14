@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.docker.example
+*.log
+.DS_Store
+deployment

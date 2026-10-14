@@ -1,0 +1,12 @@
+stages:
+  - deploy
+deploy:
+  stage: deploy
+  script:
+    - cd /home/project/mmid/mimate-api/
+    - git pull origin main && git log -1 --pretty=format:'%h %s'
+    - nvm use v22.14.0 && yarn install && yarn build && nvm use v18.20.3 && pm2 restart "mimate-api"
+  only:
+    - main
+  tags:
+    - self
