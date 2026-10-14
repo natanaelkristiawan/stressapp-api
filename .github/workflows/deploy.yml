@@ -27,7 +27,6 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ vars.SERVER_PORT || '22' }}
-          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
           envs: API_PM2_NAME
           command_timeout: 15m
           script: |
