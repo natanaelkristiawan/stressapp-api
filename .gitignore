@@ -38,3 +38,6 @@ lerna-debug.log*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Private infrastructure credentials generated on the server.
+.env.infra

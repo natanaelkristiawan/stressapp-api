@@ -11,14 +11,14 @@ import { PugAdapter } from '@nestjs-modules/mailer/dist/adapters/pug.adapter';
                 transport: {
                     host: process.env.EMAIL_HOST,
                     port: parseInt(process.env.EMAIL_PORT),
+                    // Match the app-level transport: port 465 requires implicit TLS.
+                    secure: process.env.EMAIL_SECURE === 'true',
+                    connectionTimeout: 10000,
+                    socketTimeout: 10000,
                     auth: {
                         user: process.env.EMAIL_USERNAME,
                         pass: process.env.EMAIL_PASSWORD
                     },
-                    /* secure: false,
-                    tls: {
-                        rejectUnauthorized: false,
-                    }, */
                 },
                 defaults: {
                     from: process.env.EMAIL_FROM,                    

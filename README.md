@@ -1,3 +1,7 @@
+# API deployment
+
+See [GitHub deployment setup](GITHUB_DEPLOY.md) for the PM2 workflow and required repository settings.
+
 For the isolated local Docker setup, see [DOCKER.md](./DOCKER.md).
 
 <p align="center">

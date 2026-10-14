@@ -1,0 +1,38 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A running server deployment must finish before another one starts.
+concurrency:
+  group: deploy-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Deploy API to server
+        uses: appleboy/ssh-action@v1
+        env:
+          API_PM2_NAME: ${{ vars.API_PM2_NAME }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          envs: API_PM2_NAME
+          command_timeout: 15m
+          script: |
+            set -e
+            : "${API_PM2_NAME:?Set the API_PM2_NAME repository variable to your existing API process name}"
+            cd "$HOME/nginx/temu-sobat/api"
+            git pull --ff-only origin main
+            bash deployment/github-deploy.sh
