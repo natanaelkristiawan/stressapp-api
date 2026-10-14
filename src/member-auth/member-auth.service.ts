@@ -7,8 +7,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
-import { MailerService } from '@nestjs-modules/mailer';
+import { DataSource, EntityManager } from 'typeorm';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { OtpEmailJob, OTP_EMAIL_QUEUE } from './member-auth.email.processor';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -29,12 +31,12 @@ const INVALID = 'Kode OTP tidak valid atau kedaluwarsa.';
 @Injectable()
 export class MemberAuthService {
   private readonly dummyHash = bcrypt.hash('invalid-password', 12);
-  /** Injects database, mail, rate limiting, configuration and JWT dependencies.
+  /** Injects database, email queue, rate limiting, configuration and JWT dependencies.
    * @returns A service instance; no credentials are stored in mutable request state.
    */
   constructor(
     @InjectDataSource('mimate') private readonly db: DataSource,
-    private readonly mail: MailerService,
+    @InjectQueue(OTP_EMAIL_QUEUE) private readonly emails: Queue<OtpEmailJob>,
     private readonly redis: RedisService,
     private readonly config: ConfigService,
     private readonly jwt: JwtService,
@@ -114,8 +116,8 @@ export class MemberAuthService {
       name: dto.name,
     });
   }
-  /** Replaces a purpose-specific OTP and sends email within the member transaction.
-   * @returns A generic notice, or an error when throttled/delivery fails.
+  /** Replaces a purpose-specific OTP, commits it, then queues email delivery.
+   * @returns A generic notice, or an error when throttled/queue submission fails.
    */
   async sendOtp(
     email: string,
@@ -124,7 +126,7 @@ export class MemberAuthService {
   ) {
     await this.limit('send-email', email, 5, 3600);
     await this.limit('send-cooldown', email, 1, 60);
-    await this.db.transaction(async (manager) => {
+    const delivery = await this.db.transaction(async (manager) => {
       const member = await manager.findOne(Member, {
         where: { email },
         lock: { mode: 'pessimistic_write' },
@@ -150,26 +152,31 @@ export class MemberAuthService {
         resetHash: null,
         resetExpiresAt: null,
       });
+      return {
+        memberId: member.id,
+        purpose,
+        code,
+        codeHash: this.otpHash(member.id, purpose, code),
+      };
+    });
+    if (delivery) {
       try {
-        await this.mail.sendMail({
-          from: this.config.get<string>('EMAIL_FROM'),
-          to: email,
-          subject:
-            purpose === 'registration'
-              ? 'Verifikasi akun Temu SoBAT'
-              : 'Reset kata sandi Temu SoBAT',
-          text: `Kode OTP Anda: ${code}. Berlaku 5 menit. Jangan bagikan kode ini kepada siapa pun.`,
+        await this.emails.add('send-otp', delivery, {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 },
+          removeOnComplete: true,
+          removeOnFail: true,
         });
       } catch {
         throw new ServiceUnavailableException(
-          'Gagal mengirim email. Silakan kirim ulang kode setelah 60 detik.',
+          'Gagal menjadwalkan email. Silakan kirim ulang kode setelah 60 detik.',
         );
       }
-    });
+    }
     return GENERIC;
   }
   /** Consumes a valid OTP once; registration also proves the pending password.
-   * @returns A verification notice, or a short-lived recovery reset token.
+   * @returns A logged-in session for registration, or a short-lived recovery reset token.
    */
   async verify(dto: VerifyOtpDto) {
     await this.limit('verify-email', dto.email, 10, 3600);
@@ -220,7 +227,7 @@ export class MemberAuthService {
         member.verifiedAt = new Date();
         await manager.save(member);
         await manager.save(otp);
-        return { message: 'Email berhasil diverifikasi. Silakan masuk.' };
+        return this.createSession(manager, member);
       }
       const resetToken = randomBytes(32).toString('hex');
       otp.resetHash = this.hash(resetToken);
@@ -313,6 +320,25 @@ export class MemberAuthService {
       );
     }
   }
+  /** Creates a revocable session after password login or registration verification.
+   * @returns One-day access JWT, refresh credentials and public member identity.
+   */
+  private async createSession(
+    manager: EntityManager,
+    member: Member,
+    rememberMe = false,
+  ) {
+    const refreshToken = `refresh_${randomBytes(32).toString('hex')}`;
+    const session = await manager.save(MemberSession, {
+      tokenHash: randomBytes(32).toString('hex'),
+      memberId: member.id,
+      refreshHash: this.hash(refreshToken),
+      expiresAt: new Date(
+        Math.floor(Date.now() / 1000) * 1000 + (rememberMe ? 30 : 7) * 86400000,
+      ),
+    });
+    return this.issue(member, session, refreshToken);
+  }
   /** Checks password/account verification and creates an independent refresh session.
    * @returns A one-day JWT and refresh credentials lasting 7 or 30 days.
    */
@@ -337,17 +363,7 @@ export class MemberAuthService {
           'Email belum diverifikasi. Silakan verifikasi OTP.',
           403,
         );
-      const refreshToken = `refresh_${randomBytes(32).toString('hex')}`;
-      const session = await manager.save(MemberSession, {
-        tokenHash: randomBytes(32).toString('hex'),
-        memberId: member.id,
-        refreshHash: this.hash(refreshToken),
-        expiresAt: new Date(
-          Math.floor(Date.now() / 1000) * 1000 +
-            (dto.rememberMe ? 30 : 7) * 86400000,
-        ),
-      });
-      return this.issue(member, session, refreshToken);
+      return this.createSession(manager, member, dto.rememberMe);
     });
   }
   /** Atomically rotates a live refresh credential without extending session lifetime.

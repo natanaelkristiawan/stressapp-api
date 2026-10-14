@@ -59,7 +59,10 @@ async function register(suffix) {
   assert.equal((await call('otp/verify', { ...verify, purpose: 'recovery' })).status, 400);
   assert.equal((await call('otp/verify', { ...verify, code: main.code === '0000' ? '0001' : '0000' })).status, 400);
   assert.equal((await call('otp/verify', { ...verify, password: 'Wrongpass123!' })).status, 400);
-  assert.equal((await call('otp/verify', verify)).status, 200);
+  const verifiedSession = await call('otp/verify', verify);
+  assert.equal(verifiedSession.status, 200);
+  assert(verifiedSession.data.token && verifiedSession.data.refreshToken);
+  assert.equal((await call('me', undefined, verifiedSession.data.token)).status, 200, 'Registration verification logs in immediately');
   assert.equal((await call('otp/verify', verify)).status, 400);
   assert.equal((await call('login', { ...loginBody, password: 'wrong' })).status, 401);
   const login = await call('login', loginBody); assert.equal(login.status, 200);

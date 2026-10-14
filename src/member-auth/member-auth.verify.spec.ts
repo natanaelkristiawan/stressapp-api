@@ -1,0 +1,166 @@
+import { Test } from '@nestjs/testing';
+import { getDataSourceToken } from '@nestjs/typeorm';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { RedisService } from '@liaoliaots/nestjs-redis';
+import { getQueueToken } from '@nestjs/bullmq';
+import { OTP_EMAIL_QUEUE } from './member-auth.email.processor';
+import { createHmac } from 'crypto';
+import * as bcrypt from 'bcrypt';
+import { MemberAuthService } from './member-auth.service';
+import { Member, MemberOtp, MemberSession } from './member-auth.entity';
+
+// Runs the real password/OTP/session logic with a transactional repository boundary mock.
+describe('registration OTP session', () => {
+  /** Builds purpose-bound credentials and the real service. Returns observable transaction mocks. */
+  async function setup(purpose: 'registration' | 'recovery') {
+    const member = new Member();
+    Object.assign(member, {
+      id: 7,
+      name: 'Test',
+      email: 'test@example.test',
+      suspended: false,
+      deletedAt: null,
+      verifiedAt: purpose === 'recovery' ? new Date() : null,
+    });
+    const passwordHash = await bcrypt.hash('Testpass123!', 4);
+    const otp = new MemberOtp();
+    Object.assign(otp, {
+      memberId: 7,
+      purpose,
+      attempts: 0,
+      consumedAt: null,
+      expiresAt: new Date(Date.now() + 300000),
+      codeHash: createHmac('sha256', 'test-secret')
+        .update(`7:${purpose}:1234`)
+        .digest('hex'),
+    });
+    const query = {
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      getOne: async () => ({ ...member, passwordHash }),
+    };
+    let committed = false;
+    const emails = {
+      add: jest.fn(async () => {
+        expect(committed).toBe(true);
+      }),
+    };
+    const manager = {
+      delete: jest.fn(async () => undefined),
+      findOne: async () => member,
+      findOneBy: async () => otp,
+      getRepository: () => ({ createQueryBuilder: () => query }),
+      save: jest.fn(
+        async (entity: unknown, value?: unknown) => value || entity,
+      ),
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        MemberAuthService,
+        {
+          provide: getDataSourceToken('mimate'),
+          useValue: {
+            transaction: async (
+              work: (value: typeof manager) => Promise<unknown>,
+            ) => {
+              const result = await work(manager);
+              committed = true;
+              return result;
+            },
+          },
+        },
+        { provide: getQueueToken(OTP_EMAIL_QUEUE), useValue: emails },
+        {
+          provide: RedisService,
+          useValue: { getOrThrow: () => ({ eval: async () => 1 }) },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: () => undefined, getOrThrow: () => 'test-secret' },
+        },
+        { provide: JwtService, useValue: new JwtService() },
+      ],
+    }).compile();
+    return {
+      service: module.get(MemberAuthService),
+      member,
+      otp,
+      manager,
+      emails,
+    };
+  }
+  it('queues delivery only after OTP commit and surfaces queue failure', async () => {
+    const { service, member, emails } = await setup('registration');
+    await service.sendOtp(member.email, 'registration');
+    expect(emails.add).toHaveBeenCalledWith(
+      'send-otp',
+      expect.objectContaining({
+        memberId: member.id,
+        purpose: 'registration',
+        code: expect.stringMatching(/^\d{4}$/),
+      }),
+      expect.objectContaining({
+        attempts: 3,
+        removeOnComplete: true,
+        removeOnFail: true,
+      }),
+    );
+    emails.add.mockRejectedValueOnce(new Error('Redis unavailable'));
+    await expect(service.sendOtp(member.email, 'registration')).rejects.toThrow(
+      'Gagal menjadwalkan email',
+    );
+  });
+  it('verifies email and creates JWT/refresh credentials in the same transaction', async () => {
+    const { service, member, otp, manager } = await setup('registration');
+    const result = await service.verify({
+      email: member.email,
+      purpose: 'registration',
+      code: '1234',
+      password: 'Testpass123!',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        token: expect.any(String),
+        refreshToken: expect.stringMatching(/^refresh_/),
+        member: expect.objectContaining({ id: 7, emailVerified: true }),
+      }),
+    );
+    expect(member.verifiedAt).toBeInstanceOf(Date);
+    expect(otp.consumedAt).toBeInstanceOf(Date);
+    expect(manager.save).toHaveBeenCalledWith(
+      MemberSession,
+      expect.objectContaining({ memberId: 7, refreshHash: expect.any(String) }),
+    );
+  });
+  it('does not create a session for an incorrect OTP', async () => {
+    const { service, member, manager } = await setup('registration');
+    await expect(
+      service.verify({
+        email: member.email,
+        purpose: 'registration',
+        code: '9999',
+        password: 'Testpass123!',
+      }),
+    ).rejects.toThrow();
+    expect(member.verifiedAt).toBeNull();
+    expect(
+      manager.save.mock.calls.some((call) => call[0] === MemberSession),
+    ).toBe(false);
+  });
+  it('returns reset proof without a login session for recovery', async () => {
+    const { service, member, manager } = await setup('recovery');
+    const result = await service.verify({
+      email: member.email,
+      purpose: 'recovery',
+      code: '1234',
+    });
+    expect(result).toEqual(
+      expect.objectContaining({ resetToken: expect.any(String) }),
+    );
+    expect(result).not.toHaveProperty('token');
+    expect(
+      manager.save.mock.calls.some((call) => call[0] === MemberSession),
+    ).toBe(false);
+  });
+});

@@ -16,12 +16,12 @@ envelope. Requests reject unknown fields; email is trimmed and lowercased.
 | POST `/refresh` | `refreshToken` | Rotated access/refresh pair; old refresh is rejected |
 | POST `/forgot-password` | `email` | Generic recovery notice |
 | POST `/otp/send` | `email`, `purpose: registration` or `recovery` | Generic OTP notice |
-| POST `/otp/verify` | `email`, `purpose`, four-digit string `code`, plus `password` for registration | Registration verification notice or recovery `resetToken` |
+| POST `/otp/verify` | `email`, `purpose`, four-digit string `code`, plus `password` for registration | JWT/refresh session for registration or recovery `resetToken` |
 | POST `/reset-password` | `resetToken`, `password` | Password updated; all old sessions revoked |
 | GET `/me` | `Authorization: Bearer <access JWT>` | Current member identity |
 | POST `/logout` | Same authorization | Current session revoked |
 
-Registration verification returns the member to login. Pending users can request
+Registration verification creates a session and logs the member in directly. Pending users can request
 another verification code from login after entering the correct password.
 Re-registering can replace pending credentials only while the account is unverified.
 Registration verification requires both the current pending password and its OTP,
@@ -162,3 +162,10 @@ in source but are not registered in runtime or general migration metadata.
 Normal startup excludes the standalone seeder. After building, run
 `node test/single-database.cjs` to inspect datasource/providers/entity relations
 without connecting to a database. Local identity tests are in auth.local.spec.ts.
+
+OTP delivery runs asynchronously in the `member-otp-email` BullMQ queue using
+BULL_HOST/BULL_PORT/BULL_PASSWORD. The existing API PM2 process hosts the worker.
+Registration/resend/recovery await queue acceptance, not SMTP delivery. Three
+attempts retry after 5 and 10 seconds; expired/replaced/consumed codes are skipped.
+Completed and failed jobs are removed to avoid retaining OTP payloads. See
+../docs/auth/README.md for queue failure/resend limitations.

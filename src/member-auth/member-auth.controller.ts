@@ -93,7 +93,7 @@ export class MemberAuthController {
     return this.auth.sendOtp(dto.email, dto.purpose);
   }
   /** Validates the OTP and forwards its single-use verification.
-   * @returns A registration notice or password-reset proof.
+   * @returns A registration session or password-reset proof.
    */
   @Post('otp/verify') @HttpCode(200) async verify(
     @Body() dto: VerifyOtpDto,
