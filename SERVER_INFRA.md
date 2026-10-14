@@ -44,3 +44,23 @@ applies pending scoped auth migrations, reloads the named PM2 process and checks
 /is-live. It does not install, start, stop or remove database/Redis containers.
 
 No remote container, volume, database or credential was changed during this cleanup.
+
+## Password-protected Redis
+
+Set these in the private server .env using the container's published host port:
+
+```dotenv
+BULL_HOST=127.0.0.1
+BULL_PORT=6379
+BULL_PASSWORD=YOUR_REDIS_PASSWORD
+BULL_USERNAME=
+BULL_TLS=false
+```
+
+For Redis requirepass/default user, leave BULL_USERNAME blank. For an ACL user,
+set its exact username. Both auth rate-limit Redis and BullMQ queue connections
+read these values. REDIS_URL is not used by these clients; no URL-encoding of the
+password is necessary in BULL_PASSWORD. Preserve the password exactly and apply
+dotenv quoting when it contains comment characters such as #.
+Push and redeploy to include credential support; editing .env alone on the old
+build is insufficient. The server Redis login remains to be verified.

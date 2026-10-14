@@ -126,6 +126,9 @@ import { CronModule } from './cron/cron.module';
       connection: {
         host: process.env.BULL_HOST,
         port: parseInt(process.env.BULL_PORT),
+        // Credentials apply to queue connections as well as the shared Redis client.
+        password: process.env.BULL_PASSWORD || undefined,
+        username: process.env.BULL_USERNAME || undefined,
         ...(process.env.BULL_TLS === 'true' ? {
           tls: {
             // ignore ssl
@@ -203,6 +206,9 @@ import { CronModule } from './cron/cron.module';
             host,
             port,
             name: 'default',
+            // Supports requirepass and optional Redis ACL usernames.
+            password: configService.get<string>('BULL_PASSWORD') || undefined,
+            username: configService.get<string>('BULL_USERNAME') || undefined,
             ...(useTls
               ? {
                 tls: {
