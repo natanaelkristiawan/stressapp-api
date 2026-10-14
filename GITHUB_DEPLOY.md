@@ -95,3 +95,11 @@ Live SSH permissions, production migration and server health need the first
 GitHub Actions run to verify them.
 
 SSH action options were checked against its [official documentation](https://github.com/appleboy/ssh-action).
+
+## App CORS
+
+The confirmed app origin is https://temusobat.tech. The API explicitly allows
+this origin. Additional sites can be added in the server CORS_ORIGINS setting
+as comma-separated origins, without URL paths. CORS changes require API deploy.
+If preflight remains blocked, verify OPTIONS reaches the API rather than an
+Nginx redirect/error page; do not add duplicate CORS headers in Nginx.

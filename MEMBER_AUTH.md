@@ -100,8 +100,8 @@ the implemented home screen; server onboarding/profile persistence is a later fe
 Member changes reset forum interests and remount the scoped mood provider.
 
 Copy `stressapp/.env.example` into local Expo configuration as appropriate.
-Default URL is `http://localhost:3111` for web/iOS simulator and
-`http://10.0.2.2:3111` for Android emulator. A physical phone needs a reachable API
+Default/deployed URL is `https://api.temusobat.tech`. For local testing, explicitly
+set `http://localhost:3111` for web/iOS simulator or `http://10.0.2.2:3111` for Android. A physical phone needs a reachable API
 URL in `EXPO_PUBLIC_API_URL`; the Docker port currently binds to host loopback.
 Restart Metro after changing Expo environment variables. Use HTTPS outside local testing.
 CORS defaults allow the web preview on localhost/127.0.0.1 port 8081;

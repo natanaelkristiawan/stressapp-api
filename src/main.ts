@@ -1,3 +1,4 @@
+import { getCorsOptions } from './common/config/cors';
 import { MemberAuthModule } from './member-auth/member-auth.module';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -42,16 +43,7 @@ async function bootstrap() {
   // Apply success response wrapper
   app.useGlobalInterceptors(new SuccessInterceptor(), new NullToEmptyInterceptor());
 
-  app.enableCors({
-  origin: [
-    ...(process.env.CORS_ORIGINS || 'http://localhost:8081,http://127.0.0.1:8081').split(','),
-    'http://localhost:5172',
-    'http://localhost:5173',
-    'https://mimate-cms.otesuto.com',
-    'https://mimate.mymitsubishiapps.com'
-  ],
-  credentials: true, // needed if you're sending cookies or using Authorization headers
-});
+  app.enableCors(getCorsOptions(process.env.CORS_ORIGINS));
 
 
   // Apply error response wrapper
