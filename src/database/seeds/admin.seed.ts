@@ -10,21 +10,55 @@ export class AdminSeedError extends Error {}
 /** Formats only known driver codes and seed-owned errors, never raw driver messages. */
 export function adminSeedFailure(error: unknown): string {
   if (error instanceof AdminSeedError) return error.message;
-  const code = typeof error === 'object' && error !== null && 'code' in error
-    ? String(error.code) : '';
+  // Drivers can wrap the useful code in driverError/cause or AggregateError.errors.
+  const codes = new Set<string>();
+  const seen = new Set<object>();
+  function collect(value: unknown, depth: number): void {
+    if (!value || typeof value !== 'object' || seen.has(value) || depth > 3) return;
+    seen.add(value);
+    if ('code' in value && typeof value.code === 'string' &&
+        /^(?:ER_[A-Z0-9_]+|E[A-Z0-9_]+|PROTOCOL_[A-Z0-9_]+)$/.test(value.code)) {
+      codes.add(value.code);
+    }
+    if ('driverError' in value) collect(value.driverError, depth + 1);
+    if ('cause' in value) collect(value.cause, depth + 1);
+    if ('errors' in value && Array.isArray(value.errors)) {
+      for (const child of value.errors.slice(0, 5)) collect(child, depth + 1);
+    }
+  }
+  collect(error, 0);
   const messages: Record<string, string> = {
     ECONNREFUSED: 'Database connection refused. Check DB_HOST/DB_PORT and database availability.',
     ETIMEDOUT: 'Database connection timed out. Check network and database availability.',
     ENOTFOUND: 'Database hostname could not be resolved. Check DB_HOST.',
     ER_ACCESS_DENIED_ERROR: 'Database login denied. Check DB_USERNAME/DB_PASSWORD and database grants.',
+    ER_DBACCESS_DENIED_ERROR: 'Database access denied. Check database-level grants for the configured user.',
+    ER_TABLEACCESS_DENIED_ERROR: 'Table access denied. Check SELECT/INSERT/UPDATE grants on the identity tables.',
+    ER_NOT_SUPPORTED_AUTH_MODE: 'Database authentication method is unsupported. Check the database user authentication setup.',
     ER_BAD_DB_ERROR: 'Configured database does not exist. Check DB_DATABASE_MIMATE.',
     ER_NO_SUCH_TABLE: 'Required database table is missing. Apply the reviewed schema migrations before seeding.',
     ER_BAD_FIELD_ERROR: 'Database columns do not match the API entities. Check schema migrations.',
     ER_NO_DEFAULT_FOR_FIELD: 'Database requires a field missing from the seed. Check the deployed schema.',
     ER_DUP_ENTRY: 'An existing record conflicts with the admin seed. Check account/profile uniqueness.',
     ER_DATA_TOO_LONG: 'A seed value exceeds a database column length. Check input lengths and schema.',
+    ER_BAD_NULL_ERROR: 'A required database field is null. Check the current identity migration and deployed entities.',
+    ER_NO_REFERENCED_ROW_2: 'Admin/profile foreign key failed. Check that users links to the current members table.',
+    PROTOCOL_CONNECTION_LOST: 'Database connection was lost. Check database availability and network.',
   };
-  return messages[code] || 'Unexpected seed failure. Check the deployed API schema and seed version; raw database errors are withheld to protect credentials.';
+  if (codes.size) {
+    const list = [...codes];
+    return `${list.join(', ')}: ${list.map(code => messages[code]).find(Boolean) || 'Database/connection failure. Check the reported code and deployed schema.'}`;
+  }
+  const name = error instanceof Error ? error.name : '';
+  const types: Record<string, string> = {
+    EntityMetadataNotFoundError: 'Entity metadata is missing. Check deployed entity files and datasource registration; rebuild the API.',
+    DataTypeNotSupportedError: 'An entity column type is unsupported. Check the deployed entity definitions and database driver.',
+    TypeORMError: 'TypeORM initialization failed. Check entity relationships and deployed source versions.',
+    QueryFailedError: 'A database query failed without a recognized driver code. Check database/schema compatibility.',
+    AggregateError: 'Multiple connection attempts failed. Check database host, port and availability.',
+  };
+  return types[name] ? `${name}: ${types[name]}` :
+    'Unclassified seed failure (no recognized driver code). Check deployed source/dependencies; raw errors are withheld to protect credentials.';
 }
 
 class AdminSeedInput {

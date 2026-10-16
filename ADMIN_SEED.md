@@ -48,3 +48,8 @@ member_otps, member_sessions and users directly and records completion in
 typeorm_migrations. The seed creates a dedicated CMS profile with memberAuthEnabled=false.
 For compiled deployment run `node dist/database/run-migrations.js`, then `npm run seed:admin`.
 See [MEMBER_MERGE.md](MEMBER_MERGE.md) for the current baseline.
+
+Seed errors report the stage (configuration validation, database initialization,
+or admin creation) and recognized driver codes/TypeORM categories. Wrapped driver
+errors and aggregate connection failures are inspected without printing raw SQL,
+credentials or driver messages. If troubleshooting, share only this safe output.

@@ -32,6 +32,21 @@ describe('CMS admin seed', () => {
       expect(adminSeedFailure(error)).toContain('email, password');
     }
   });
+  it('reports wrapped driver failures and metadata categories without raw error data', () => {
+    expect(adminSeedFailure({ driverError: { code: 'ER_DBACCESS_DENIED_ERROR', sql: 'private SQL' } })).toContain('ER_DBACCESS_DENIED_ERROR');
+    const wrapped = { errors: [{ code: 'ECONNREFUSED', message: 'private host' }] };
+    expect(adminSeedFailure(wrapped)).toContain('connection refused');
+    expect(adminSeedFailure(wrapped)).not.toContain('private host');
+    const metadata = new Error('private metadata details');
+    metadata.name = 'EntityMetadataNotFoundError';
+    expect(adminSeedFailure(metadata)).toContain('Entity metadata is missing');
+    expect(adminSeedFailure(metadata)).not.toContain('private metadata');
+    expect(adminSeedFailure({ code: 'ER_SOME_NEW_DRIVER_CODE', message: 'private SQL' })).toContain('ER_SOME_NEW_DRIVER_CODE');
+    expect(adminSeedFailure({ code: 'private password' })).not.toContain('private password');
+    const circular = { cause: null };
+    circular.cause = circular;
+    expect(adminSeedFailure(circular)).toContain('Unclassified');
+  });
   it('creates linked records with a password hash and commits', async () => {
     const { source, admins, profiles, runner } = setup();
     expect(await seedAdmin(source, input())).toBe('created');
