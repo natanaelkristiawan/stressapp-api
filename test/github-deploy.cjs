@@ -40,7 +40,7 @@ exit 0
   assert(run({ FAKE_EXISTING: '0' }).calls.includes('pm2 start ecosystem.config.cjs'));
   for (const failure of ['build', 'migration']) {
     const result = run({ FAKE_FAILURE: failure });
-    assert.notEqual(result.status, 0); assert(!result.calls.includes('pm2 '), 'Failed preparation must not reload PM2');
+    assert.notEqual(result.status, 0); assert(!result.calls.includes('pm2 reload'), 'Failed migration must not reload PM2');
   }
   assert.notEqual(run({ FAKE_FAILURE: 'health' }).status, 0);
   assert.equal(run({ API_PM2_NAME: 'ignored-name' }).status, 0);

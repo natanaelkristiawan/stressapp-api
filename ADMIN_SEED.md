@@ -1,7 +1,8 @@
 # CMS admin seed
 
 Run from `stressapp-api` against the intended database. The existing `users` and
-`backup_members` tables must exist before seeding. Create missing tables with
+`members` tables must exist before seeding. Read [MEMBER_MERGE.md](MEMBER_MERGE.md)
+for the fresh-database baseline. Create the identity tables with
 `npm run migration:run`; the seed itself does not migrate schema,
 seed quests, start the API, or modify member-auth accounts.
 
@@ -40,26 +41,10 @@ Verification: `npm run build` and
 The focused tests use database mocks; actual database creation/login still needs
 verification in the intended environment.
 
-## Missing CMS tables
+## Initial schema
 
-`npm run migration:run` runs the active member and CMS migrations from
-`src/database/migrations`. Original `member_auth_migrations` and
-`cms_auth_migrations` history tables are retained so applied migrations are skipped.
-The CMS baseline creates `backup_members` before `users`, including all mapped
-scalar columns, profile indexes, a unique admin/profile link and its foreign key.
-Legacy migration source files have been removed. Existing tables
-are preserved by CREATE TABLE IF NOT EXISTS; this baseline does not repair partial
-or incompatible old schemas. Check schema compatibility separately if tables
-already exist. MySQL DDL can commit before a later statement fails; rerunning can
-create any remaining missing table. Automatic rollback deliberately refuses to
-drop these shared tables.
-
-After deploying source, run migration then seed from the API folder as shown above.
-For a compiled checkout, build first and run:
-
-```sh
-node dist/database/run-migrations.js
-npm run seed:admin
-```
-
-PM2 deployment uses the same central runner for member and CMS migrations. No server schema was modified locally.
+The user confirmed an empty database. `npm run migration:run` creates members,
+member_otps, member_sessions and users directly and records completion in
+typeorm_migrations. The seed creates a dedicated CMS profile with memberAuthEnabled=false.
+For compiled deployment run `node dist/database/run-migrations.js`, then `npm run seed:admin`.
+See [MEMBER_MERGE.md](MEMBER_MERGE.md) for the current baseline.

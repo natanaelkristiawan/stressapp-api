@@ -125,7 +125,7 @@ export class AdminSettingService {
 
   /**
    * Get latest user data access:
-   * Mengambil semua user (backup_members), join dengan activity_logs (mengambil 1 data terbaru berdasarkan waktu / createdAt),
+   * Mengambil semua user (members), join dengan activity_logs (mengambil 1 data terbaru berdasarkan waktu / createdAt),
    * lalu menginjeksi nilai member_id, last_active, dan created_at ke tabel log_last_active_manual.
    */
   async syncLatestUserDataAccess(
@@ -148,7 +148,7 @@ export class AdminSettingService {
         m.id AS member_id,
         latest_activity.last_active,
         NOW() AS created_at
-      FROM backup_members m
+      FROM members m
       LEFT JOIN (
         SELECT 
           al.userId,

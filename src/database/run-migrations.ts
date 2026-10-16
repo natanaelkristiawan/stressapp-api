@@ -1,7 +1,7 @@
 import { DataSource, DataSourceOptions } from 'typeorm';
 import { AppDataSource, migrationGroups } from './data-source';
 
-/** Runs active project migrations with their original histories, closing each connection. */
+/** Runs active project migrations and records completed versions, closing each connection. */
 export async function runProjectMigrations(
   createSource: (options: DataSourceOptions) => DataSource = (options) =>
     new DataSource(options),

@@ -240,7 +240,7 @@ export class MemberVoteService {
 
   /**
    * Builds vote report CSV with columns: Username, umur, domisili, gender, kendaraan, hobi, hasil vote, jumlah vote.
-   * Uses local backup_members profiles; external vehicle details are unavailable.
+   * Uses local members profiles; external vehicle details are unavailable.
    */
   async getVoteReportCsv(post_id: number): Promise<{ csv: string; filename: string }> {
     const detail = await this.getVoteDetailByPostId(post_id, undefined);

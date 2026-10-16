@@ -8,7 +8,9 @@ import { OTP_EMAIL_QUEUE } from './member-auth.email.processor';
 import { createHmac } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { MemberAuthService } from './member-auth.service';
-import { Member, MemberOtp, MemberSession } from './member-auth.entity';
+import { Member } from '../entity/user-mimate.entity';
+import { MemberOtp } from '../entity/member-otp.entity';
+import { MemberSession } from '../entity/member-session.entity';
 
 // Runs the real password/OTP/session logic with a transactional repository boundary mock.
 describe('registration OTP session', () => {
@@ -19,8 +21,8 @@ describe('registration OTP session', () => {
       id: 7,
       name: 'Test',
       email: 'test@example.test',
-      suspended: false,
-      deletedAt: null,
+      is_suspended: false, memberAuthEnabled: true,
+      deleted_at: null,
       verifiedAt: purpose === 'recovery' ? new Date() : null,
     });
     const passwordHash = await bcrypt.hash('Testpass123!', 4);
@@ -147,6 +149,16 @@ describe('registration OTP session', () => {
     expect(
       manager.save.mock.calls.some((call) => call[0] === MemberSession),
     ).toBe(false);
+  });
+  it('does not enable member auth for a legacy or CMS-only profile', async () => {
+    const { service, member, manager, emails } = await setup('registration');
+    member.memberAuthEnabled = false;
+    await service.sendOtp(member.email, 'registration');
+    expect(emails.add).not.toHaveBeenCalled();
+    await expect(service.verify({
+      email: member.email, purpose: 'registration', code: '1234', password: 'Testpass123!',
+    })).rejects.toThrow();
+    expect(manager.save.mock.calls.some(call => call[0] === MemberSession)).toBe(false);
   });
   it('returns reset proof without a login session for recovery', async () => {
     const { service, member, manager } = await setup('recovery');

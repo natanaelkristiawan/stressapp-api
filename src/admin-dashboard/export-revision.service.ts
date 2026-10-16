@@ -163,7 +163,7 @@ export class ExportRevisionService {
         // Query active members within the UTC bounds
         const activeUsers = await this.activityRepository
             .createQueryBuilder('activity')
-            .innerJoin('backup_members', 'member', 'member.id = activity.userId')
+            .innerJoin('members', 'member', 'member.id = activity.userId')
             .select([
                 'member.id AS id',
                 'member.name AS name',

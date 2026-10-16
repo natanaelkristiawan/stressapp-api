@@ -1,5 +1,9 @@
 # Member authentication
 
+Member/profile identity is unified. The user confirmed an empty database; the
+initial migration now creates the final schema directly. See [MEMBER_MERGE.md](MEMBER_MERGE.md).
+Profile writes remain separate work.
+
 Implemented 2026-10-14. Email/password member authentication is separate from
 CMS `admin-auth`. No Google sign-in in this step.
 See the [maintenance guide](../docs/auth/README.md) and [implementation history](../docs/auth/HISTORY.md).
@@ -56,16 +60,12 @@ Unexpected server errors use a generic message.
 
 ## Database and local run
 
-The first additive migration creates `members`, `member_otps`, and `member_sessions`
-in the existing `mimate` connection, plus its separate migration history table.
-The second migration adds the unique nullable refreshHash column. Existing opaque
-sessions have no refresh grant and require login once after the JWT upgrade.
+The initial identity migration creates members, member_otps, member_sessions and
+users directly in the existing mimate connection, including refreshHash.
+TypeORM records completion in typeorm_migrations and skips completed versions.
 The physical tokenHash primary-key column is retained for compatibility; for new
 JWT sessions it stores the random session ID referenced by the JWT sid claim.
-It does not remove legacy tables, connections, entities or retained databases.
-The central migration runner applies active member and CMS migrations while
-preserving their original history tables and excluding removed legacy migrations. The retired external users mapping
-is also excluded from the general datasource.
+
 
 From `stressapp-api`, with the existing private server .env configured:
 
@@ -150,7 +150,7 @@ is implied by this check. Function comments explain purposes, results and errors
 Only the mimate datasource remains, configured by DB_DATABASE_MIMATE.
 DB_DATABASE_MMID is no longer read and can be removed from the server .env.
 No database/table/data deletion or schema synchronization was executed.
-CMS tokens now carry local backup_members IDs and explicit CMS scope; old
+CMS tokens now carry local profile IDs in the unified members table and explicit CMS scope; old
 external-ID tokens are rejected, so existing CMS sessions must log in again.
 
 Removed external vehicle enrichment from profile/admin/vote exports and external

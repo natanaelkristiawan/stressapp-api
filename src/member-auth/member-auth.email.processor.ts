@@ -5,7 +5,8 @@ import { MailerService } from '@nestjs-modules/mailer';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { DataSource } from 'typeorm';
-import { Member, MemberOtp } from './member-auth.entity';
+import { Member } from '../entity/user-mimate.entity';
+import { MemberOtp } from '../entity/member-otp.entity';
 export const OTP_EMAIL_QUEUE = 'member-otp-email';
 export type OtpEmailJob = {
   memberId: number;
@@ -43,8 +44,9 @@ export class MemberOtpEmailProcessor extends WorkerHost {
       .findOneBy({ id: memberId });
     if (
       !member ||
-      member.suspended ||
-      member.deletedAt ||
+      !member.memberAuthEnabled ||
+      member.is_suspended ||
+      member.deleted_at ||
       (purpose === 'registration' ? !!member.verifiedAt : !member.verifiedAt)
     )
       return;

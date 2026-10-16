@@ -5,8 +5,30 @@ import { Quest } from "./quest.entity";
 import { QuestPointDetail } from "./quest-point-detail.entity";
 import { UserAdmin } from "./user-admin.entity";
 import { QuestPoint } from "./quest-point.entity";
-@Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "backup_members"})
-export class UserMimateEntity {
+@Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "members"})
+export class Member {
+    @Column({ length: 60, nullable: true, select: false })
+    passwordHash: string | null;
+
+    @Column({ type: 'datetime', nullable: true })
+    verifiedAt: Date | null;
+
+    @Column({ type: 'datetime', nullable: true })
+    termsAcceptedAt: Date | null;
+
+    @Column({ default: false })
+    memberAuthEnabled: boolean;
+
+    @Index('UQ_members_username', { unique: true })
+    @Column({ length: 100, nullable: true })
+    username: string | null;
+
+    @Column({ length: 100, nullable: true })
+    location: string | null;
+
+    @Column({ type: 'json', nullable: true })
+    preferences: string[] | null;
+
     @PrimaryGeneratedColumn()
     id?: number;
 
@@ -18,12 +40,9 @@ export class UserMimateEntity {
     memberId?: string;
 
     @Column({nullable: true})
-    locale?: string;
-
-    @Column({nullable: true})
     status?: string;
 
-    @Index()
+    @Index('UQ_members_email', { unique: true })
     @Column({nullable: true})
     email: string;
 
@@ -43,9 +62,6 @@ export class UserMimateEntity {
     @Index()
     @Column({nullable: true})
     email_mmid?: string;
-
-    @Column({nullable: true})
-    timeZone?: string;
 
     @Column({ nullable: true})
     image_path?: string;
@@ -107,9 +123,6 @@ export class UserMimateEntity {
     hobby?: string;
 
     @Column({ nullable: true})
-    income?: string;
-
-    @Column({ nullable: true})
     link?: string;
 
     @Column({ nullable: true})
@@ -158,7 +171,7 @@ export class UserMimateEntity {
     @OneToMany(() => QuestPointDetail, (questPointDetail) => questPointDetail.member)
     questPointDetails?: QuestPointDetail[];
 
-    // Inverse side: FK lives on users.backup_member_id → backup_members.id (see UserAdmin)
+    // Inverse side: FK lives on users.backup_member_id → members.id (see UserAdmin)
     @OneToOne(() => UserAdmin, (userAdmin) => userAdmin.userMimate)
     userAdmin?: UserAdmin;
 
@@ -178,7 +191,7 @@ export class UserMimateEntity {
     @Column({ nullable: false, default: false})
     member_verified?: boolean;
 
-    // Inverse side: FK lives on quest_points.member_id → backup_members.id (see QuestPoint)
+    // Inverse side: FK lives on quest_points.member_id → members.id (see QuestPoint)
     @OneToOne(() => QuestPoint, (questPoint) => questPoint.member)
     questPoint?: QuestPoint;
 
@@ -192,3 +205,5 @@ export class UserMimateEntity {
     @Column({ nullable: true})
     quiz_winner?: number;
 }
+// Compatibility export: one mapped entity, not a second identity table.
+export { Member as UserMimateEntity };

@@ -1,5 +1,7 @@
 import { MemberAuthModule } from './member-auth/member-auth.module';
-import { Member, MemberOtp, MemberSession } from './member-auth/member-auth.entity';
+import { Member } from './entity/user-mimate.entity';
+import { MemberOtp } from './entity/member-otp.entity';
+import { MemberSession } from './entity/member-session.entity';
 import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -97,7 +99,7 @@ import { CronModule } from './cron/cron.module';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE_MIMATE,
-      entities: [Member, MemberOtp, MemberSession, UserMimateEntity, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
+      entities: [Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
         CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner], // Your entities
       synchronize: false, // Should not be true in production

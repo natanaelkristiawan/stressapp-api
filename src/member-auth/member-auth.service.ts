@@ -21,7 +21,9 @@ import {
   timingSafeEqual,
 } from 'crypto';
 import * as bcrypt from 'bcrypt';
-import { Member, MemberOtp, MemberSession } from './member-auth.entity';
+import { Member } from '../entity/user-mimate.entity';
+import { MemberOtp } from '../entity/member-otp.entity';
+import { MemberSession } from '../entity/member-session.entity';
 import { LoginDto, RegisterDto, VerifyOtpDto } from './member-auth.dto';
 
 const GENERIC = {
@@ -72,11 +74,11 @@ export class MemberAuthService {
         429,
       );
   }
-  /** Checks whether a member exists and is neither suspended nor deleted.
+  /** Checks member-login eligibility and the shared suspension/deletion state.
    * @returns A truthy eligibility result; null/false when access is disallowed.
    */
   private active(member: Member | null) {
-    return member && !member.suspended && !member.deletedAt;
+    return member && member.memberAuthEnabled && !member.is_suspended && !member.deleted_at;
   }
   /** Builds the public member identity without credentials or private columns.
    * @returns The member ID, email, display name and verification status.
@@ -101,7 +103,8 @@ export class MemberAuthService {
         name: dto.name,
         passwordHash,
         termsAcceptedAt: new Date(),
-        createdAt: new Date(),
+        created_at: new Date(),
+        memberAuthEnabled: true,
       });
     } catch (error) {
       if (

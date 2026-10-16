@@ -2,7 +2,7 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 import { runProjectMigrations } from './run-migrations';
 
 describe('central project migrations', () => {
-  it('uses the original histories and active migrations, then closes both connections', async () => {
+  it('uses the original histories and active migrations, then closes all connections', async () => {
     const options: DataSourceOptions[] = [];
     const sources: {
       initialize: jest.Mock;
@@ -21,17 +21,10 @@ describe('central project migrations', () => {
       sources.push(source);
       return source as unknown as DataSource;
     });
-    expect(options.map((o) => o.migrationsTableName)).toEqual([
-      'member_auth_migrations',
-      'cms_auth_migrations',
-    ]);
-    expect(options.map((o) => o.migrations)).toEqual([
-      [
-        expect.objectContaining({ name: 'MemberAuth1791936000000' }),
-        expect.objectContaining({ name: 'MemberRefresh1791936001000' }),
-      ],
-      [expect.objectContaining({ name: 'CmsAdmin1792108800000' })],
-    ]);
+    expect(options.map(o => o.migrationsTableName)).toEqual(['typeorm_migrations']);
+    expect(options.map(o => o.migrations)).toEqual([[
+      expect.objectContaining({ name: 'InitialIdentity1792195200000' }),
+    ]]);
     for (const source of sources) {
       expect(source.runMigrations).toHaveBeenCalledTimes(1);
       expect(source.destroy).toHaveBeenCalledTimes(1);

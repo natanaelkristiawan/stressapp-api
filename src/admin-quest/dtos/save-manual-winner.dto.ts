@@ -33,7 +33,7 @@ export class SaveManualWinnerDto {
   year?: number;
 
   @ApiPropertyOptional({
-    description: 'User ID / Member ID in backup_members',
+    description: 'User ID / Member ID in members',
     example: 105,
   })
   @IsOptional()

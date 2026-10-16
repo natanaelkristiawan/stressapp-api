@@ -1,5 +1,5 @@
 import { MemberOtpEmailProcessor } from './member-auth.email.processor';
-import { MemberOtp } from './member-auth.entity';
+import { MemberOtp } from '../entity/member-otp.entity';
 describe('OTP email worker', () => {
   const data = {
     memberId: 7,
@@ -23,8 +23,8 @@ describe('OTP email worker', () => {
             ? current
             : {
                 email: 'test@example.test',
-                suspended: false,
-                deletedAt: null,
+                is_suspended: false, memberAuthEnabled: true,
+                deleted_at: null,
                 verifiedAt: null,
               },
       }),

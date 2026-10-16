@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsEmail, IsOptional, IsString, IsBoolean, IsDateString, IsNumber, IsUrl, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsDateString, IsUrl, IsNotEmpty } from 'class-validator';
 
 export class UpdateProfileDto {
   @ApiProperty({ description: 'Full name of the user', example: 'Abid Putra' })
@@ -42,12 +41,6 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsString()
   hobby?: string;
-
-  @ApiPropertyOptional({ description: 'Monthly income in USD', example: 1200 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  income?: number;
 
   @ApiPropertyOptional({ description: 'Personal or social media link', example: 'https://instagram.com/abidputra' })
   @IsOptional()

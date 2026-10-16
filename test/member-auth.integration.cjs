@@ -99,9 +99,9 @@ async function register(suffix) {
   const cachedExpired = await fetch(`${api}/profile/me`, { headers: { Authorization: `Bearer ${expiredJwt}` } });
   assert.equal(cachedExpired.status, 401, 'Cached identity cannot bypass JWT expiry');
   await redis.del(`token:${expiredJwt}`);
-  await db.execute('UPDATE members SET suspended=1 WHERE email=?', [main.email]);
+  await db.execute('UPDATE members SET is_suspended=1 WHERE email=?', [main.email]);
   assert.equal((await call('me', undefined, token)).status, 401);
-  await db.execute('UPDATE members SET suspended=0 WHERE email=?', [main.email]);
+  await db.execute('UPDATE members SET is_suspended=0 WHERE email=?', [main.email]);
   await cooldown(main.email);
   assert.equal((await call('forgot-password', { email: main.email })).status, 200);
   assert.equal((await call('forgot-password', { email: main.email })).status, 429);

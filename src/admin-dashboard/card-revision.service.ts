@@ -997,7 +997,7 @@ export class CardRevisionService {
             COALESCE(u.profilePictureUrl_new, u.profilePictureUrl, '') AS profilePicture,
             COUNT(*) AS count
           FROM ${tableName} t
-          JOIN backup_members u ON u.id = t.${userIdField}
+          JOIN members u ON u.id = t.${userIdField}
           WHERE t.${createdAtField} BETWEEN ? AND ?
           GROUP BY u.id
           ORDER BY count DESC
@@ -1342,7 +1342,7 @@ export class CardRevisionService {
 
       // Generate buffer and filename
       const buffer = await workbook.xlsx.writeBuffer() as Buffer;
-      const filename = `backup_members_${format(this.dateStart, 'yyyy-MM-dd')}_to_${format(this.dateEnd, 'yyyy-MM-dd')}_${Date.now()}.xlsx`;
+      const filename = `members_${format(this.dateStart, 'yyyy-MM-dd')}_to_${format(this.dateEnd, 'yyyy-MM-dd')}_${Date.now()}.xlsx`;
       
       return { buffer, filename };
     }

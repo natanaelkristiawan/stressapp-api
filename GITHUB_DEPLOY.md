@@ -44,7 +44,7 @@ by this repository edit.
   server if it is missing. The script does not silently install/change runtime versions.
 - The server `.env` contains the existing production port, database, Redis,
   JWT, SMTP and other runtime configuration. It remains on the server.
-- The SSH user can reload the intended PM2 process and access its database.
+- The SSH user can stop/restart the intended PM2 process and access its database.
   Ensure PM2 startup configuration already restores the API after server reboot.
 
 ## What happens on each deployment
@@ -53,16 +53,14 @@ by this repository edit.
 2. It pulls `main` using `git pull --ff-only`; it does not reset/delete local files.
 3. The deployment script checks the process name, server `.env` and runtime tools.
 4. Yarn installs with the frozen lockfile, then builds NestJS.
-5. The central database runner applies pending member and CMS migrations using their original histories.
-6. PM2 reloads the existing named API, or starts the included ecosystem config
-   when that process does not exist.
+5. The runner applies pending migrations and records them in typeorm_migrations.
+6. PM2 reloads the existing API or starts the included ecosystem configuration.
 7. The script waits for local `/is-live` on the configured `PORT` and reports failure
    if the API does not become healthy.
 
-Build/migration failure stops before PM2 reload. A failed health check fails the
-GitHub job; automatic code/database rollback is not implemented. The additive
-auth migrations do not alter retained legacy tables. Use a reviewed backup before
-future schema changes; do not substitute the legacy broad datasource.
+Build/migration failure prevents PM2 reload. A failed health check fails the job;
+automatic rollback is not implemented. The initial identity baseline targets the
+user-confirmed empty database; see [MEMBER_MERGE.md](MEMBER_MERGE.md).
 Deployments run serially. This in-place PM2 workflow does not promise zero downtime.
 A health response confirms readiness, not complete feature acceptance.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys the already-updated checkout. Exits nonzero before PM2 reload on build/migration failure.
+# Deploys the already-updated checkout. Exits before PM2 reload on build/migration failure.
 # Returns shell status 0 only after the API health endpoint responds successfully.
 set -eo pipefail
 cd "$(dirname "$0")/.."
@@ -21,7 +21,7 @@ export PORT=3111
 # Keep dev dependencies for the Nest compiler and TypeORM CLI; do not mutate the lockfile.
 yarn install --frozen-lockfile --production=false --non-interactive
 yarn build
-# Run the active project migrations, preserving each deployed history table.
+# TypeORM history skips completed migrations on subsequent deployments.
 node dist/database/run-migrations.js
 
 if pm2 describe stressapp-api >/dev/null 2>&1; then
