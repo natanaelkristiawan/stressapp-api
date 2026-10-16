@@ -1,6 +1,6 @@
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { adminSeedInput, seedAdmin } from './admin.seed';
+import { adminSeedFailure, adminSeedInput, seedAdmin } from './admin.seed';
 import { UserAdmin } from '../../entity/user-admin.entity';
 
 describe('CMS admin seed', () => {
@@ -21,7 +21,15 @@ describe('CMS admin seed', () => {
     expect(input().email).toBe('admin@example.com');
     expect(input().password).toBe(' password ');
     for (const env of [{}, { ADMIN_SEED_EMAIL: 'bad', ADMIN_SEED_PASSWORD: 'password' }, { ADMIN_SEED_EMAIL: 'a@b.com', ADMIN_SEED_PASSWORD: '😀'.repeat(30) }]) {
-      expect(() => adminSeedInput(env)).toThrow('Set valid');
+      expect(() => adminSeedInput(env)).toThrow('Invalid ADMIN_SEED');
+    }
+  });
+  it('reports actionable errors without leaking driver messages or credentials', () => {
+    expect(adminSeedFailure({ code: 'ER_NO_SUCH_TABLE', message: 'secret SQL' })).toContain('table is missing');
+    expect(adminSeedFailure({ code: 'ER_ACCESS_DENIED_ERROR', message: 'secret password' })).toContain('login denied');
+    expect(adminSeedFailure(new Error('secret password'))).not.toContain('secret password');
+    try { adminSeedInput({}); } catch (error) {
+      expect(adminSeedFailure(error)).toContain('email, password');
     }
   });
   it('creates linked records with a password hash and commits', async () => {
