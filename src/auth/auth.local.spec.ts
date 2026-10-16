@@ -11,6 +11,7 @@ describe('local identity without mmid', () => {
   /** Creates the local-only service graph. Returns services and observable repository/JWT mocks. */
   async function setup() {
     const findOne = jest.fn();
+    const adminFindOne = jest.fn();
     const sign = jest.fn().mockReturnValue('signed-admin-token');
     const module = await Test.createTestingModule({
       providers: [
@@ -20,7 +21,7 @@ describe('local identity without mmid', () => {
           provide: getRepositoryToken(UserMimateEntity, 'mimate'),
           useValue: { findOne },
         },
-        { provide: getRepositoryToken(UserAdmin, 'mimate'), useValue: {} },
+        { provide: getRepositoryToken(UserAdmin, 'mimate'), useValue: { findOne: adminFindOne } },
         { provide: JwtService, useValue: { sign } },
       ],
     }).compile();
@@ -29,6 +30,7 @@ describe('local identity without mmid', () => {
       admin: module.get(AdminAuthService),
       findOne,
       sign,
+      adminFindOne,
     };
   }
   it('rejects invalid IDs before querying and looks up valid local IDs', async () => {
@@ -57,4 +59,21 @@ describe('local identity without mmid', () => {
       expect.objectContaining({ id: 7, kind: 'admin-access', aud: 'cms' }),
     );
   });
+  it('returns only admin identity and rejects missing, suspended or deleted accounts', async () => {
+    const { admin, adminFindOne } = await setup();
+    const user = Object.assign(new UserAdmin(), {
+      id: 3, name: 'Staff', email: 'staff@example.test', password: 'private-hash',
+      userMimate: { id: 7, is_suspended: false, deleted_at: null },
+    });
+    adminFindOne.mockResolvedValue(user);
+    expect(await admin.currentAdmin(7)).toEqual({ id: '3', name: 'Staff', email: 'staff@example.test' });
+    user.userMimate.is_suspended = true;
+    await expect(admin.currentAdmin(7)).rejects.toThrow('Invalid credentials');
+    user.userMimate.is_suspended = false;
+    user.userMimate.deleted_at = new Date();
+    await expect(admin.currentAdmin(7)).rejects.toThrow('Invalid credentials');
+    adminFindOne.mockResolvedValue(null);
+    await expect(admin.currentAdmin(7)).rejects.toThrow('Invalid credentials');
+  });
+
 });

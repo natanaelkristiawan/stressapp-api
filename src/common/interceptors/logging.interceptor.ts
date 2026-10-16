@@ -15,7 +15,7 @@ import {
     constructor(private readonly logService: RequestLogService) {}
   
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-      if (context.getClass().name === 'MemberAuthController') return next.handle();
+      if (['MemberAuthController', 'AdminAuthController'].includes(context.getClass().name)) return next.handle();
       const now = Date.now();
       const ctx = context.switchToHttp();
       const request = ctx.getRequest<Request>();

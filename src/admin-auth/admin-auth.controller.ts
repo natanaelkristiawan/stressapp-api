@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { ChangePasswordDto, LoginDto } from './dtos/auth.dto';
 import { JwtService } from '@nestjs/jwt';
 import { AdminAuthService } from './admin-auth.service';
@@ -46,10 +46,17 @@ export class AdminAuthController {
             message: 'Login successful',
             data: {
                 access_token: token,
-                user: user.userMimate,
+                user: this.adminAuthService.identity(user),
             }
         }
        
+    }
+
+    /** Returns the current CMS identity after middleware token verification. */
+    @Get('me')
+    @ApiBearerAuth('access-token')
+    async me(@Req() req: { userData: { id: number } }) {
+        return { message: 'Current admin', data: { user: await this.adminAuthService.currentAdmin(req.userData.id) } };
     }
 
     @Post('change-password')

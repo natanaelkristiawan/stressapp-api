@@ -18,10 +18,26 @@ export class AdminAuthService {
 
   async validateUser(email: string, password: string): Promise<UserAdmin> {
     const user = await this.usersRepository.findOne({ where: { email }, relations: ['userMimate'] });
-    if (user?.userMimate && await bcrypt.compare(password, user.password)) {
+    if (user?.userMimate && !user.userMimate.is_suspended && !user.userMimate.deleted_at && await bcrypt.compare(password, user.password)) {
       return user;
     }
     throw new UnauthorizedException('Invalid credentials');
+  }
+
+  /** Returns only CMS identity fields, never credentials or the full linked profile. */
+  identity(user: UserAdmin) {
+    return { id: String(user.id), name: user.name, email: user.email };
+  }
+
+  /** Resolves a currently authorized admin from the middleware's local profile ID. */
+  async currentAdmin(profileId: number) {
+    const user = await this.usersRepository.findOne({
+      where: { backup_member_id: profileId }, relations: ['userMimate'],
+    });
+    if (!user?.userMimate || user.userMimate.is_suspended || user.userMimate.deleted_at) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    return this.identity(user);
   }
 
   async login(user: UserAdmin): Promise<string> {
