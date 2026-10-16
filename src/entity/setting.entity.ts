@@ -4,7 +4,6 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  Index,
 } from 'typeorm';
 
 @Entity('setting_config')
@@ -12,7 +11,6 @@ export class SettingEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Index({ unique: true })
   @Column({ name: 'key', type: 'varchar', length: 191, unique: true })
   key: string;
 
