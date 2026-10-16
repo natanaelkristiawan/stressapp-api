@@ -25,27 +25,26 @@ try {
 printf '%s\\n' "${name} $*" >> "$FAKE_LOG"
 if [[ '${name}' == pm2 ]]; then printf '%s\\n' "PORT=$PORT" >> "$FAKE_LOG"; fi
 if [[ '${name}' == yarn && "$1" == build && "$FAKE_FAILURE" == build ]]; then exit 11; fi
-if [[ '${name}' == node && "$1" == dist/database/run-migrations.js && "$FAKE_FAILURE" == migration ]]; then exit 12; fi
 if [[ '${name}' == pm2 && "$1" == describe && "$FAKE_EXISTING" == 0 ]]; then exit 1; fi
 if [[ '${name}' == node && $# == 0 && "$FAKE_FAILURE" == health ]]; then exit 13; fi
 exit 0
 `, { mode: 0o755 });
   }
   const success = run(); assert.equal(success.status, 0);
-  assert(success.calls.indexOf('yarn build') < success.calls.indexOf('dist/database/run-migrations.js'));
-  assert(success.calls.indexOf('dist/database/run-migrations.js') < success.calls.indexOf('pm2 reload'));
+  assert(success.calls.indexOf('yarn build') < success.calls.indexOf('pm2 reload'));
   assert(success.calls.includes('pm2 reload stressapp-api --update-env'));
+  assert(!success.calls.includes('run-migrations'));
   assert(success.calls.includes('PORT=3111'), 'PM2 receives the confirmed API port');
   assert.equal(run({ FAKE_EXISTING: '0' }).status, 0);
   assert(run({ FAKE_EXISTING: '0' }).calls.includes('pm2 start ecosystem.config.cjs'));
-  for (const failure of ['build', 'migration']) {
+  for (const failure of ['build']) {
     const result = run({ FAKE_FAILURE: failure });
-    assert.notEqual(result.status, 0); assert(!result.calls.includes('pm2 reload'), 'Failed migration must not reload PM2');
+    assert.notEqual(result.status, 0); assert(!result.calls.includes('pm2 reload'), 'Failed build must not reload PM2');
   }
   assert.notEqual(run({ FAKE_FAILURE: 'health' }).status, 0);
   assert.equal(run({ API_PM2_NAME: 'ignored-name' }).status, 0);
   assert(run({ API_PM2_NAME: 'ignored-name' }).calls.includes('pm2 reload stressapp-api --update-env'), 'External name cannot override the static process');
   fs.unlinkSync(path.join(root, '.env'));
   assert.notEqual(run().status, 0);
-  console.log('PASS: install/build/migration/reload order, existing/first-start PM2, failed build/migration/health and missing configuration.');
+  console.log('PASS: install/build/reload order, existing/first-start PM2, failed build/health and missing configuration.');
 } finally { fs.rmSync(root, { recursive: true, force: true }); }

@@ -21,11 +21,7 @@
     "seed": "ts-node -r tsconfig-paths/register src/database/seeds/run-seed.ts",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
     "typeorm:ds": "npm run typeorm -- -d src/database/data-source.ts",
-    "migration:generate": "npm run typeorm:ds -- migration:generate",
-    "migration:create": "npm run typeorm -- migration:create",
-    "migration:run": "ts-node -r tsconfig-paths/register src/database/run-migrations.ts",
-    "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/run-admin-seed.ts",
-    "migration:cms": "npm run migration:run"
+    "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/run-admin-seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",

@@ -3,13 +3,6 @@ import { join } from 'path';
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 
-import { InitialIdentity1792195200000 } from './migrations/1792195200000-InitialIdentity';
-
-export const migrationGroups = [{
-  migrationsTableName: 'typeorm_migrations',
-  migrations: [InitialIdentity1792195200000],
-}];
-
 dotenv.config();
 
 export const AppDataSource = new DataSource({
@@ -29,7 +22,5 @@ export const AppDataSource = new DataSource({
       )
       .map((file) => join(__dirname, '../entity', file)),
   ],
-  migrations: migrationGroups.flatMap((group) => group.migrations),
-  migrationsTableName: 'typeorm_migrations',
-  synchronize: false,
+  synchronize: true,
 });

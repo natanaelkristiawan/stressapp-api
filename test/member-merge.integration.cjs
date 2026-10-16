@@ -7,7 +7,6 @@ const { readdirSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { DataSource } = require('typeorm');
 const { createConnection } = require('mysql2/promise');
-const { InitialIdentity1792195200000 } = require('../src/database/migrations/1792195200000-InitialIdentity');
 const { Member } = require('../src/entity/user-mimate.entity');
 const { UserMimateEntity } = require('../src/entity/user-mimate.entity');
 const { UserAdmin } = require('../src/entity/user-admin.entity');
@@ -27,8 +26,7 @@ async function main() {
     await admin.query(`CREATE DATABASE \`${schema}\``);
     const folder = resolve(__dirname, '../src/entity');
     db = new DataSource({
-      type: 'mysql', ...options, username: 'root', database: schema, synchronize: false,
-      migrations: [InitialIdentity1792195200000], migrationsTableName: 'typeorm_migrations',
+      type: 'mysql', ...options, username: 'root', database: schema, synchronize: true,
       entities: [...readdirSync(folder)
         .filter(file => /\.entity\.ts$/.test(file) && !/^(user|vehicle|car)\.entity\./.test(file))
         .map(file => resolve(folder, file))],
@@ -41,8 +39,6 @@ async function main() {
     const q = db.createQueryRunner();
     await q.connect();
     try {
-      assert.equal((await db.runMigrations()).length, 1);
-      assert.equal((await db.runMigrations()).length, 0);
       assert.equal(await q.hasTable('backup_members'), false);
       assert.equal(await q.hasTable('members_auth_archive'), false);
       for (const field of ['locale', 'timeZone', 'income']) assert.equal(await q.hasColumn('members', field), false);
@@ -86,7 +82,10 @@ async function main() {
       const cms = new AdminAuthService(jwt, db.getRepository(UserAdmin));
       await assert.rejects(cms.validateUser(registration.email, registration.password));
       assert.equal((await cms.validateUser('newadmin@example.test', 'Synthetic123!')).userMimate.memberAuthEnabled, false);
-      console.log('Fresh identity MySQL checks passed: schema, constraints, FKs, registration/OTP/login/refresh/logout, suspension/deletion, CMS isolation, secret exclusion, profile storage, admin seed.');
+      const before = await q.query('SELECT id, email, password FROM users ORDER BY id');
+      await db.synchronize();
+      assert.deepEqual(await q.query('SELECT id, email, password FROM users ORDER BY id'), before);
+      console.log('Identity sync MySQL checks passed: repeat synchronization preserves records, constraints, FKs, registration/OTP/login/refresh/logout, suspension/deletion, CMS isolation, secret exclusion, profile storage, admin seed.');
     } finally {
       await q.release();
     }

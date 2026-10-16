@@ -9,7 +9,7 @@ import { Quest } from 'src/entity/quest.entity';
     imports: [
         ConfigModule.forRoot({ envFilePath: ['.env'], isGlobal: true }),
         // Standalone seed command shares the local datasource entity filtering.
-        TypeOrmModule.forRoot({ ...AppDataSource.options, name: 'mimate', synchronize: false }),
+        TypeOrmModule.forRoot({ ...AppDataSource.options, name: 'mimate', synchronize: true }),
         TypeOrmModule.forFeature([Quest], 'mimate'),
     ],
     providers: [SeedService],
