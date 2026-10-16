@@ -1,7 +1,7 @@
 # Member authentication
 
-Member/profile identity is unified. The user confirmed an empty database; the
-initial migration now creates the final schema directly. See [MEMBER_MERGE.md](MEMBER_MERGE.md).
+Member/profile identity is unified. TypeORM synchronize:true manages schema during
+development; migration commands have been removed. See [MEMBER_MERGE.md](MEMBER_MERGE.md).
 Profile writes remain separate work.
 
 Implemented 2026-10-14. Email/password member authentication is separate from
@@ -60,9 +60,8 @@ Unexpected server errors use a generic message.
 
 ## Database and local run
 
-The initial identity migration creates members, member_otps, member_sessions and
-users directly in the existing mimate connection, including refreshHash.
-TypeORM records completion in typeorm_migrations and skips completed versions.
+API startup and standalone seeds synchronize the configured mimate database from
+entities. OTP/session foreign keys and uniqueness are declared in entity metadata.
 The physical tokenHash primary-key column is retained for compatibility; for new
 JWT sessions it stores the random session ID referenced by the JWT sid claim.
 
@@ -72,7 +71,6 @@ From `stressapp-api`, with the existing private server .env configured:
 ```sh
 yarn install --frozen-lockfile --production=false
 yarn build
-node dist/database/run-migrations.js
 ```
 
 The API runs with PM2. MySQL/Redis containers are installed and managed separately;
@@ -157,7 +155,7 @@ Removed external vehicle enrichment from profile/admin/vote exports and external
 phone lookup from CSV exports; legacy fields remain empty for compatibility.
 Admin profile updates no longer write external users. Quest profile-completion
 checks use the local name/bio/hobby. Historical external entity definitions remain
-in source but are not registered in runtime or general migration metadata.
+in source but are not registered in runtime or datasource metadata.
 
 Normal startup excludes the standalone seeder. After building, run
 `node test/single-database.cjs` to inspect datasource/providers/entity relations

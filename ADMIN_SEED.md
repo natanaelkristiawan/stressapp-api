@@ -1,10 +1,8 @@
 # CMS admin seed
 
-Run from `stressapp-api` against the intended database. The existing `users` and
-`members` tables must exist before seeding. Read [MEMBER_MERGE.md](MEMBER_MERGE.md)
-for the fresh-database baseline. Create the identity tables with
-`npm run migration:run`; the seed itself does not migrate schema,
-seed quests, start the API, or modify member-auth accounts.
+Run from `stressapp-api` against the configured development database. TypeORM
+synchronize:true creates/updates tables during seed datasource initialization.
+No migration command is required. See [MEMBER_MERGE.md](MEMBER_MERGE.md).
 
 Set these values in the private server `.env` (never commit credentials):
 
@@ -20,7 +18,6 @@ The seed uses existing `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD`, and
 `DB_DATABASE_MIMATE` settings.
 
 ```sh
-npm run migration:run
 npm run seed:admin
 ```
 
@@ -41,13 +38,10 @@ Verification: `npm run build` and
 The focused tests use database mocks; actual database creation/login still needs
 verification in the intended environment.
 
-## Initial schema
+## Development schema
 
-The user confirmed an empty database. `npm run migration:run` creates members,
-member_otps, member_sessions and users directly and records completion in
-typeorm_migrations. The seed creates a dedicated CMS profile with memberAuthEnabled=false.
-For compiled deployment run `node dist/database/run-migrations.js`, then `npm run seed:admin`.
-See [MEMBER_MERGE.md](MEMBER_MERGE.md) for the current baseline.
+API startup and standalone seeds synchronize the schema from entity definitions.
+The seed creates a dedicated CMS profile with memberAuthEnabled=false.
 
 Seed errors report the stage (configuration validation, database initialization,
 or admin creation) and recognized driver codes/TypeORM categories. Wrapped driver

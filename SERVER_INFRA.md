@@ -40,7 +40,7 @@ verified on the server. Mailpit is optional for separately managed test environm
 ## Deploy
 
 Follow [GITHUB_DEPLOY.md](GITHUB_DEPLOY.md). GitHub pulls main, installs/builds,
-applies pending scoped auth migrations, reloads the named PM2 process and checks
+reloads the named PM2 process (which synchronizes the development schema) and checks
 /is-live. It does not install, start, stop or remove database/Redis containers.
 
 No remote container, volume, database or credential was changed during this cleanup.

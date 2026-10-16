@@ -53,14 +53,14 @@ by this repository edit.
 2. It pulls `main` using `git pull --ff-only`; it does not reset/delete local files.
 3. The deployment script checks the process name, server `.env` and runtime tools.
 4. Yarn installs with the frozen lockfile, then builds NestJS.
-5. The runner applies pending migrations and records them in typeorm_migrations.
-6. PM2 reloads the existing API or starts the included ecosystem configuration.
+5. PM2 reloads the API or starts the included ecosystem configuration.
+6. TypeORM synchronize:true applies the development schema during API startup.
 7. The script waits for local `/is-live` on the configured `PORT` and reports failure
    if the API does not become healthy.
 
-Build/migration failure prevents PM2 reload. A failed health check fails the job;
-automatic rollback is not implemented. The initial identity baseline targets the
-user-confirmed empty database; see [MEMBER_MERGE.md](MEMBER_MERGE.md).
+Build failure prevents PM2 reload. A failed health check fails the job; automatic
+rollback is not implemented. The user selected synchronize:true for development;
+there is no deployment migration command. See [MEMBER_MERGE.md](MEMBER_MERGE.md).
 Deployments run serially. This in-place PM2 workflow does not promise zero downtime.
 A health response confirms readiness, not complete feature acceptance.
 
@@ -89,7 +89,7 @@ node test/github-deploy.cjs
 The runnable check uses disposable mock commands and never touches a real PM2
 process, database or server. It verifies ordering, existing/first-start PM2,
 missing configuration and failure handling. Workflow YAML parsing also passed.
-Live SSH permissions, production migration and server health need the first
+Live SSH permissions, schema synchronization and server health need the first
 GitHub Actions run to verify them.
 
 SSH action options were checked against its [official documentation](https://github.com/appleboy/ssh-action).
