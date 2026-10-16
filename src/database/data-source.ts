@@ -3,32 +3,26 @@ import { join } from 'path';
 import { DataSource } from 'typeorm';
 import * as dotenv from 'dotenv';
 
-import { UserMimateEntity } from '../entity/user-mimate.entity';
-import { PostEntity } from '../entity/post.entity';
-import { TagsEntity } from '../entity/tags.entity';
-import { PostTagsEntity } from '../entity/post-tags.entity';
-import { AssetsEntity } from '../entity/asset.entity';
-import { SpaceEntity } from '../entity/space.entity';
-import { ReactionEntity } from '../entity/reaction.entity';
-import { MemberSpaceEntity } from '../entity/member-spaces.entity';
-import { Conversation } from '../entity/convertation.entity';
-import { Message } from '../entity/message.entity';
-import { UserFollowEntity } from '../entity/user-follow.entity';
-import { CommentEntity } from '../entity/comment.entity';
-import { PostReport } from '../entity/post-report.entity';
-import { Activity } from '../entity/activity.entity';
-import { CommentReactionEntity } from '../entity/comment-reaction.entity';
-import { RequestLogEntity } from '../entity/log.entity';
-import { Quest } from '../entity/quest.entity';
-import { QuestDetail } from '../entity/quest-detail.entity';
-import { QuestPoint } from '../entity/quest-point.entity';
-import { QuestPointDetail } from '../entity/quest-point-detail.entity';
-import { UserAdmin } from '../entity/user-admin.entity';
-import { Highlight } from '../entity/highlights.entity';
-import { Visitor } from '../entity/visitor.entity';
-import { VoteEntity } from '../entity/vote.entity';
-import { VoteMemberEntity } from '../entity/vote-member.entity';
-import { QuestBackup } from '../entity/quest-backup.entity';
+import {
+  Member,
+  MemberOtp,
+  MemberSession,
+} from '../member-auth/member-auth.entity';
+import { MemberAuth1791936000000 } from './migrations/1791936000000-MemberAuth';
+import { MemberRefresh1791936001000 } from './migrations/1791936001000-MemberRefresh';
+import { CmsAdmin1792108800000 } from './migrations/1792108800000-CmsAdmin';
+
+// Preserve deployed history tables while keeping migration code/configuration together.
+export const migrationGroups = [
+  {
+    migrationsTableName: 'member_auth_migrations',
+    migrations: [MemberAuth1791936000000, MemberRefresh1791936001000],
+  },
+  {
+    migrationsTableName: 'cms_auth_migrations',
+    migrations: [CmsAdmin1792108800000],
+  },
+];
 
 dotenv.config();
 
@@ -40,14 +34,19 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_DATABASE_MIMATE,
   // Exclude retired external users/vehicles; users remains the CMS table.
-  entities: readdirSync(join(__dirname, '../entity'))
-    .filter(
-      (file) =>
-        /\.entity\.(ts|js)$/.test(file) &&
-        !/^(user|vehicle|car)\.entity\./.test(file),
-    )
-    .map((file) => join(__dirname, '../entity', file)),
-  migrations: ['src/database/migrations/*.ts'],
+  entities: [
+    Member,
+    MemberOtp,
+    MemberSession,
+    ...readdirSync(join(__dirname, '../entity'))
+      .filter(
+        (file) =>
+          /\.entity\.(ts|js)$/.test(file) &&
+          !/^(user|vehicle|car)\.entity\./.test(file),
+      )
+      .map((file) => join(__dirname, '../entity', file)),
+  ],
+  migrations: migrationGroups.flatMap((group) => group.migrations),
   migrationsTableName: 'typeorm_migrations',
   synchronize: false,
 });

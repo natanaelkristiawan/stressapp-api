@@ -21,8 +21,8 @@ export PORT=3111
 # Keep dev dependencies for the Nest compiler and TypeORM CLI; do not mutate the lockfile.
 yarn install --frozen-lockfile --production=false --non-interactive
 yarn build
-# Use only member auth migrations; the legacy datasource has conflicting users mappings.
-node node_modules/typeorm/cli.js -d dist/member-auth/data-source.js migration:run
+# Run the active project migrations, preserving each deployed history table.
+node dist/database/run-migrations.js
 
 if pm2 describe stressapp-api >/dev/null 2>&1; then
   pm2 reload stressapp-api --update-env

@@ -53,7 +53,7 @@ by this repository edit.
 2. It pulls `main` using `git pull --ff-only`; it does not reset/delete local files.
 3. The deployment script checks the process name, server `.env` and runtime tools.
 4. Yarn installs with the frozen lockfile, then builds NestJS.
-5. The scoped member-auth datasource applies only pending auth migrations.
+5. The central database runner applies pending member and CMS migrations using their original histories.
 6. PM2 reloads the existing named API, or starts the included ecosystem config
    when that process does not exist.
 7. The script waits for local `/is-live` on the configured `PORT` and reports failure

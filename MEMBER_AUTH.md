@@ -63,8 +63,8 @@ sessions have no refresh grant and require login once after the JWT upgrade.
 The physical tokenHash primary-key column is retained for compatibility; for new
 JWT sessions it stores the random session ID referenced by the JWT sid claim.
 It does not remove legacy tables, connections, entities or retained databases.
-The auth migration datasource includes only member auth entities/migrations,
-avoiding unrelated legacy schema migrations. The retired external users mapping
+The central migration runner applies active member and CMS migrations while
+preserving their original history tables and excluding removed legacy migrations. The retired external users mapping
 is also excluded from the general datasource.
 
 From `stressapp-api`, with the existing private server .env configured:
@@ -72,7 +72,7 @@ From `stressapp-api`, with the existing private server .env configured:
 ```sh
 yarn install --frozen-lockfile --production=false
 yarn build
-node node_modules/typeorm/cli.js -d dist/member-auth/data-source.js migration:run
+node dist/database/run-migrations.js
 ```
 
 The API runs with PM2. MySQL/Redis containers are installed and managed separately;
