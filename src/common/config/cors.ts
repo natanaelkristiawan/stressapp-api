@@ -5,6 +5,7 @@ export function getCorsOptions(configuredOrigins?: string): { origin: string[]; 
   return {
     origin: [
       'https://temusobat.tech',
+      'https://cms.temusobat.tech',
       ...(configuredOrigins || 'http://localhost:8081,http://127.0.0.1:8081')
         .split(',').map(origin => origin.trim().replace(/\/$/, '')).filter(Boolean),
       'http://localhost:5172',
