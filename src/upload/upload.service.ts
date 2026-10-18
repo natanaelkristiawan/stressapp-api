@@ -10,14 +10,30 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import { lookup as mimeLookup } from 'mime-types';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
+import { storageConfig, objectUrl } from './storage-config';
 
 
 @Injectable()
 export class UploadService {
 
-    private s3
-    private readonly bucket = process.env.S3_BUCKET;
-    private readonly baseUrl = process.env.BASE_URL;
+    private storageSettings?: ReturnType<typeof storageConfig>;
+    private storageClient?: S3Client;
+    /** Validates storage lazily. Returns cached settings without blocking unrelated API startup. */
+    private get storage(): ReturnType<typeof storageConfig> {
+        return this.storageSettings ?? (this.storageSettings = storageConfig(process.env));
+    }
+    /** Reuses one configured client. Returns the MinIO S3 client. */
+    private get s3(): S3Client {
+        return this.storageClient ?? (this.storageClient = new S3Client(this.storage.client));
+    }
+    /** Returns the configured bucket name. */
+    private get bucket(): string { return this.storage.bucket; }
+    /** Returns the configured API delivery origin. */
+    private get baseUrl(): string { return this.storage.baseUrl; }
+    /** Returns the configured MinIO URL for existing public asset responses. */
+    private publicUrl(key: string): string {
+        return objectUrl(this.storage.endpointUrl, this.bucket, key);
+    }
     constructor(
         @InjectRepository(AssetsEntity, 'mimate')
         private assetRepository: Repository<AssetsEntity>,
@@ -25,14 +41,7 @@ export class UploadService {
         @InjectRepository(UserMimateEntity, 'mimate')
         private userMimateRepository: Repository<UserMimateEntity>,
     ){
-        this.s3 = new S3Client({
-            region:  process.env.S3_REGION,
-            endpoint: process.env.S3_SPACES_ENDPOINT, // DO Spaces endpoint
-            credentials: {
-                accessKeyId: process.env.S3_ACCESS_KEY,
-                secretAccessKey: process.env.S3_SECRET_KEY,
-            },
-        });
+
     }
 
 
@@ -67,7 +76,7 @@ export class UploadService {
       
         let response = await this.s3.send(new PutObjectCommand(params));
 
-        const url_open = `https://${this.bucket}.s3.${process.env.S3_REGION}.amazonaws.com/${key}`;
+        const url_open = this.publicUrl(key);
 
         // check if url_old is not null
         let url = `${this.baseUrl}/upload/files/${mediaId}`;
@@ -161,7 +170,7 @@ export class UploadService {
        
       
           await this.s3.send(new PutObjectCommand(imageParams));
-          const url_open = `https://${this.bucket}.s3.${process.env.S3_REGION}.amazonaws.com/${imageKey}`;
+          const url_open = this.publicUrl(imageKey);
           const url = `${this.baseUrl}/upload/files/${mediaId}`;
           const metadata = await sharp(imageFile.buffer).metadata();
           results.image = {
@@ -186,7 +195,7 @@ export class UploadService {
           };
      
           await this.s3.send(new PutObjectCommand(videoParams));
-          videoUrlOpen = `https://${this.bucket}.s3.${process.env.S3_REGION}.amazonaws.com/${videoKey}`;
+          videoUrlOpen = this.publicUrl(videoKey);
           videoUrl = `${this.baseUrl}/upload/files/${mediaId}`;
 
 

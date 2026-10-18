@@ -1,3 +1,4 @@
+import { MemberAuthGuard } from './member-auth.guard';
 import { BullModule } from '@nestjs/bullmq';
 import {
   MemberOtpEmailProcessor,
@@ -13,6 +14,7 @@ import { MemberAuthService } from './member-auth.service';
     BullModule.registerQueue({ name: OTP_EMAIL_QUEUE }),
   ],
   controllers: [MemberAuthController],
-  providers: [MemberAuthService, MemberOtpEmailProcessor],
+  providers: [MemberAuthService, MemberOtpEmailProcessor, MemberAuthGuard],
+  exports: [MemberAuthService, MemberAuthGuard],
 })
 export class MemberAuthModule {}

@@ -67,3 +67,33 @@ build is insufficient. The server Redis login remains to be verified.
 
 The API now uses only DB_DATABASE_MIMATE. Remove the unused DB_DATABASE_MMID
 setting from server .env when redeploying. No second database is required.
+
+## MinIO uploads
+
+The user confirmed `https://minio.temusobat.tech` proxies to the S3 API on port
+9000. Port 9001 is the administration console. Existing uploads now use this
+endpoint by default, path-style addressing and configured object URLs.
+
+Copy the S3 section from `.env.example` into the private server `.env`. Set an
+existing bucket and application access/secret keys; `temusobat` is an example
+bucket, not a provisioned resource. Region defaults to `us-east-1`; align it with
+MinIO if configured differently. `BASE_URL` is the API origin for existing file
+streaming links. Restart/redeploy after configuration changes. Missing/invalid
+storage settings fail when storage is used, without blocking unrelated API startup.
+
+This changes configuration for existing public-media responses only. It does
+not create buckets, change bucket policies or retrofit stored AWS URLs. Direct
+object URLs require a deliberately public object policy; private buckets will
+reject unauthenticated access. Do not make mood media public to enable these
+URLs. Member-owned private attachments and protected image/audio access are now
+implemented under `/upload/mood`; mobile integration remains pending. No live storage connection has
+been verified by the local build/configuration tests.
+
+### Private mood media
+
+Set `S3_PRIVATE_BUCKET` to a separately created private bucket, e.g.
+`temusobat-private`; it must differ from `S3_BUCKET`. Disable anonymous read/list
+and grant the application PutObject/GetObject/DeleteObject in that bucket.
+Mood endpoints validate member identity/ownership and issue five-minute signed
+URLs; never enable public access to make them work. See [MOOD_TRACKER.md](MOOD_TRACKER.md).
+No bucket/policy/credentials or server configuration has been changed locally.

@@ -1,3 +1,4 @@
+import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { getCorsOptions } from './common/config/cors';
 import { MemberAuthModule } from './member-auth/member-auth.module';
 import { NestFactory } from '@nestjs/core';
@@ -101,6 +102,7 @@ async function bootstrap() {
   const documentFactory = () => SwaggerModule.createDocument(app, config, {
     include: [
       MemberAuthModule,
+      MoodTrackerModule,
       PostModule,
       SpaceModule,
       UploadModule,

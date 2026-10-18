@@ -16,6 +16,8 @@ import {
   @Injectable()
   export class NullToEmptyInterceptor implements NestInterceptor {
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+      // Mood chart gaps are deliberate nulls, never mood zero or empty strings.
+      if (context.getClass().name === 'MoodTrackerController') return next.handle();
       return next.handle().pipe(
         map(data => this.replaceNulls(data)),
       );
