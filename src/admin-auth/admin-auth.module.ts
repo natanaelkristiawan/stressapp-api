@@ -8,16 +8,19 @@ import { ConfigModule } from '@nestjs/config';
 import { ConfigService } from '@nestjs/config';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserAdmin], 'mimate'),
-  JwtModule.registerAsync({
-    imports: [ConfigModule],
-    useFactory: async (config: ConfigService) => ({
-      secret: config.get<string>('JWT_SECRET'),
-      signOptions: {  algorithm: 'HS256' },
+  imports: [
+    TypeOrmModule.forFeature([UserAdmin], 'mimate'),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET'),
+        signOptions: { algorithm: 'HS256' },
+      }),
+      inject: [ConfigService],
     }),
-    inject: [ConfigService],
-  })],
+  ],
   controllers: [AdminAuthController],
-  providers: [AdminAuthService]
+  exports: [AdminAuthService],
+  providers: [AdminAuthService],
 })
 export class AdminAuthModule {}

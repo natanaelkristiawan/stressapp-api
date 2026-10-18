@@ -1,3 +1,4 @@
+import { CmsMembersModule } from './cms-members/cms-members.module';
 import { MemberAuthModule } from './member-auth/member-auth.module';
 import { Member } from './entity/user-mimate.entity';
 import { MemberOtp } from './entity/member-otp.entity';
@@ -162,6 +163,7 @@ import { CronModule } from './cron/cron.module';
     AdminDashboardModule,
     CommentReactionModule,
     AdminUserModule,
+    CmsMembersModule,
     RequestLogModule,
     AdminQuestModule,
     QuestModule,
