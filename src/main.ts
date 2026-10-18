@@ -1,3 +1,4 @@
+import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { getCorsOptions } from './common/config/cors';
 import { MemberAuthModule } from './member-auth/member-auth.module';
@@ -139,6 +140,7 @@ async function bootstrap() {
 
   const adminDoc = SwaggerModule.createDocument(app, adminConfig, {
     include: [
+      CmsMoodParticipationModule,
       AdminDashboardModule, 
       AdminUserModule, 
       AdminQuestModule, 

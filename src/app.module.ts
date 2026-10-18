@@ -1,3 +1,4 @@
+import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { MoodEntryEntity } from './entity/mood-entry.entity';
 import { MoodAttachment } from './entity/mood-attachment.entity';
@@ -168,6 +169,7 @@ import { CronModule } from './cron/cron.module';
     CommentReactionModule,
     AdminUserModule,
     CmsMembersModule,
+    CmsMoodParticipationModule,
     RequestLogModule,
     AdminQuestModule,
     QuestModule,
