@@ -7,6 +7,7 @@ import { Request, Response, NextFunction } from 'express';
 import { JwtService } from '@nestjs/jwt';
 import { Redis } from 'ioredis';
 import { AuthService } from 'src/auth/auth.service';
+import { MemberAuthService } from '../member-auth/member-auth.service';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class RedisTokenMiddleware implements NestMiddleware {
     private jwtService: JwtService,
     private authService: AuthService,
     private readonly redisService: RedisService,
+    private readonly memberAuth: MemberAuthService,
   ) {
     this.redis = this.redisService.getOrNil('default');
     if (!this.redis) {
@@ -49,6 +51,20 @@ export class RedisTokenMiddleware implements NestMiddleware {
       throw new UnauthorizedException('Missing or invalid token');
     }
 
+    // Shared uploads accept live member sessions as well as the existing CMS identity.
+    if (
+      req.method === 'POST' &&
+      /^\/upload\/(image|audio)\/?$/.test(req.originalUrl.split('?')[0])
+    ) {
+      try {
+        req['member'] = await this.memberAuth.authenticate(token);
+        res.setHeader('Cache-Control', 'private, no-store');
+        return next();
+      } catch {
+        // A CMS token still follows the original validated admin path below.
+      }
+    }
+
     const cacheKey = `token:${token}`;
 
     try {
@@ -70,7 +86,8 @@ export class RedisTokenMiddleware implements NestMiddleware {
 
       // if member suspended, throw error
       if (dbUser.is_suspended) {
-        let message = 'Your account has been suspended, please contact support';
+        const message =
+          'Your account has been suspended, please contact support';
 
         throw new UnauthorizedException(message);
       }

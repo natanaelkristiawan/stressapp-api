@@ -28,9 +28,8 @@ create a duplicate, but is not a stale-edit/version conflict protocol.
 | GET | `/me/moods/:date` | Required query `timeZone`. One owned entry, or 404 when absent. |
 | PUT | `/me/moods/:date` | JSON `score` integer 1–5, `timeZone`, optional `note`, `attachmentIds` (default empty). Creates/replaces today. |
 | GET | `/me/mood-summary` | Required `from`, `to`, `timeZone`; optional `grouping=week\|month` (week). Daily scores and distribution counts. |
-| POST | `/upload/mood/image` | Multipart field `file`; one JPEG/PNG/WebP up to 5 MiB, maximum 16 million decoded pixels. Re-encoded in the original JPEG/PNG/WebP format to strip EXIF/location metadata. |
-| POST | `/upload/mood/audio` | Multipart field `file`; one MP4/M4A, WebM, Ogg, WAV or MP3 up to 10 MiB. MIME and container signature must agree. |
-| GET | `/upload/mood/:id` | UUID attachment ID. Returns attachment metadata and a permanent public media URL after ownership validation. |
+| POST | `/upload/image` | Multipart field `file`; one JPEG/PNG/WebP up to 5 MiB, maximum 16 million decoded pixels. Re-encoded in the original JPEG/PNG/WebP format to strip EXIF/location metadata. |
+| POST | `/upload/audio` | Multipart field `file`; one MP4/M4A, WebM, Ogg, WAV or MP3 up to 10 MiB. MIME and container signature must agree. |
 
 Ranges are inclusive, ordered and at most 366 days. Grouping identifies the
 chart view; the caller supplies the exact week/month date range. Summary returns
@@ -59,15 +58,21 @@ settings and `S3_BUCKET`; `S3_PRIVATE_BUCKET` is no longer used. Configure anony
 GetObject for root UUID filenames and legacy `mood/*` in that bucket, with no anonymous write/list permission.
 The API needs PutObject/DeleteObject (cleanup) permissions. Settings alone do
 not create buckets or change policies; see [server setup](SERVER_INFRA.md).
-Existing `/upload/image` and `/upload/video` contracts are preserved.
+Uses the existing UploadController/UploadService and backup_assets repository.
+The global image response keeps its numeric asset id and UUID mediaId; audio
+uses the same response shape. No separate mood upload controller/service/table
+is used. Member uploads store nullable shared owner/contentType/size/bucket metadata.
 
-1. Upload selected image/audio to the appropriate `/upload/mood/` route.
-2. Keep returned `{ id, type, contentType, size, url, expiresAt }` for preview.
-3. Save mood with the returned IDs in `attachmentIds`; never send device URIs.
+1. Upload selected image/audio through `/upload/image` or `/upload/audio`.
+2. Read global response `{ id, mediaId, type, url, contentType, size, ... }`.
+   id is the numeric asset row ID, mediaId is its UUID, type is Image/Audio.
+3. Save mood with UUID mediaId values in attachmentIds; never send numeric IDs
+   or device URIs. The app adapter maps mediaId to its existing serverId.
 4. Load entries for detail/calendar. Map attachment `url` to the mobile `uri`.
 5. URLs are permanent public links and `expiresAt` is `null`. Anyone with the
    URL can access the file without login, including after logout. The authenticated
-   attachment route remains owner-only, as does attaching an upload to an entry.
+   upload endpoint accepts validated member/CMS sessions. Assigning an upload
+   to a mood requires matching member ownership in the shared assets table.
 
 Bucket/key/owner ID are not separate metadata fields; the public URL includes
 its object path. Credentials are never returned. Existing attachments keep their
@@ -101,3 +106,8 @@ bucket root as `<uuid>.<extension>`, without member/date/folder prefixes. Images
 retain their decoded JPEG/PNG/WebP format while stripping metadata. Original
 extensions are retained when compatible with the validated content type; missing
 or mismatched extensions use the canonical extension. Old keys remain readable.
+
+Existing deployment: if member_mood_attachments contains previous uploads, copy
+those metadata rows into backup_assets before resuming mood reads. Keep UUIDs,
+member ownership, stored bucket/key and original files unchanged. See the
+non-destructive SQL in SERVER_INFRA.md. The retired table is not dropped.

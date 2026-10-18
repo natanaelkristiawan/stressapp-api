@@ -2,7 +2,7 @@
 require('ts-node/register');
 require('tsconfig-paths/register');
 const assert = require('node:assert/strict');
-const { readdirSync } = require('node:fs');
+const { readdirSync, readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { randomBytes, randomUUID } = require('node:crypto');
 const { createConnection } = require('mysql2/promise');
@@ -10,16 +10,17 @@ const { Test } = require('@nestjs/testing');
 const { TypeOrmModule, getDataSourceToken } = require('@nestjs/typeorm');
 const { ValidationPipe } = require('@nestjs/common');
 const { JwtService } = require('@nestjs/jwt');
+const { RedisTokenMiddleware } = require('../src/middleware/redis-token.middleware');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
 const { Member } = require('../src/entity/user-mimate.entity');
 const { MemberSession } = require('../src/entity/member-session.entity');
 const { MoodEntryEntity } = require('../src/entity/mood-entry.entity');
-const { MoodAttachment } = require('../src/entity/mood-attachment.entity');
+const { AssetsEntity } = require('../src/entity/asset.entity');
 const { MoodTrackerController } = require('../src/mood-tracker/mood-tracker.controller');
 const { MoodTrackerService, localMoodDate, moodRange } = require('../src/mood-tracker/mood-tracker.service');
-const { MoodUploadController } = require('../src/upload/mood-upload.controller');
-const { MoodUploadService, audioContentType } = require('../src/upload/mood-upload.service');
+const { UploadController } = require('../src/upload/upload.controller');
+const { UploadService } = require('../src/upload/upload.service');
 const { MemberAuthGuard } = require('../src/member-auth/member-auth.guard');
 const { MemberAuthService } = require('../src/member-auth/member-auth.service');
 const { SuccessInterceptor } = require('../src/common/interceptors/success.interceptor');
@@ -47,8 +48,11 @@ async function main() {
       imports: [TypeOrmModule.forRoot({ name: 'mimate', type: 'mysql', host: '127.0.0.1', port, username: 'root', password: '', database: schema, timezone: 'Z', synchronize: true,
         entities: readdirSync(folder).filter(file => /\.entity\.ts$/.test(file) && !/^(user|car|vehicle)\.entity\./.test(file)).map(file => resolve(folder, file)),
       })],
-      controllers: [MoodTrackerController, MoodUploadController],
-      providers: [MoodTrackerService, MoodUploadService, MemberAuthGuard, {
+      controllers: [MoodTrackerController, UploadController],
+      providers: [MoodTrackerService, MemberAuthGuard, {
+        provide: UploadService, inject: [getDataSourceToken('mimate')],
+        useFactory: db => new UploadService(db.getRepository(AssetsEntity), db.getRepository(Member)),
+      }, {
         provide: MemberAuthService, inject: [getDataSourceToken('mimate')],
         useFactory: db => new MemberAuthService(db, { add: async () => undefined }, { getOrThrow: () => ({ eval: async () => rateCount }) }, { get: () => secret, getOrThrow: () => secret }, jwt),
       }],
@@ -57,6 +61,13 @@ async function main() {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     app.useGlobalInterceptors(new SuccessInterceptor(), new NullToEmptyInterceptor());
     app.useGlobalFilters(new AllExceptionsFilter());
+    const uploadAuth = new RedisTokenMiddleware(
+      { verify: token => jwt.verify(token, { secret }) },
+      { getLocalMember: async id => id === 999 ? { id: 999, is_suspended: false } : null },
+      { getOrNil: () => ({ set: async () => undefined }) },
+      module.get(MemberAuthService),
+    );
+    app.use('/upload', (req, res, next) => uploadAuth.use(req, res, next).catch(error => next(error)));
     await app.listen(0, '127.0.0.1');
     const base = await app.getUrl();
     const db = module.get(getDataSourceToken('mimate'));
@@ -83,7 +94,7 @@ async function main() {
     /** Posts multipart data through Multer. Returns status and parsed envelope. */
     async function upload(kind, buffer, mime, bearer = token) {
       const form = new FormData(); form.append('file', new Blob([buffer], { type: mime }), 'fixture');
-      const response = await fetch(`${base}/upload/mood/${kind}`, { method: 'POST', headers: bearer ? { Authorization: `Bearer ${bearer}` } : {}, body: form });
+      const response = await fetch(`${base}/upload/${kind}`, { method: 'POST', headers: bearer ? { Authorization: `Bearer ${bearer}` } : {}, body: form });
       return { status: response.status, body: await response.json() };
     }
     assert.equal((await request(`/me/moods?${query}`, 'GET', undefined, '')).status, 401);
@@ -123,39 +134,48 @@ async function main() {
     assert.equal((await request(`/me/moods/${today}`, 'DELETE')).status, 404);
     const image = await sharp({ create: { width: 4, height: 4, channels: 3, background: 'red' } }).png().toBuffer();
     const photo = await upload('image', image, 'image/png');
-    assert.equal(photo.status, 201); assert.equal(photo.body.data.type, 'photo');
+    assert.equal(photo.status, 201); assert.equal(photo.body.data.type, 'Image');
     const publicUrl = new URL(photo.body.data.url);
     assert.equal(publicUrl.search, '');
     assert.equal(publicUrl.hostname, 'minio.example.test');
     assert.match(publicUrl.pathname, /^\/test-public\/[0-9a-f-]+\.png$/);
-    assert.equal(photo.body.data.expiresAt, null);
     assert.equal(puts[0].Bucket, 'test-public'); assert.equal(puts[0].ContentType, 'image/png');
-    assert.equal(puts[0].CacheControl, 'public, max-age=86400');
+    assert.equal((await sharp(puts[0].Body).metadata()).format, 'png');
     assert.equal((await upload('image', Buffer.from('fake'), 'image/png')).status, 400);
     assert.equal((await upload('image', Buffer.alloc(5 * 1024 * 1024 + 1), 'image/png')).status, 413);
     assert.equal((await upload('image', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), 'image/png')).status, 400);
     assert.equal((await upload('image', image, 'image/png', '')).status, 401);
+    const cmsToken = jwt.sign({ id: 999, kind: 'admin-access', iss: 'https://mimate.otesuto.com/admin-auth/login', aud: 'cms' }, { secret, expiresIn: 3600 });
+    const cmsUpload = await upload('image', image, 'image/png', cmsToken);
+    assert.equal(cmsUpload.status, 201);
+    assert.equal((await request(`/me/moods/${today}`, 'PUT', { score: 4, timeZone, attachmentIds: [cmsUpload.body.data.mediaId] })).status, 404);
     const wav = Buffer.alloc(44); wav.write('RIFF'); wav.write('WAVE', 8);
     const audio = await upload('audio', wav, 'audio/wav');
-    assert.equal(audio.status, 201); assert.equal(audio.body.data.type, 'audio');
+    assert.equal(audio.status, 201); assert.equal(audio.body.data.type, 'Audio');
     assert.equal((await upload('audio', Buffer.from('not audio'), 'audio/wav')).status, 400);
     rateCount = 61;
     assert.equal((await upload('audio', wav, 'audio/wav')).status, 429);
     rateCount = 1;
     assert.equal((await upload('audio', Buffer.alloc(10 * 1024 * 1024 + 1), 'audio/wav')).status, 413);
-    assert.equal((await request(`/upload/mood/${photo.body.data.id}`, 'GET', undefined, other)).status, 404);
-    assert.equal((await request(`/upload/mood/${photo.body.data.id}`)).status, 200);
-    assert.equal((await request(`/upload/mood/not-uuid`)).status, 400);
-    const ids = [photo.body.data.id, audio.body.data.id];
+    const ids = [photo.body.data.mediaId, audio.body.data.mediaId];
     assert.equal((await request(`/me/moods/${today}`, 'PUT', { score: 4, timeZone, attachmentIds: ids }, other)).status, 404);
     assert.equal((await request(`/me/moods/${today}`, 'PUT', { score: 4, timeZone, attachmentIds: [ids[0], ids[0]] })).status, 400);
     assert.equal((await request(`/me/moods/${today}`, 'PUT', { score: 4, timeZone, attachmentIds: [randomUUID()] })).status, 404);
     const attached = await request(`/me/moods/${today}`, 'PUT', { score: 4, timeZone, attachmentIds: ids });
     assert.equal(attached.status, 200); assert.equal(attached.body.data.attachments.length, 2);
-    assert.equal(await db.getRepository(MoodAttachment).count(), 2);
-    const publicBucket = process.env.S3_BUCKET; delete process.env.S3_BUCKET;
-    assert.equal((await upload('audio', wav, 'audio/wav')).status, 503);
-    process.env.S3_BUCKET = publicBucket;
+    assert.equal(await db.getRepository(AssetsEntity).count(), 3);
+    // Exercise the exact documented copy SQL for metadata created before consolidation.
+    await db.query('CREATE TABLE member_mood_attachments (id varchar(36) PRIMARY KEY, memberId int, type varchar(5), bucket varchar(100), `key` varchar(255), contentType varchar(100), size int, createdAt datetime(3))');
+    const legacyId = randomUUID();
+    await db.query('INSERT INTO member_mood_attachments VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [legacyId, alice.id, 'photo', 'test-old-bucket', `mood/${alice.id}/${legacyId}`, 'image/png', 20, new Date()]);
+    const copySql = readFileSync(resolve(__dirname, '../SERVER_INFRA.md'), 'utf8').split('```sql\n')[1].split('```')[0];
+    await db.query(copySql);
+    await db.query(copySql);
+    assert.equal(await db.getRepository(AssetsEntity).countBy({ mediaId: legacyId }), 1);
+    await db.getRepository(MoodEntryEntity).update({ memberId: alice.id, dateString: yesterday }, { attachmentIds: [legacyId] });
+    const previous = (await request(`/me/moods/${yesterday}?timeZone=${timeZone}`)).body.data;
+    assert.equal(previous.attachments[0].id, legacyId);
+    assert.equal(previous.attachments[0].url, `https://minio.example.test/test-old-bucket/mood/${alice.id}/${legacyId}`);
     await repo.update(alice.id, { is_suspended: true });
     assert.equal((await request(`/me/moods?${query}`)).status, 401);
     assert.equal((await upload('audio', wav, 'audio/wav')).status, 401);
@@ -165,9 +185,9 @@ async function main() {
     assert.equal(localMoodDate(new Date('2026-10-17T16:30:00Z'), 'Asia/Makassar'), '2026-10-18');
     assert.equal(localMoodDate(new Date('2026-10-18T00:30:00Z'), 'America/Los_Angeles'), '2026-10-17');
     assert.equal(moodRange({ from: '2024-02-28', to: '2024-03-01' }), 3);
-    assert.throws(() => audioContentType(Buffer.from('<html>'), 'audio/mpeg'));
     await db.synchronize(); // Verify repeated development synchronization preserves entries.
     assert.equal(await db.getRepository(MoodEntryEntity).countBy({ memberId: alice.id }), 2);
+    assert.equal((await db.query('SELECT COUNT(*) AS total FROM member_mood_attachments'))[0].total, 1);
     console.log('Mood HTTP/MySQL integration passed: validation, authorization, daily upsert/concurrency, gaps, public upload URLs and attachment ownership and session revocation. S3/Redis/email are mocked.');
   } finally {
     S3Client.prototype.send = originalSend;

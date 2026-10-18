@@ -18,7 +18,7 @@ import {
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
       // Mood chart gaps and public media expiry are deliberate nulls.
       if (
-        ['MoodTrackerController', 'MoodUploadController'].includes(context.getClass().name)
+        ['MoodTrackerController'].includes(context.getClass().name)
       ) return next.handle();
       return next.handle().pipe(
         map(data => this.replaceNulls(data)),

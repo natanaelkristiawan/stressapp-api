@@ -62,6 +62,3 @@ export class SaveMoodDto extends MoodTimeZoneDto {
   @IsUUID('4', { each: true })
   attachmentIds: string[] = [];
 }
-export class MoodAttachmentIdDto {
-  @IsUUID('4') id: string;
-}

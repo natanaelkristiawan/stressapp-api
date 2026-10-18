@@ -89,7 +89,8 @@ No live bucket policy or server configuration has been changed by local edits.
 
 Create the configured bucket if absent. Merge this statement into its bucket
 policy, replacing `YOUR_BUCKET` with `S3_BUCKET`. Retain unrelated approved policy
-statements. This grants anonymous reads only for mood objects, not write/list:
+statements. This grants anonymous reads for shared UUID upload filenames and legacy mood
+objects, not write/list:
 
 ```json
 {
@@ -114,3 +115,25 @@ already exist, their old bucket needs its own explicitly scoped read policy or
 an object/database migration before those direct URLs work. No migration runs
 automatically. Mood scores/notes remain owner-only API resources.
 See [MOOD_TRACKER.md](MOOD_TRACKER.md).
+
+### Retired mood upload metadata
+
+The standalone mood upload implementation is removed. Uploads now reuse
+UploadController, UploadService and backup_assets; no table is deleted. If the
+previous member_mood_attachments table contains records, after TypeORM has added
+the nullable shared asset metadata columns, copy them once before resuming reads.
+The SQL is repeatable and preserves UUIDs, ownership and object locations:
+
+```sql
+INSERT INTO backup_assets
+  (mediaId, memberId, contentType, size, bucket, path, type, url, url_open, created_at)
+SELECT old.id, old.memberId, old.contentType, old.size, old.bucket, old.`key`,
+  CASE old.type WHEN 'photo' THEN 'Image' ELSE 'Audio' END,
+  CONCAT('https://api.temusobat.tech/upload/files/', old.id),
+  CONCAT('https://s3.temusobat.tech/', old.bucket, '/', old.`key`), old.createdAt
+FROM member_mood_attachments old
+WHERE NOT EXISTS (SELECT 1 FROM backup_assets asset WHERE asset.mediaId = old.id);
+```
+
+Run only if the retired table exists. Do not drop it or delete stored objects.
+No SQL has been executed on the deployed database by this change.

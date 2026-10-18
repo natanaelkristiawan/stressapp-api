@@ -7,7 +7,8 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, EntityManager } from 'typeorm';
 import { Member } from '../entity/user-mimate.entity';
 import { MoodEntryEntity } from '../entity/mood-entry.entity';
-import { MoodUploadService } from '../upload/mood-upload.service';
+import { AssetsEntity } from '../entity/asset.entity';
+import { objectUrl, storageConfig } from '../upload/storage-config';
 import { MoodListDto, MoodRangeDto, SaveMoodDto } from './mood-tracker.dto';
 
 const MOODS = [
@@ -41,15 +42,12 @@ export function moodRange(query: MoodRangeDto): number {
 
 @Injectable()
 export class MoodTrackerService {
-  /** Injects shared database/private uploads. Returns member-owned mood operations. */
-  constructor(
-    @InjectDataSource('mimate') private readonly db: DataSource,
-    private readonly uploads: MoodUploadService,
-  ) {}
+  /** Injects the shared database. Returns member-owned mood operations. */
+  constructor(@InjectDataSource('mimate') private readonly db: DataSource) {}
 
-  /** Maps one stored entry to the mobile shape. Returns safe fields and short-lived attachment URLs. */
+  /** Maps one stored entry to the mobile shape. Returns safe fields and public attachment URLs. */
   private async view(entry: MoodEntryEntity) {
-    const attachments = await this.uploads.owned(
+    const attachments = await this.ownedAttachments(
       entry.memberId,
       entry.attachmentIds,
     );
@@ -60,12 +58,40 @@ export class MoodTrackerService {
       mood: MOODS[entry.score - 1],
       score: entry.score,
       note: entry.note,
-      attachments: await Promise.all(
-        attachments.map((attachment) => this.uploads.view(attachment)),
-      ),
+      attachments: attachments.map((asset) => ({
+        id: asset.mediaId,
+        type: asset.type === 'Image' ? 'photo' : 'audio',
+        contentType: asset.contentType,
+        size: asset.size,
+        url: objectUrl(
+          storageConfig(process.env).endpointUrl,
+          asset.bucket || process.env.S3_BUCKET,
+          asset.path,
+        ),
+        expiresAt: null,
+      })),
       createdAt: entry.createdAt.toISOString(),
       updatedAt: entry.updatedAt.toISOString(),
     };
+  }
+
+  /** Validates attachment assignment against the shared asset owner. Returns rows in requested order. */
+  private async ownedAttachments(
+    memberId: number,
+    ids: string[],
+    manager: EntityManager = this.db.manager,
+  ) {
+    if (!ids.length) return [];
+    const rows = await manager
+      .getRepository(AssetsEntity)
+      .createQueryBuilder('asset')
+      .where('asset.memberId = :memberId', { memberId })
+      .andWhere('asset.mediaId IN (:...ids)', { ids })
+      .andWhere('asset.type IN (:...types)', { types: ['Image', 'Audio'] })
+      .getMany();
+    if (rows.length !== ids.length)
+      throw new NotFoundException('Lampiran tidak ditemukan.');
+    return ids.map((id) => rows.find((row) => row.mediaId === id));
   }
 
   /** Scopes all queries to the authenticated member. Returns a reusable bounded query. */
@@ -124,7 +150,7 @@ export class MoodTrackerService {
         throw new BadRequestException(
           'Hanya mood hari ini yang dapat disimpan.',
         );
-      await this.uploads.owned(memberId, input.attachmentIds, manager);
+      await this.ownedAttachments(memberId, input.attachmentIds, manager);
       const previous = await this.query(memberId, manager)
         .andWhere('mood.dateString = :date', { date })
         .getOne();

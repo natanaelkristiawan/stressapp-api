@@ -22,7 +22,7 @@ export class LoggingInterceptor implements NestInterceptor {
         'CmsMembersController',
         'CmsMoodParticipationController',
         'MoodTrackerController',
-        'MoodUploadController',
+        'UploadController',
       ].includes(context.getClass().name)
     )
       return next.handle();

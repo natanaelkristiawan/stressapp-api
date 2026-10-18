@@ -1,7 +1,6 @@
 import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { MoodEntryEntity } from './entity/mood-entry.entity';
-import { MoodAttachment } from './entity/mood-attachment.entity';
 import { CmsMembersModule } from './cms-members/cms-members.module';
 import { MemberAuthModule } from './member-auth/member-auth.module';
 import { Member } from './entity/user-mimate.entity';
@@ -104,7 +103,7 @@ import { CronModule } from './cron/cron.module';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE_MIMATE,
-      entities: [MoodEntryEntity, MoodAttachment, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
+      entities: [MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
         CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner], // Your entities
       synchronize: true, // User-approved development schema synchronization
@@ -244,7 +243,6 @@ export class AppModule {
         { path: 'me/moods', method: RequestMethod.ALL },
         { path: 'me/moods/(.*)', method: RequestMethod.ALL },
         { path: 'me/mood-summary', method: RequestMethod.ALL },
-        { path: 'upload/mood/(.*)', method: RequestMethod.ALL },
         { path: 'is-live', method: RequestMethod.GET },
         { path: 'admin-auth/login', method: RequestMethod.ALL },
         { path: 'admin-auth/login/(.*)', method: RequestMethod.ALL },
@@ -273,7 +271,8 @@ export class AppModule {
       { path: 'me/moods', method: RequestMethod.ALL },
       { path: 'me/moods/(.*)', method: RequestMethod.ALL },
       { path: 'me/mood-summary', method: RequestMethod.ALL },
-      { path: 'upload/mood/(.*)', method: RequestMethod.ALL },
+      { path: 'upload/image', method: RequestMethod.POST },
+      { path: 'upload/audio', method: RequestMethod.POST },
     ).forRoutes({ path: '*', method: RequestMethod.ALL });
 
   }
