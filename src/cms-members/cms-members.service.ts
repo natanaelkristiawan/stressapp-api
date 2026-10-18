@@ -54,7 +54,7 @@ export class CmsMembersService {
       );
   }
 
-  /** Applies substring/date filters and server pagination. Returns safe rows and accurate totals. */
+  /** Applies substring/date filters and stable server sorting/pagination. Returns safe rows and accurate totals. */
   async list(query: MemberListDto) {
     if (query.startDate && query.endDate && query.startDate > query.endDate) {
       throw new BadRequestException('Start date must not be after end date.');
@@ -77,8 +77,18 @@ export class CmsMembersService {
       end.setUTCDate(end.getUTCDate() + 1);
       builder.andWhere('member.created_at < :end', { end });
     }
+    // Map validated public sort keys to fixed columns; never interpolate query input into SQL.
+    const sortColumns = {
+      name: 'member.name',
+      username: 'member.username',
+      email: 'member.email',
+      createdAt: 'member.created_at',
+    };
     const [rows, total] = await builder
-      .orderBy('member.created_at', 'DESC')
+      .orderBy(
+        sortColumns[query.sortBy],
+        query.sortOrder === 'asc' ? 'ASC' : 'DESC',
+      )
       .addOrderBy('member.id', 'DESC')
       .skip((query.page - 1) * query.pageSize)
       .take(query.pageSize)

@@ -101,10 +101,26 @@ async function main() {
     const page = await expectStatus(200, '?page=1&pageSize=2');
     assert.equal(page.total, 3); assert.equal(page.items.length, 2);
     assert(!JSON.stringify(page).includes('passwordHash'));
+    assert.deepEqual(page.items.map(row => row.name), ['Bob', 'A%_Member'], 'default order remains newest first');
+    for (const sortBy of ['name', 'email', 'createdAt']) {
+      const ascending = await expectStatus(200, `?sortBy=${sortBy}&sortOrder=asc&pageSize=2`);
+      const next = await expectStatus(200, `?sortBy=${sortBy}&sortOrder=asc&pageSize=2&page=2`);
+      const descending = await expectStatus(200, `?sortBy=${sortBy}&sortOrder=desc&pageSize=2`);
+      assert.equal(ascending.total, 3);
+      assert.equal(next.items.length, 1);
+      const ordered = [...ascending.items, ...next.items];
+      assert.equal(new Set(ordered.map(row => row.id)).size, 3, 'remote pages must not overlap');
+      assert(ordered.every((row, index) => !index || ordered[index - 1][sortBy] <= row[sortBy]), `${sortBy} must sort the complete result`);
+      assert(descending.items[0][sortBy] >= descending.items[1][sortBy]);
+    }
+    const usernames = await expectStatus(200, '?sortBy=username&sortOrder=asc&pageSize=2');
+    assert.deepEqual(usernames.items.map(row => row.id), [members[2].id, members[1].id], 'equal/null values use stable descending ID order');
+    assert.equal((await expectStatus(200, '?name=Alice&sortBy=email&sortOrder=desc')).items[0].id, members[0].id);
+
     assert.equal((await expectStatus(200, '?name=ALICE&email=alice')).total, 1);
     assert.equal((await expectStatus(200, '?name=%25_')).total, 1, 'search must treat wildcard characters literally');
     assert.equal((await expectStatus(200, '?startDate=2026-10-10&endDate=2026-10-10')).total, 2);
-    for (const query of ['?page=0', '?pageSize=101', '?startDate=2026-02-30', '?startDate=2026-10-12&endDate=2026-10-10', '?extra=1']) await expectStatus(400, query);
+    for (const query of ['?page=0', '?pageSize=101', '?startDate=2026-02-30', '?startDate=2026-10-12&endDate=2026-10-10', '?extra=1', '?sortBy=passwordHash', '?sortBy=name%3BDROP%20TABLE%20members', '?sortOrder=ASC', '?sortOrder=invalid', '?sortBy=', '?sortOrder=']) await expectStatus(400, query);
     for (const id of ['0', '-1', 'bad']) await expectStatus(400, `/${id}`);
     await expectStatus(404, `/${adminAccount.backup_member_id}`);
     await expectStatus(404, '', 'POST', { name: 'No creation endpoint' });
@@ -155,7 +171,7 @@ async function main() {
     await repository.update(adminAccount.backup_member_id, { is_suspended: true });
     await expectStatus(401, '');
     await repository.update(adminAccount.backup_member_id, { is_suspended: false });
-    console.log('PASS: CMS member HTTP/MySQL authorization, mobile-only filters, UTC date boundaries, validation, edits/conflicts, audit, badge isolation, session revocation and soft deletion.');
+    console.log('PASS: CMS member HTTP/MySQL authorization, mobile-only filters, remote sorting/pagination, UTC date boundaries, validation, edits/conflicts, audit, badge isolation, session revocation and soft deletion.');
     if (process.env.CMS_MEMBERS_BROWSER === '1') {
       console.log(`Local browser fixture: ${base}; admin@example.test / ${password}; member list retains two sample records.`);
       await new Promise(resolve => { process.once('SIGTERM', resolve); process.once('SIGINT', resolve); });

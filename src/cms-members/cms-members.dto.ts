@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsDateString,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   IsUrl,
@@ -24,6 +25,12 @@ export class MemberIdDto {
 }
 
 export class MemberListDto {
+  @IsIn(['name', 'username', 'email', 'createdAt']) sortBy:
+    | 'name'
+    | 'username'
+    | 'email'
+    | 'createdAt' = 'createdAt';
+  @IsIn(['asc', 'desc']) sortOrder: 'asc' | 'desc' = 'desc';
   @Type(() => Number) @IsInt() @Min(1) @Max(1000000) page = 1;
   @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize = 20;
   @IsOptional() @Transform(trim) @IsString() @MaxLength(100) name?: string;
