@@ -1,7 +1,15 @@
-import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import {
+  ParticipationIdDto,
   ParticipationListDto,
   ParticipationRangeDto,
 } from './cms-mood-participation.dto';
@@ -27,5 +35,11 @@ export class CmsMoodParticipationController {
   @Header('Cache-Control', 'private, no-store')
   async list(@Query() query: ParticipationListDto) {
     return { data: await this.participation.list(query) };
+  }
+  /** Loads one approved read-only mood submission for an active CMS admin. */
+  @Get(':id')
+  @Header('Cache-Control', 'private, no-store')
+  async detail(@Param() params: ParticipationIdDto) {
+    return { data: await this.participation.detail(params.id) };
   }
 }

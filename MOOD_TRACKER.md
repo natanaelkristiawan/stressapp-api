@@ -11,7 +11,8 @@ One entry per member/local calendar day. Create/edit is limited to today in the
 supplied valid IANA timezone; past dates are read-only. No delete endpoint.
 Notes are optional (default empty, maximum 2,000 characters). The app supplies its
 device timezone, e.g. `Asia/Makassar`; server time decides today in that zone.
-Weeks start Monday. Onboarding mood remains separate. No CMS mood access.
+Weeks start Monday. Onboarding mood remains separate. All active CMS admins have approved read-only submission detail access through
+the existing CMS participation module.
 
 Dates are `YYYY-MM-DD`. Entries retain their original date keys when a member
 travels; history is not rebucketed into the current timezone. The server validates

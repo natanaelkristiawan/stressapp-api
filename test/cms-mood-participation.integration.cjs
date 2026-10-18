@@ -1,6 +1,8 @@
 // Disposable localhost MySQL only. No application .env, external database, Redis or email delivery.
 require('ts-node/register'); require('tsconfig-paths/register');
 const assert = require('node:assert/strict');
+const { randomUUID } = require('node:crypto');
+const sharp = require('sharp');
 const { readdirSync } = require('node:fs'); const { resolve } = require('node:path');
 const { createConnection } = require('mysql2/promise');
 const { Test } = require('@nestjs/testing'); const { TypeOrmModule, getDataSourceToken } = require('@nestjs/typeorm');
@@ -20,6 +22,7 @@ const secret = 'synthetic-cms-mood-secret', password = 'Synthetic123!';
 async function main() {
   const port = Number(process.env.CMS_MOOD_TEST_PORT);
   assert(Number.isInteger(port) && port > 0 && port <= 65535, 'Set CMS_MOOD_TEST_PORT to disposable local MySQL');
+  Object.assign(process.env, { S3_BUCKET: 'test-public', S3_REGION: 'us-east-1', S3_ACCESS_KEY: 'synthetic-access', S3_SECRET_KEY: 'synthetic-secret', S3_SPACES_ENDPOINT: 'https://minio.example.test', BASE_URL: 'http://127.0.0.1' });
   const connection = await createConnection({ host: '127.0.0.1', port, user: 'root', password: '' });
   const schema = `cms_mood_test_${process.pid}_${Date.now()}`;
   let app;
@@ -37,7 +40,10 @@ async function main() {
     const cms = module.get(AdminAuthService), jwt = new JwtService({ secret });
     const middleware = new RedisTokenMiddleware(jwt, new AuthService(db.getRepository(Member)), { getOrNil: () => ({ set: async () => undefined }) });
     app.enableCors({ origin: ['http://127.0.0.1:5183'] });
+    const image = await sharp({ create: { width: 80, height: 80, channels: 3, background: '#20b8ab' } }).png().toBuffer();
+    const audio = Buffer.alloc(8044, 128); audio.write('RIFF'); audio.writeUInt32LE(8036, 4); audio.write('WAVEfmt ', 8); audio.writeUInt32LE(16, 16); audio.writeUInt16LE(1, 20); audio.writeUInt16LE(1, 22); audio.writeUInt32LE(8000, 24); audio.writeUInt32LE(8000, 28); audio.writeUInt16LE(1, 32); audio.writeUInt16LE(8, 34); audio.write('data', 36); audio.writeUInt32LE(8000, 40);
     app.use((req, res, next) => {
+      if (req.path.startsWith('/test-public/')) return res.type(req.path.endsWith('.png') ? 'image/png' : 'audio/wav').send(req.path.endsWith('.png') ? image : audio);
       if (req.path === '/admin-auth/login') return next();
       middleware.use(req, res, next).catch(error => res.status(error.getStatus?.() || 500).json({ success: false }));
     });
@@ -46,6 +52,7 @@ async function main() {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.listen(Number(process.env.CMS_MOOD_HTTP_PORT || 0), '127.0.0.1');
     const base = await app.getUrl();
+    if (process.env.CMS_MOOD_BROWSER === '1') process.env.S3_SPACES_ENDPOINT = base;
     await seedAdmin(db, { email: 'admin@example.test', name: 'Synthetic Admin', password });
     const admin = await db.getRepository(UserAdmin).findOne({ where: { email: 'admin@example.test' }, relations: ['userMimate'] });
     const token = await cms.login(admin);
@@ -58,7 +65,7 @@ async function main() {
     await repository.softDelete(deleted.id);
     await repository.update(admin.backup_member_id, { memberAuthEnabled: true });
     const month = new Date().toISOString().slice(0, 7);
-    /** Stores a fixture daily record with secret content that must never reach CMS responses. Returns its row. */
+    /** Stores a fixture daily record whose content is available only through approved admin detail access. Returns its row. */
     async function mood(memberId, day) {
       return db.getRepository(MoodEntryEntity).save({ memberId, dateString: `${month}-${String(day).padStart(2, '0')}`, timeZone: 'Asia/Makassar', score: 1, note: 'PRIVATE-NOTE-MUST-NOT-LEAK', attachmentIds: ['private-attachment-id'], createdAt: new Date('2020-01-01T00:00:00Z'), updatedAt: new Date() });
     }
@@ -77,6 +84,7 @@ async function main() {
     for (const bearer of [null, 'invalid', jwt.sign({ id: members[0].id, iss: 'https://mimate.otesuto.com/admin-auth/login', aud: 'cms', kind: 'admin-access' }), jwt.sign({ id: admin.backup_member_id, iss: 'temu-sobat', aud: 'member', kind: 'member-access' }), jwt.sign({ id: admin.backup_member_id, iss: 'https://mimate.otesuto.com/admin-auth/login', aud: 'cms', kind: 'admin-access', exp: 1 })]) {
       assert.equal((await request(`?${range}`, bearer)).status, 401);
       assert.equal((await request(`/summary?${range}`, bearer)).status, 401);
+      assert.equal((await request(`/1`, bearer)).status, 401);
     }
     const summary = await request(`/summary?${range}`);
     assert.equal(summary.status, 200); assert.equal(summary.cache, 'private, no-store');
@@ -109,12 +117,35 @@ async function main() {
     assert.equal((await request(`/summary?${range}&name=Alice`)).status, 400);
     assert.equal((await request(`?${range}`, token, 'PUT')).status, 404);
     const first = await db.getRepository(MoodEntryEntity).findOneBy({ memberId: members[0].id, dateString: `${month}-10` });
+    const { AssetsEntity } = require('../src/entity/asset.entity');
+    const photoId = randomUUID(), audioId = randomUUID(), foreignId = randomUUID(), missingId = randomUUID();
+    for (const [mediaId, memberId, type, contentType, extension] of [[photoId, members[0].id, 'Image', 'image/png', 'png'], [audioId, members[0].id, 'Audio', 'audio/wav', 'wav'], [foreignId, members[1].id, 'Image', 'image/png', 'png']]) {
+      await db.getRepository(AssetsEntity).save({ mediaId, memberId, type, contentType, size: 80, bucket: 'test-public', path: `${mediaId}.${extension}`, url: 'synthetic', url_open: 'synthetic', created_at: new Date() });
+    }
+    await db.getRepository(MoodEntryEntity).update(first.id, { attachmentIds: [photoId, audioId, foreignId, missingId], updatedAt: new Date('2026-10-18T06:00:00Z') });
+    const detail = await request(`/${first.id}`);
+    assert.equal(detail.status, 200); assert.equal(detail.cache, 'private, no-store');
+    assert.equal(detail.body.data.memberName, 'Alice'); assert.equal(detail.body.data.score, 1);
+    assert.equal(detail.body.data.note, 'PRIVATE-NOTE-MUST-NOT-LEAK');
+    assert.equal(detail.body.data.createdAt, '2020-01-01T00:00:00.000Z');
+    assert.equal(detail.body.data.updatedAt, '2026-10-18T06:00:00.000Z');
+    assert.deepEqual(detail.body.data.attachments.map(file => file.id), [photoId, audioId]);
+    assert.equal(detail.body.data.unavailableAttachmentCount, 2);
+    assert(!JSON.stringify(detail.body).includes(foreignId));
+    for (const file of detail.body.data.attachments) assert.deepEqual(Object.keys(file).sort(), ['contentType', 'id', 'size', 'type', 'url']);
+    for (const id of ['invalid', '0', '-1', '1.5', '2147483648']) assert.equal((await request(`/${id}`)).status, 400);
+    assert.equal((await request('/2147483647')).status, 404);
+    for (const memberId of [legacy.id, deleted.id, admin.backup_member_id]) {
+      const hidden = await db.getRepository(MoodEntryEntity).findOneBy({ memberId });
+      assert.equal((await request(`/${hidden.id}`)).status, 404);
+    }
+    assert.equal((await request(`/${first.id}`, token, 'PUT')).status, 404);
     await db.getRepository(MoodEntryEntity).update(first.id, { score: 5, note: 'PRIVATE-UPDATED' });
     assert.equal((await request(`/summary?${range}`)).body.data.totalEntries, 24, 'Editing a daily record is not an additional participation event');
     await repository.update(admin.backup_member_id, { is_suspended: true });
-    assert.equal((await request(`?${range}`)).status, 401); assert.equal((await request(`/summary?${range}`)).status, 401);
+    assert.equal((await request(`?${range}`)).status, 401); assert.equal((await request(`/summary?${range}`)).status, 401); assert.equal((await request(`/${first.id}`)).status, 401);
     await repository.update(admin.backup_member_id, { is_suspended: false });
-    console.log('PASS: CMS participation HTTP/MySQL eligibility, exact aggregate reconciliation, strict privacy shape, date boundaries, remote filtering/sorting/pagination, invalid input and live admin authorization.');
+    console.log('PASS: CMS participation HTTP/MySQL eligibility, exact aggregate reconciliation, compact list shape, authorized content/media detail, date boundaries, remote filtering/sorting/pagination, invalid input and live admin authorization.');
     if (process.env.CMS_MOOD_BROWSER === '1') {
       console.log(`Synthetic browser fixture ${base}; admin@example.test / ${password}`);
       await new Promise(resolve => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve); });

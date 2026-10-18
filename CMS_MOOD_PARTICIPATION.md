@@ -1,13 +1,15 @@
 # CMS Mood Tracker participation
 
-Confirmed 18 October 2026: all active CMS admins may view participant names and
-mood-record dates only, plus aggregate entry/participant counts. This does not
-grant access to mood scores, notes, photos, audio, individual health assessment
-results or member-private file URLs. There are no edit/delete/export endpoints.
+Confirmed 18 October 2026: all active CMS admins may view participant names,
+mood dates, aggregate counts, and read-only individual mood submission details.
+The later explicit approval includes score, reflection message, image/audio
+attachments, and creation/update timestamps, superseding metadata-only access.
+No edit/delete/export or private chat/health-assessment access is granted.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
 | GET | `/cms-mood-participation/summary` | Dashboard counts for required inclusive `from`/`to` dates. |
+| GET | `/cms-mood-participation/:id` | On-demand read-only submission detail; integer ID 1–2147483647. |
 | GET | `/cms-mood-participation` | Read-only participation history for the same required dates; optional `name`, `page`, `pageSize`, `sortBy`, `sortOrder`. |
 
 Date format: YYYY-MM-DD, valid ordered range of 1–366 days. Dates filter the
@@ -27,7 +29,7 @@ returned. The SQL projection selects only the approved fields. Current member
 names are displayed; historical names are not snapshotted. One row represents a
 member's daily record, not an immutable log of every edit.
 
-Both views use current mobile-account eligibility: memberAuthEnabled=true,
+List, summary and detail use current mobile-account eligibility: memberAuthEnabled=true,
 not soft-deleted and not linked to a CMS staff account. Suspended mobile members'
 historical participation is included. Removing account eligibility may therefore
 change historical totals; these are live reports, not frozen research cohorts.
@@ -50,11 +52,12 @@ Dashboard: `/dashboards/home` has the two cards and date filters. History:
 `/mood-participation`, available through the Mood Tracker navigation or dashboard
 link preserving dates. The table follows the Members remote TanStack standard,
 URL-owned query state, scoped Context, RHF+Yup filter drafts, runtime response
-validation and loading/empty/error/retry feedback. Name/date fields are read-only.
+validation and loading/empty/error/retry feedback. Name/date fields are read-only. View details opens an accessible dialog; requests
+are aborted on close/account transition and detail content is not persisted.
 No CSV export, clinical distributions or reminder analytics are included.
 
-Deploy API/CMS together; no MinIO configuration is needed for these metadata
-reports. They do not call private media services. Existing private mobile Mood
+Deploy API/CMS together. Counts/list do not need MinIO configuration; detail
+attachment URLs use the existing S3 configuration. Detail media URLs use the existing public object URL configuration. Existing private mobile Mood
 Tracker routes and ownership checks remain unchanged.
 
 ## Verification
@@ -74,6 +77,24 @@ that synthetic HTTP fixture until SIGINT/SIGTERM for a local browser check.
 
 CMS checks: `npm run build`, scoped ESLint, `node test/admin-auth.cjs` and
 `node test/mood-participation.cjs`. Browser verified cards, single-day counts,
-reset, metadata-only history, filtering, sorting, pagination and invalid ranges
+reset, compact history, filtering, sorting, pagination and invalid ranges
 against the real API/disposable MySQL fixture. Existing CMS bundle/circular-chunk
 and TanStack React Compiler warnings remain. No deployment performed.
+
+## Submission details
+
+GET /cms-mood-participation/:id returns data with id, memberName, dateString,
+timeZone, score (1–5), note, attachments, unavailableAttachmentCount, createdAt,
+and updatedAt. Timestamps are ISO instants, displayed in the admin browser’s
+local timezone with a visible label; the mood date retains member-local semantics.
+Each attachment includes only UUID id, photo/audio type, contentType, size, and
+public URL. Resolve files from backup_assets only when their memberId matches
+the mood’s owner and the asset type is Image/Audio. Missing, incompatible or
+foreign metadata is counted unavailable; foreign URLs are never included.
+
+Detail uses the same live-admin guard and eligible-member scope as the list.
+Missing/ineligible rows return 404; invalid IDs return 400; unauthenticated,
+revoked or suspended-admin access returns 401. Responses stay private/no-store
+and excluded from request logging. Current content only: updates replace the
+entry; no prior versions are recorded. Images are previews and audio has native
+browser controls. Empty notes/attachments and loading/error/retry are visible.

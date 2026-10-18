@@ -29,3 +29,7 @@ export class ParticipationListDto extends ParticipationRangeDto {
     'dateString';
   @IsIn(['asc', 'desc']) sortOrder: 'asc' | 'desc' = 'desc';
 }
+
+export class ParticipationIdDto {
+  @Type(() => Number) @IsInt() @Min(1) @Max(2147483647) id: number;
+}
