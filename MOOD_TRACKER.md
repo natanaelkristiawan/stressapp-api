@@ -28,7 +28,7 @@ create a duplicate, but is not a stale-edit/version conflict protocol.
 | GET | `/me/moods/:date` | Required query `timeZone`. One owned entry, or 404 when absent. |
 | PUT | `/me/moods/:date` | JSON `score` integer 1–5, `timeZone`, optional `note`, `attachmentIds` (default empty). Creates/replaces today. |
 | GET | `/me/mood-summary` | Required `from`, `to`, `timeZone`; optional `grouping=week\|month` (week). Daily scores and distribution counts. |
-| POST | `/upload/mood/image` | Multipart field `file`; one JPEG/PNG/WebP up to 5 MiB, maximum 16 million decoded pixels. Re-encoded WebP strips EXIF/location metadata. |
+| POST | `/upload/mood/image` | Multipart field `file`; one JPEG/PNG/WebP up to 5 MiB, maximum 16 million decoded pixels. Re-encoded in the original JPEG/PNG/WebP format to strip EXIF/location metadata. |
 | POST | `/upload/mood/audio` | Multipart field `file`; one MP4/M4A, WebM, Ogg, WAV or MP3 up to 10 MiB. MIME and container signature must agree. |
 | GET | `/upload/mood/:id` | UUID attachment ID. Returns attachment metadata and a permanent public media URL after ownership validation. |
 
@@ -56,7 +56,7 @@ Uploads share a Redis limit of 60 per member/hour (429 when exhausted).
 User explicitly approved public mood images/audio on 18 October 2026. This
 supersedes the earlier private-bucket/signed-URL design. Use the existing S3
 settings and `S3_BUCKET`; `S3_PRIVATE_BUCKET` is no longer used. Configure anonymous
-GetObject for `mood/*` in that bucket, with no anonymous write/list permission.
+GetObject for root UUID filenames and legacy `mood/*` in that bucket, with no anonymous write/list permission.
 The API needs PutObject/DeleteObject (cleanup) permissions. Settings alone do
 not create buckets or change policies; see [server setup](SERVER_INFRA.md).
 Existing `/upload/image` and `/upload/video` contracts are preserved.
@@ -95,3 +95,9 @@ writes, concurrent upserts, multipart limits and repeated schema synchronization
 S3 transport, Redis counters and email are mocked. It checks unsigned public URLs and shared-bucket uploads, but does not establish real MinIO policy
 acceptance, Redis availability, playback, deployment or native-device behavior.
 Never point this fixture at shared/deployed databases.
+
+Object naming (18 October 2026): new mood uploads are stored directly at the
+bucket root as `<uuid>.<extension>`, without member/date/folder prefixes. Images
+retain their decoded JPEG/PNG/WebP format while stripping metadata. Original
+extensions are retained when compatible with the validated content type; missing
+or mismatched extensions use the canonical extension. Old keys remain readable.

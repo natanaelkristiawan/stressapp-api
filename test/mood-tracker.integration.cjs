@@ -127,9 +127,9 @@ async function main() {
     const publicUrl = new URL(photo.body.data.url);
     assert.equal(publicUrl.search, '');
     assert.equal(publicUrl.hostname, 'minio.example.test');
-    assert(publicUrl.pathname.startsWith('/test-public/mood/'));
+    assert.match(publicUrl.pathname, /^\/test-public\/[0-9a-f-]+\.png$/);
     assert.equal(photo.body.data.expiresAt, null);
-    assert.equal(puts[0].Bucket, 'test-public'); assert.equal(puts[0].ContentType, 'image/webp');
+    assert.equal(puts[0].Bucket, 'test-public'); assert.equal(puts[0].ContentType, 'image/png');
     assert.equal(puts[0].CacheControl, 'public, max-age=86400');
     assert.equal((await upload('image', Buffer.from('fake'), 'image/png')).status, 400);
     assert.equal((await upload('image', Buffer.alloc(5 * 1024 * 1024 + 1), 'image/png')).status, 413);

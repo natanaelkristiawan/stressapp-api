@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { ExecutionContext } from '@nestjs/common';
 import { firstValueFrom, of } from 'rxjs';
 import { NullToEmptyInterceptor } from '../common/interceptors/null-to-empty.interceptor';
+import * as sharp from 'sharp';
 import { MoodUploadService } from './mood-upload.service';
 
 describe('public mood uploads', () => {
@@ -46,15 +47,48 @@ describe('public mood uploads', () => {
     const result = await service.upload(42, 'audio', {
       buffer,
       mimetype: 'audio/wav',
+      originalname: 'recording.wav',
     } as Express.Multer.File);
     const command = send.mock.calls[0][0] as PutObjectCommand;
     expect(command.input.Bucket).toBe('test-public');
     expect(command.input.CacheControl).toBe('public, max-age=86400');
     expect(result.url).toBe(
-      `https://minio.example.test/test-public/mood/42/${result.id}`,
+      `https://minio.example.test/test-public/${result.id}.wav`,
     );
     expect(result.expiresAt).toBeNull();
     expect(new URL(result.url).search).toBe('');
     expect(save).toHaveBeenCalledTimes(1);
   });
+  it.each(['jpeg', 'png', 'webp'] as const)(
+    'keeps %s images at the bucket root with a random name and matching extension',
+    async (format) => {
+      const send = jest
+        .spyOn(S3Client.prototype, 'send')
+        .mockResolvedValue({} as never);
+      const db = {
+        getRepository: () => ({ save: async (attachment) => attachment }),
+      } as unknown as DataSource;
+      const service = new MoodUploadService(db);
+      const buffer = await sharp({
+        create: { width: 2, height: 2, channels: 3, background: 'red' },
+      })
+        .toFormat(format)
+        .toBuffer();
+      const extension = format === 'jpeg' ? 'jpg' : format;
+      const result = await service.upload(42, 'photo', {
+        buffer,
+        mimetype: `image/${format}`,
+        originalname: `my-photo.${extension}`,
+      } as Express.Multer.File);
+      const command = send.mock.calls[0][0] as PutObjectCommand;
+      expect(command.input.Key).toBe(`${result.id}.${extension}`);
+      expect(command.input.ContentType).toBe(`image/${format}`);
+      expect(
+        (await sharp(command.input.Body as Buffer).metadata()).format,
+      ).toBe(format);
+      expect(result.url).toBe(
+        `https://minio.example.test/test-public/${result.id}.${extension}`,
+      );
+    },
+  );
 });

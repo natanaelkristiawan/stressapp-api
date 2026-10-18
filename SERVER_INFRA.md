@@ -98,12 +98,15 @@ statements. This grants anonymous reads only for mood objects, not write/list:
     "Effect": "Allow",
     "Principal": { "AWS": ["*"] },
     "Action": ["s3:GetObject"],
-    "Resource": ["arn:aws:s3:::YOUR_BUCKET/mood/*"]
+    "Resource": [
+      "arn:aws:s3:::YOUR_BUCKET/????????-????-????-????-????????????.*",
+      "arn:aws:s3:::YOUR_BUCKET/mood/*"
+    ]
   }]
 }
 ```
 
-Give API credentials PutObject/DeleteObject permissions for that prefix. Restart
+Give API credentials PutObject/DeleteObject permissions for the upload keys. Restart
 the API after deploying the code/environment changes. Test an uploaded image and
 audio URL without Authorization; neither URL should contain signing parameters.
 Existing attachments still reference their original bucket. If private uploads

@@ -12,6 +12,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import { extname } from 'path';
 import * as sharp from 'sharp';
 import { MoodAttachment } from '../entity/mood-attachment.entity';
 import { objectUrl, storageConfig } from './storage-config';
@@ -77,15 +78,16 @@ export class MoodUploadService {
         // Decode/re-encode a single frame, stripping EXIF/location metadata and bounding pixels.
         const decoder = sharp(buffer, { limitInputPixels: 16000000 });
         const metadata = await decoder.metadata();
-        if (!['jpeg', 'png', 'webp'].includes(metadata.format))
+        const format = metadata.format;
+        if (format !== 'jpeg' && format !== 'png' && format !== 'webp')
           throw new Error();
-        buffer = await decoder.rotate().webp({ quality: 85 }).toBuffer();
+        buffer = await decoder.rotate().toFormat(format).toBuffer();
+        contentType = `image/${format}`;
       } catch {
         throw new BadRequestException('Gambar tidak valid.');
       }
       if (buffer.length > maximum)
         throw new BadRequestException('Gambar terlalu besar.');
-      contentType = 'image/webp';
     } else {
       contentType = audioContentType(
         buffer,
@@ -94,7 +96,22 @@ export class MoodUploadService {
     }
     const { client, bucket } = this.storage();
     const id = randomUUID();
-    const key = `mood/${memberId}/${id}`;
+    const extensions: Record<string, string[]> = {
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
+      'audio/mp4': ['.m4a', '.mp4'],
+      'audio/webm': ['.webm'],
+      'audio/ogg': ['.ogg'],
+      'audio/wav': ['.wav'],
+      'audio/mpeg': ['.mp3'],
+    };
+    const allowed = extensions[contentType];
+    const originalExtension = extname(file.originalname || '').toLowerCase();
+    const extension = allowed.includes(originalExtension)
+      ? originalExtension
+      : allowed[0];
+    const key = `${id}${extension}`;
     try {
       await client.send(
         new PutObjectCommand({
