@@ -38,7 +38,7 @@ export function storageConfig(env: NodeJS.ProcessEnv): {
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket))
     throw new Error('Invalid S3_BUCKET configuration.');
   const endpointUrl = endpoint(
-    env.S3_SPACES_ENDPOINT || 'https://minio.temusobat.tech',
+    env.S3_SPACES_ENDPOINT || 'https://s3.temusobat.tech',
     'S3_SPACES_ENDPOINT',
   );
   return {

@@ -11,7 +11,7 @@ describe('MinIO storage configuration', () => {
   it('uses the confirmed API endpoint and path-style addressing', () => {
     const config = storageConfig(env);
     expect(config.client).toMatchObject({
-      endpoint: 'https://minio.temusobat.tech',
+      endpoint: 'https://s3.temusobat.tech',
       region: 'us-east-1',
       forcePathStyle: true,
       credentials: {

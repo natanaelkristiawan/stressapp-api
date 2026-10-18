@@ -17,7 +17,9 @@ import {
   export class NullToEmptyInterceptor implements NestInterceptor {
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
       // Mood chart gaps and public media expiry are deliberate nulls.
-      if (['MoodTrackerController', 'MoodUploadController'].includes(context.getClass().name)) return next.handle();
+      if (
+        ['MoodTrackerController', 'MoodUploadController'].includes(context.getClass().name)
+      ) return next.handle();
       return next.handle().pipe(
         map(data => this.replaceNulls(data)),
       );

@@ -70,8 +70,8 @@ setting from server .env when redeploying. No second database is required.
 
 ## MinIO uploads
 
-The user confirmed `https://minio.temusobat.tech` proxies to the S3 API on port
-9000. Port 9001 is the administration console. Existing uploads now use this
+The user corrected the endpoint mapping on 18 October 2026: `https://s3.temusobat.tech` proxies to the S3 API on port
+9000. `https://minio.temusobat.tech` is the administration console on port 9001. Existing uploads now use this
 endpoint by default, path-style addressing and configured object URLs.
 
 Copy the S3 section from `.env.example` into the private server `.env`. Set an
