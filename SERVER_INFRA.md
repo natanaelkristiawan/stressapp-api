@@ -75,8 +75,7 @@ The user corrected the endpoint mapping on 18 October 2026: `https://s3.temusoba
 endpoint by default, path-style addressing and configured object URLs.
 
 Copy the S3 section from `.env.example` into the private server `.env`. Set an
-existing bucket and application access/secret keys; `temusobat` is an example
-bucket, not a provisioned resource. Region defaults to `us-east-1`; align it with
+existing bucket and application access/secret keys; `temu-sobat` is the bucket confirmed by the user’s working direct S3 PUT. Region defaults to `us-east-1`; align it with
 MinIO if configured differently. `BASE_URL` is the API origin for existing file
 streaming links. Restart/redeploy after configuration changes. Missing/invalid
 storage settings fail when storage is used, without blocking unrelated API startup.
@@ -107,7 +106,7 @@ objects, not write/list:
 }
 ```
 
-Give API credentials PutObject/DeleteObject permissions for the upload keys. Restart
+Give API credentials PutObject/GetObject permissions for the upload keys. Restart
 the API after deploying the code/environment changes. Test an uploaded image and
 audio URL without Authorization; neither URL should contain signing parameters.
 Existing attachments still reference their original bucket. If private uploads
@@ -137,3 +136,34 @@ WHERE NOT EXISTS (SELECT 1 FROM backup_assets asset WHERE asset.mediaId = old.id
 
 Run only if the retired table exists. Do not drop it or delete stored objects.
 No SQL has been executed on the deployed database by this change.
+
+### Diagnose shared upload failures
+
+Send multipart field `file` (lowercase, type File) to POST /upload/image with
+Authorization. Let the HTTP client set Content-Type including its multipart
+boundary. A missing file returns 400, not a generic 500.
+
+Storage configuration failures now return 503 with the missing/invalid environment
+field name, without its value. Check the deployed environment and restart PM2.
+Unexpected 500s from /upload/image or /upload/audio log only an error type and
+safe driver code (no SQL, payload, credentials or stack):
+
+```sh
+pm2 logs stressapp-api --lines 50 --nostream | grep 'Shared upload failed'
+```
+
+For example, ER_BAD_FIELD_ERROR indicates a database column mismatch; check that
+the deployed entity definitions synchronized against the intended database.
+A ReplyError points to the Redis command used by upload rate limiting. Share
+only the diagnostic line or the 503 message, not the environment or raw SQL.
+A file appearing in MinIO despite a failed response suggests metadata persistence
+failed after object storage accepted the upload. It does not prove which database
+operation failed. Live server diagnosis still requires the actual error code.
+
+Working Postman S3 PUT confirmed by user (18 October 2026): endpoint
+https://s3.temusobat.tech, bucket temu-sobat, signing region us-east-1.
+Set the API access/secret pair to the same authorized MinIO identity privately.
+The SDK creates AWS signatures automatically; do not paste Authorization
+signatures, content hashes or X-Amz-Date into the API environment. The local
+credentials differed from the working identity and were deliberately not replaced
+without the matching secret. Live deployed environment remains unverified.

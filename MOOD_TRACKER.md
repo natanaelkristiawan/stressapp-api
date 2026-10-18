@@ -56,7 +56,7 @@ User explicitly approved public mood images/audio on 18 October 2026. This
 supersedes the earlier private-bucket/signed-URL design. Use the existing S3
 settings and `S3_BUCKET`; `S3_PRIVATE_BUCKET` is no longer used. Configure anonymous
 GetObject for root UUID filenames and legacy `mood/*` in that bucket, with no anonymous write/list permission.
-The API needs PutObject/DeleteObject (cleanup) permissions. Settings alone do
+The API needs PutObject and GetObject (existing streaming route) permissions. Settings alone do
 not create buckets or change policies; see [server setup](SERVER_INFRA.md).
 Uses the existing UploadController/UploadService and backup_assets repository.
 The global image response keeps its numeric asset id and UUID mediaId; audio
@@ -74,8 +74,9 @@ is used. Member uploads store nullable shared owner/contentType/size/bucket meta
    upload endpoint accepts validated member/CMS sessions. Assigning an upload
    to a mood requires matching member ownership in the shared assets table.
 
-Bucket/key/owner ID are not separate metadata fields; the public URL includes
-its object path. Credentials are never returned. Existing attachments keep their
+Mood-entry attachment responses do not expose bucket/key/owner ID as separate
+metadata fields. The existing upload response retains its path field; public
+URLs include the object path. Credentials are never returned. Existing attachments keep their
 stored bucket/key; moving old private objects or changing their read policies is
 a separate deployment operation. No automatic data migration is performed.
 Audio validation checks MIME/container signatures and size; it does

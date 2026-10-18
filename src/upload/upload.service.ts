@@ -3,7 +3,6 @@ import {
   PutObjectCommandInput,
   PutObjectCommand,
   GetObjectCommand,
-  GetObjectCommandInput,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import {
@@ -31,10 +30,19 @@ export class UploadService {
   private storageClient?: S3Client;
   /** Validates storage lazily. Returns cached settings without blocking unrelated API startup. */
   private get storage(): ReturnType<typeof storageConfig> {
-    return (
-      this.storageSettings ??
-      (this.storageSettings = storageConfig(process.env))
-    );
+    try {
+      return (
+        this.storageSettings ??
+        (this.storageSettings = storageConfig(process.env))
+      );
+    } catch (error) {
+      // storageConfig errors contain field names only, never environment values.
+      throw new ServiceUnavailableException(
+        error instanceof Error
+          ? error.message
+          : 'Invalid storage configuration.',
+      );
+    }
   }
   /** Reuses one configured client. Returns the MinIO S3 client. */
   private get s3(): S3Client {

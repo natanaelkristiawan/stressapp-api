@@ -12,7 +12,6 @@ import { UserMimateEntity } from 'src/entity/user-mimate.entity';
     TypeOrmModule.forFeature([AssetsEntity, UserMimateEntity], 'mimate'),
   ],
   providers: [UploadService],
-  exports: [UploadService],
   controllers: [UploadController],
 })
 export class UploadModule {}

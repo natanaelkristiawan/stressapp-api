@@ -187,7 +187,7 @@ async function main() {
     assert.equal(moodRange({ from: '2024-02-28', to: '2024-03-01' }), 3);
     await db.synchronize(); // Verify repeated development synchronization preserves entries.
     assert.equal(await db.getRepository(MoodEntryEntity).countBy({ memberId: alice.id }), 2);
-    assert.equal((await db.query('SELECT COUNT(*) AS total FROM member_mood_attachments'))[0].total, 1);
+    assert.equal(Number((await db.query('SELECT COUNT(*) AS total FROM member_mood_attachments'))[0].total), 1);
     console.log('Mood HTTP/MySQL integration passed: validation, authorization, daily upsert/concurrency, gaps, public upload URLs and attachment ownership and session revocation. S3/Redis/email are mocked.');
   } finally {
     S3Client.prototype.send = originalSend;
