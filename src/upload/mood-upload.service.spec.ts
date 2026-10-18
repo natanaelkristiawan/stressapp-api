@@ -1,5 +1,8 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { DataSource } from 'typeorm';
+import { ExecutionContext } from '@nestjs/common';
+import { firstValueFrom, of } from 'rxjs';
+import { NullToEmptyInterceptor } from '../common/interceptors/null-to-empty.interceptor';
 import { MoodUploadService } from './mood-upload.service';
 
 describe('public mood uploads', () => {
@@ -16,6 +19,18 @@ describe('public mood uploads', () => {
   afterEach(() => {
     process.env = originalEnv;
     jest.restoreAllMocks();
+  });
+
+  it('preserves null public expiry through the response interceptor', async () => {
+    const context = {
+      getClass: () => ({ name: 'MoodUploadController' }),
+    } as unknown as ExecutionContext;
+    const result = await firstValueFrom(
+      new NullToEmptyInterceptor().intercept(context, {
+        handle: () => of({ data: { expiresAt: null } }),
+      }),
+    );
+    expect(result.data.expiresAt).toBeNull();
   });
 
   it('uploads to the shared bucket without private configuration or signed URLs', async () => {
