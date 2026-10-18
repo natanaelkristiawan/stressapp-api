@@ -73,8 +73,9 @@ No public URLs, bucket paths, owner IDs or credentials are returned as separate
 metadata fields. A presigned URL necessarily contains its object path and signing
 parameters. Audio validation checks MIME/container signatures and size; it does
 not fully decode media, calculate trusted duration, or perform speech scanning.
-The current mobile UI still needs its separate API integration; this API work
-preserves its routes/layout and does not replace demo state yet. Unattached or
+The existing mobile UI is now connected through its feature Context and validated
+API adapter; see [mobile integration](../stressapp/MOOD_TRACKER.md). Live native
+and MinIO verification remains pending. Unattached or
 removed uploads remain private; automated orphan retention/cleanup is not defined.
 Mood reminders and loneliness assessments are outside these routes.
 
