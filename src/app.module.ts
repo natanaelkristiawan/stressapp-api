@@ -1,3 +1,7 @@
+import { AssessmentModule } from './assessment/assessment.module';
+import { AssessmentVersion } from './entity/assessment-version.entity';
+import { AssessmentSettings } from './entity/assessment-settings.entity';
+import { MemberAssessment } from './entity/member-assessment.entity';
 import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { MoodEntryEntity } from './entity/mood-entry.entity';
@@ -103,7 +107,7 @@ import { CronModule } from './cron/cron.module';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE_MIMATE,
-      entities: [MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
+      entities: [AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
         CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner], // Your entities
       synchronize: true, // User-approved development schema synchronization
@@ -149,6 +153,7 @@ import { CronModule } from './cron/cron.module';
       }
     }),
 
+    AssessmentModule,
     MemberAuthModule,
     MoodTrackerModule,
     AuthModule,
@@ -243,6 +248,8 @@ export class AppModule {
         { path: 'me/moods', method: RequestMethod.ALL },
         { path: 'me/moods/(.*)', method: RequestMethod.ALL },
         { path: 'me/mood-summary', method: RequestMethod.ALL },
+        { path: 'me/assessment', method: RequestMethod.ALL },
+        { path: 'me/assessment/(.*)', method: RequestMethod.ALL },
         { path: 'is-live', method: RequestMethod.GET },
         { path: 'admin-auth/login', method: RequestMethod.ALL },
         { path: 'admin-auth/login/(.*)', method: RequestMethod.ALL },
@@ -271,6 +278,8 @@ export class AppModule {
       { path: 'me/moods', method: RequestMethod.ALL },
       { path: 'me/moods/(.*)', method: RequestMethod.ALL },
       { path: 'me/mood-summary', method: RequestMethod.ALL },
+      { path: 'me/assessment', method: RequestMethod.ALL },
+      { path: 'me/assessment/(.*)', method: RequestMethod.ALL },
       { path: 'upload/image', method: RequestMethod.POST },
       { path: 'upload/audio', method: RequestMethod.POST },
     ).forRoutes({ path: '*', method: RequestMethod.ALL });

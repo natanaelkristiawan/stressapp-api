@@ -1,3 +1,4 @@
+import { AssessmentModule } from './assessment/assessment.module';
 import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { getCorsOptions } from './common/config/cors';
@@ -102,6 +103,7 @@ async function bootstrap() {
   
   const documentFactory = () => SwaggerModule.createDocument(app, config, {
     include: [
+      AssessmentModule,
       MemberAuthModule,
       MoodTrackerModule,
       PostModule,
@@ -140,6 +142,7 @@ async function bootstrap() {
 
   const adminDoc = SwaggerModule.createDocument(app, adminConfig, {
     include: [
+      AssessmentModule,
       CmsMoodParticipationModule,
       AdminDashboardModule, 
       AdminUserModule, 
