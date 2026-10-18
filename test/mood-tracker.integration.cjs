@@ -30,7 +30,7 @@ const { AllExceptionsFilter } = require('../src/common/filters/http-exception.fi
 async function main() {
   const port = Number(process.env.MOOD_TEST_PORT);
   assert(Number.isInteger(port) && port > 0 && port <= 65535, 'Set MOOD_TEST_PORT to disposable local MySQL');
-  Object.assign(process.env, { S3_BUCKET: 'test-public', S3_PRIVATE_BUCKET: 'test-private', S3_ACCESS_KEY: 'synthetic-access', S3_SECRET_KEY: 'synthetic-secret', S3_SPACES_ENDPOINT: 'https://minio.example.test', BASE_URL: 'http://127.0.0.1' });
+  Object.assign(process.env, { S3_BUCKET: 'test-public', S3_ACCESS_KEY: 'synthetic-access', S3_SECRET_KEY: 'synthetic-secret', S3_SPACES_ENDPOINT: 'https://minio.example.test', BASE_URL: 'http://127.0.0.1' });
   const schema = `mood_test_${process.pid}_${Date.now()}`;
   const connection = await createConnection({ host: '127.0.0.1', port, user: 'root', password: '' });
   const originalSend = S3Client.prototype.send;
@@ -124,9 +124,13 @@ async function main() {
     const image = await sharp({ create: { width: 4, height: 4, channels: 3, background: 'red' } }).png().toBuffer();
     const photo = await upload('image', image, 'image/png');
     assert.equal(photo.status, 201); assert.equal(photo.body.data.type, 'photo');
-    const signed = new URL(photo.body.data.url);
-    assert.equal(signed.searchParams.get('X-Amz-Expires'), '300'); assert(signed.searchParams.has('X-Amz-Signature'));
-    assert.equal(puts[0].Bucket, 'test-private'); assert.equal(puts[0].ContentType, 'image/webp');
+    const publicUrl = new URL(photo.body.data.url);
+    assert.equal(publicUrl.search, '');
+    assert.equal(publicUrl.hostname, 'minio.example.test');
+    assert(publicUrl.pathname.startsWith('/test-public/mood/'));
+    assert.equal(photo.body.data.expiresAt, null);
+    assert.equal(puts[0].Bucket, 'test-public'); assert.equal(puts[0].ContentType, 'image/webp');
+    assert.equal(puts[0].CacheControl, 'public, max-age=86400');
     assert.equal((await upload('image', Buffer.from('fake'), 'image/png')).status, 400);
     assert.equal((await upload('image', Buffer.alloc(5 * 1024 * 1024 + 1), 'image/png')).status, 413);
     assert.equal((await upload('image', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'), 'image/png')).status, 400);
@@ -149,11 +153,9 @@ async function main() {
     const attached = await request(`/me/moods/${today}`, 'PUT', { score: 4, timeZone, attachmentIds: ids });
     assert.equal(attached.status, 200); assert.equal(attached.body.data.attachments.length, 2);
     assert.equal(await db.getRepository(MoodAttachment).count(), 2);
-    const privateBucket = process.env.S3_PRIVATE_BUCKET; delete process.env.S3_PRIVATE_BUCKET;
+    const publicBucket = process.env.S3_BUCKET; delete process.env.S3_BUCKET;
     assert.equal((await upload('audio', wav, 'audio/wav')).status, 503);
-    process.env.S3_PRIVATE_BUCKET = process.env.S3_BUCKET;
-    assert.equal((await upload('audio', wav, 'audio/wav')).status, 503);
-    process.env.S3_PRIVATE_BUCKET = privateBucket;
+    process.env.S3_BUCKET = publicBucket;
     await repo.update(alice.id, { is_suspended: true });
     assert.equal((await request(`/me/moods?${query}`)).status, 401);
     assert.equal((await upload('audio', wav, 'audio/wav')).status, 401);
@@ -166,7 +168,7 @@ async function main() {
     assert.throws(() => audioContentType(Buffer.from('<html>'), 'audio/mpeg'));
     await db.synchronize(); // Verify repeated development synchronization preserves entries.
     assert.equal(await db.getRepository(MoodEntryEntity).countBy({ memberId: alice.id }), 2);
-    console.log('Mood HTTP/MySQL integration passed: validation, authorization, daily upsert/concurrency, gaps, private upload ownership and session revocation. S3/Redis/email are mocked.');
+    console.log('Mood HTTP/MySQL integration passed: validation, authorization, daily upsert/concurrency, gaps, public upload URLs and attachment ownership and session revocation. S3/Redis/email are mocked.');
   } finally {
     S3Client.prototype.send = originalSend;
     if (app) await app.close();

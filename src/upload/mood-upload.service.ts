@@ -11,7 +11,6 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { S3RequestPresigner } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import * as sharp from 'sharp';
 import { MoodAttachment } from '../entity/mood-attachment.entity';
@@ -44,32 +43,23 @@ export function audioContentType(buffer: Buffer, mime: string): string {
 @Injectable()
 export class MoodUploadService {
   private client?: S3Client;
-  /** Injects the shared datasource. Returns private member-media operations. */
+  /** Injects the shared datasource. Returns member-media operations. */
   constructor(@InjectDataSource('mimate') private readonly db: DataSource) {}
 
-  /** Validates private storage settings. Returns one cached S3 client and a dedicated bucket. */
+  /** Validates shared storage settings. Returns one cached S3 client and the public upload bucket. */
   private storage() {
     try {
       const settings = storageConfig(process.env);
-      const bucket = process.env.S3_PRIVATE_BUCKET;
-      if (
-        !bucket ||
-        !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket) ||
-        bucket === settings.bucket
-      )
-        throw new Error();
       return {
         client: this.client ?? (this.client = new S3Client(settings.client)),
-        bucket,
+        bucket: settings.bucket,
       };
     } catch {
-      throw new ServiceUnavailableException(
-        'Penyimpanan privat belum tersedia.',
-      );
+      throw new ServiceUnavailableException('Penyimpanan belum tersedia.');
     }
   }
 
-  /** Validates and stores one private image/audio object. Returns owner metadata and an expiring URL. */
+  /** Validates and stores one public image/audio object. Returns owner metadata and a permanent URL. */
   async upload(
     memberId: number,
     type: 'photo' | 'audio',
@@ -112,7 +102,7 @@ export class MoodUploadService {
           Key: key,
           Body: buffer,
           ContentType: contentType,
-          CacheControl: 'private, no-store',
+          CacheControl: 'public, max-age=86400',
         }),
       );
     } catch {
@@ -158,52 +148,25 @@ export class MoodUploadService {
     return ids.map((id) => rows.find((row) => row.id === id));
   }
 
-  /** Signs private media for five minutes. Returns safe metadata without bucket/key or owner ID. */
+  /** Builds a permanent public media URL. Returns metadata without credentials or a separate owner ID. */
   async view(attachment: MoodAttachment) {
-    const { client } = this.storage();
-    const expiresIn = 300;
-    // The installed client/presigner have different Smithy Client versions.
-    // Sign the HTTP request with the existing SDK presigner, without client casts or new dependencies.
-    const target = new URL(
-      objectUrl(
-        storageConfig(process.env).endpointUrl,
-        attachment.bucket,
-        attachment.key,
-      ),
+    const settings = storageConfig(process.env);
+    const url = objectUrl(
+      settings.endpointUrl,
+      attachment.bucket,
+      attachment.key,
     );
-    const presigner = new S3RequestPresigner({
-      region: client.config.region,
-      credentials: client.config.credentials,
-      sha256: client.config.sha256,
-    });
-    const signed = await presigner.presign(
-      {
-        protocol: target.protocol,
-        hostname: target.hostname,
-        port: target.port ? Number(target.port) : undefined,
-        method: 'GET',
-        path: target.pathname,
-        headers: { host: target.host },
-        query: { 'response-cache-control': 'private, no-store' },
-      },
-      { expiresIn },
-    );
-    for (const [key, value] of Object.entries(signed.query || {})) {
-      for (const item of Array.isArray(value) ? value : [value])
-        target.searchParams.append(key, item ?? '');
-    }
-    const url = target.toString();
     return {
       id: attachment.id,
       type: attachment.type,
       contentType: attachment.contentType,
       size: attachment.size,
       url,
-      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+      expiresAt: null,
     };
   }
 
-  /** Refreshes an owned attachment URL. Returns 404 without signing foreign objects. */
+  /** Resolves an owned attachment URL. Returns 404 for foreign attachment metadata. */
   async detail(memberId: number, id: string) {
     const [attachment] = await this.owned(memberId, [id]);
     return this.view(attachment);

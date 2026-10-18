@@ -23,13 +23,13 @@ import { MoodUploadService } from './mood-upload.service';
 @UseGuards(MemberAuthGuard)
 @Controller('upload/mood')
 export class MoodUploadController {
-  /** Injects private media and shared rate limits. Returns member-only upload routes. */
+  /** Injects member media and shared rate limits. Returns member-only upload routes. */
   constructor(
     private readonly uploads: MoodUploadService,
     private readonly auth: MemberAuthService,
   ) {}
 
-  /** Uploads a bounded private photo. Returns an attachment ID and short-lived preview URL. */
+  /** Uploads a bounded photo. Returns an attachment ID and public preview URL. */
   @Post('image')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -45,7 +45,7 @@ export class MoodUploadController {
     return { data: await this.uploads.upload(req.member.id, 'photo', file) };
   }
 
-  /** Uploads bounded private audio. Returns an attachment ID and short-lived playback URL. */
+  /** Uploads bounded audio. Returns an attachment ID and public playback URL. */
   @Post('audio')
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
@@ -61,7 +61,7 @@ export class MoodUploadController {
     return { data: await this.uploads.upload(req.member.id, 'audio', file) };
   }
 
-  /** Refreshes private access after ownership validation. Returns safe metadata and an expiring URL. */
+  /** Resolves attachment metadata after ownership validation. Returns a public URL. */
   @Get(':id')
   async detail(
     @Req() req: MemberRequest,

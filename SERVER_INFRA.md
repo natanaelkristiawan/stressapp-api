@@ -81,19 +81,33 @@ MinIO if configured differently. `BASE_URL` is the API origin for existing file
 streaming links. Restart/redeploy after configuration changes. Missing/invalid
 storage settings fail when storage is used, without blocking unrelated API startup.
 
-This changes configuration for existing public-media responses only. It does
-not create buckets, change bucket policies or retrofit stored AWS URLs. Direct
-object URLs require a deliberately public object policy; private buckets will
-reject unauthenticated access. Do not make mood media public to enable these
-URLs. Member-owned private attachments and protected image/audio access are now
-implemented under `/upload/mood`; mobile integration remains pending. No live storage connection has
-been verified by the local build/configuration tests.
+Mood images/audio now also use `S3_BUCKET` and direct public URLs, by explicit
+user approval on 18 October 2026. No `S3_PRIVATE_BUCKET` setting is required.
+No live bucket policy or server configuration has been changed by local edits.
 
-### Private mood media
+### Public mood media
 
-Set `S3_PRIVATE_BUCKET` to a separately created private bucket, e.g.
-`temusobat-private`; it must differ from `S3_BUCKET`. Disable anonymous read/list
-and grant the application PutObject/GetObject/DeleteObject in that bucket.
-Mood endpoints validate member identity/ownership and issue five-minute signed
-URLs; never enable public access to make them work. See [MOOD_TRACKER.md](MOOD_TRACKER.md).
-No bucket/policy/credentials or server configuration has been changed locally.
+Create the configured bucket if absent. Merge this statement into its bucket
+policy, replacing `YOUR_BUCKET` with `S3_BUCKET`. Retain unrelated approved policy
+statements. This grants anonymous reads only for mood objects, not write/list:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "AWS": ["*"] },
+    "Action": ["s3:GetObject"],
+    "Resource": ["arn:aws:s3:::YOUR_BUCKET/mood/*"]
+  }]
+}
+```
+
+Give API credentials PutObject/DeleteObject permissions for that prefix. Restart
+the API after deploying the code/environment changes. Test an uploaded image and
+audio URL without Authorization; neither URL should contain signing parameters.
+Existing attachments still reference their original bucket. If private uploads
+already exist, their old bucket needs its own explicitly scoped read policy or
+an object/database migration before those direct URLs work. No migration runs
+automatically. Mood scores/notes remain owner-only API resources.
+See [MOOD_TRACKER.md](MOOD_TRACKER.md).
