@@ -9,6 +9,7 @@ import { MemberAuthService } from './member-auth.service';
 export interface MemberRequest {
   headers: { authorization?: string };
   member: { id: number };
+  sessionId: string;
 }
 
 @Injectable()
@@ -27,7 +28,9 @@ export class MemberAuthGuard implements CanActivate {
     if (typeof header !== 'string' || !/^Bearer \S+$/.test(header)) {
       throw new UnauthorizedException('Sesi tidak valid.');
     }
-    request.member = await this.auth.authenticate(header.slice(7));
+    const session = await this.auth.authenticateSession(header.slice(7));
+    request.member = session.member;
+    request.sessionId = session.sessionId;
     return true;
   }
 }

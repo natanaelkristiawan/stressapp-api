@@ -1,3 +1,4 @@
+import { PushDevicesModule } from './push-devices/push-devices.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
@@ -103,6 +104,7 @@ async function bootstrap() {
   
   const documentFactory = () => SwaggerModule.createDocument(app, config, {
     include: [
+      PushDevicesModule,
       AssessmentModule,
       MemberAuthModule,
       MoodTrackerModule,

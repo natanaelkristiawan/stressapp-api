@@ -410,6 +410,12 @@ export class MemberAuthService {
    * @returns Public member identity; expired or revoked access throws 401.
    */
   async authenticate(token: string) {
+    return (await this.authenticateSession(token)).member;
+  }
+  /** Resolves the same live identity plus its server-owned session key for installation-scoped resources.
+   * @returns Internal session context; never returned as a public auth response.
+   */
+  async authenticateSession(token: string) {
     const claims = this.claims(token);
     const session = await this.db
       .getRepository(MemberSession)
@@ -425,7 +431,7 @@ export class MemberAuthService {
       .findOneBy({ id: session.memberId });
     if (!this.active(member) || !member.verifiedAt)
       throw new UnauthorizedException('Sesi tidak valid.');
-    return this.view(member);
+    return { member: this.view(member), sessionId: session.tokenHash };
   }
   /** Revokes the JWT session and its refresh credential together.
    * @returns A logout confirmation; other independent sessions remain active.
