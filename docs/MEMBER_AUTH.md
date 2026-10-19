@@ -6,7 +6,7 @@ Profile writes remain separate work.
 
 Implemented 2026-10-14. Email/password member authentication is separate from
 CMS `admin-auth`. No Google sign-in in this step.
-See the [maintenance guide](../docs/auth/README.md) and [implementation history](../docs/auth/HISTORY.md).
+See the [maintenance guide](../../docs/auth/README.md) and [implementation history](../../docs/auth/HISTORY.md).
 
 ## API contract
 
@@ -168,7 +168,7 @@ BULL_HOST/BULL_PORT/BULL_PASSWORD. The existing API PM2 process hosts the worker
 Registration/resend/recovery await queue acceptance, not SMTP delivery. Three
 attempts retry after 5 and 10 seconds; expired/replaced/consumed codes are skipped.
 Completed and failed jobs are removed to avoid retaining OTP payloads. See
-../docs/auth/README.md for queue failure/resend limitations.
+../../docs/auth/README.md for queue failure/resend limitations.
 
 ## Browser cookie sessions (19 October 2026)
 

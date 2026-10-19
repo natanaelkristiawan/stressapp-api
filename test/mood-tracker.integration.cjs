@@ -168,7 +168,7 @@ async function main() {
     await db.query('CREATE TABLE member_mood_attachments (id varchar(36) PRIMARY KEY, memberId int, type varchar(5), bucket varchar(100), `key` varchar(255), contentType varchar(100), size int, createdAt datetime(3))');
     const legacyId = randomUUID();
     await db.query('INSERT INTO member_mood_attachments VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [legacyId, alice.id, 'photo', 'test-old-bucket', `mood/${alice.id}/${legacyId}`, 'image/png', 20, new Date()]);
-    const copySql = readFileSync(resolve(__dirname, '../SERVER_INFRA.md'), 'utf8').split('```sql\n')[1].split('```')[0];
+    const copySql = readFileSync(resolve(__dirname, '../docs/SERVER_INFRA.md'), 'utf8').split('```sql\n')[1].split('```')[0];
     await db.query(copySql);
     await db.query(copySql);
     assert.equal(await db.getRepository(AssetsEntity).countBy({ mediaId: legacyId }), 1);

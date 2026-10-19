@@ -83,7 +83,7 @@ a separate deployment operation. No automatic data migration is performed.
 Audio validation checks MIME/container signatures and size; it does
 not fully decode media, calculate trusted duration, or perform speech scanning.
 The existing mobile UI is now connected through its feature Context and validated
-API adapter; see [mobile integration](../stressapp/MOOD_TRACKER.md). Live native
+API adapter; see [mobile integration](../../stressapp/docs/MOOD_TRACKER.md). Live native
 and MinIO verification remains pending. Unattached or
 removed uploads remain public when their bucket policy allows access; automated orphan retention/cleanup is not defined.
 Mood reminders and loneliness assessments are outside these routes.

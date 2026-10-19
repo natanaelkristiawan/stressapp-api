@@ -66,11 +66,11 @@ A health response confirms readiness, not complete feature acceptance.
 
 ## Files to push
 
-- [.github/workflows/deploy.yml](.github/workflows/deploy.yml)
-- [deployment/github-deploy.sh](deployment/github-deploy.sh)
-- [ecosystem.config.cjs](ecosystem.config.cjs)
-- [.nvmrc](.nvmrc)
-- [test/github-deploy.cjs](test/github-deploy.cjs)
+- [.github/workflows/deploy.yml](../.github/workflows/deploy.yml)
+- [deployment/github-deploy.sh](../deployment/github-deploy.sh)
+- [ecosystem.config.cjs](../ecosystem.config.cjs)
+- [.nvmrc](../.nvmrc)
+- [test/github-deploy.cjs](../test/github-deploy.cjs)
 - This guide
 
 The API folder must be the root of its own GitHub repository for this workflow
