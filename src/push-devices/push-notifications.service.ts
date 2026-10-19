@@ -23,7 +23,68 @@ const FAILURE_CODES = new Set([
   'messaging/internal-error',
   'messaging/quota-exceeded',
   'messaging/invalid-argument',
+  'messaging/authentication-error',
+  'messaging/invalid-payload',
+  'messaging/invalid-options',
+  'messaging/message-rate-exceeded',
+  'messaging/device-message-rate-exceeded',
+  'app/invalid-credential',
+  'app/network-error',
 ]);
+
+/** Narrows untrusted SDK response objects without exposing their messages or request data. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+/** Returns only fixed diagnostic codes, including Google reasons hidden behind SDK unknown-error. */
+export function pushFailureCode(
+  error: unknown,
+  fallback = 'messaging/unknown-error',
+): string {
+  if (!isRecord(error)) {
+    return fallback;
+  }
+  const httpResponse = isRecord(error.httpResponse) ? error.httpResponse : null;
+  const body =
+    httpResponse && isRecord(httpResponse.data) ? httpResponse.data : null;
+  const providerError = body && isRecord(body.error) ? body.error : null;
+  const details =
+    providerError && Array.isArray(providerError.details)
+      ? providerError.details
+      : [];
+
+  for (const detail of details) {
+    if (
+      !isRecord(detail) ||
+      detail['@type'] !== 'type.googleapis.com/google.rpc.ErrorInfo'
+    ) {
+      continue;
+    }
+    if (detail.reason === 'SERVICE_DISABLED') {
+      return 'messaging/api-disabled';
+    }
+    if (
+      detail.reason === 'IAM_PERMISSION_DENIED' ||
+      detail.reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'
+    ) {
+      return 'messaging/permission-denied';
+    }
+    if (detail.reason === 'CREDENTIALS_MISSING') {
+      return 'messaging/authentication-error';
+    }
+  }
+  if (typeof error.code === 'string' && FAILURE_CODES.has(error.code)) {
+    return error.code;
+  }
+  if (httpResponse?.status === 401) {
+    return 'messaging/authentication-error';
+  }
+  if (httpResponse?.status === 403) {
+    return 'messaging/permission-denied';
+  }
+  return fallback;
+}
 
 @Injectable()
 export class PushNotificationsService {
@@ -118,19 +179,14 @@ export class PushNotificationsService {
           if (response.success) {
             continue;
           }
-          const rawCode = response.error?.code || '';
-          const code = FAILURE_CODES.has(rawCode)
-            ? rawCode
-            : 'messaging/unknown-error';
+          const code = pushFailureCode(response.error);
           failures.set(code, (failures.get(code) || 0) + 1);
         }
-      } catch {
+      } catch (error) {
         // A failed/ambiguous batch is not automatically resent: that can duplicate notifications.
         failed += batch.length;
-        failures.set(
-          'messaging/request-failed',
-          (failures.get('messaging/request-failed') || 0) + batch.length,
-        );
+        const code = pushFailureCode(error, 'messaging/request-failed');
+        failures.set(code, (failures.get(code) || 0) + batch.length);
       }
     }
 

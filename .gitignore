@@ -41,3 +41,6 @@ lerna-debug.log*
 
 # Private infrastructure credentials generated on the server.
 .env.infra
+
+# Runtime Firebase configuration, including private service-account credentials.
+/notification/

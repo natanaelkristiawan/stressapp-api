@@ -15,7 +15,10 @@ import { MemberPushDevice } from '../entity/member-push-device.entity';
 import { MemberAuthService } from '../member-auth/member-auth.service';
 import { CmsPushSettingsController } from './cms-push-settings.controller';
 import { PushDevicesService } from './push-devices.service';
-import { PushNotificationsService } from './push-notifications.service';
+import {
+  PushNotificationsService,
+  pushFailureCode,
+} from './push-notifications.service';
 
 jest.mock('firebase-admin/app', () => ({
   applicationDefault: jest.fn(),
@@ -247,6 +250,65 @@ describe('CMS push notification test', () => {
     ).toEqual([500, 1]);
     expect(result).toMatchObject({ accepted: 1, failed: 500, attempted: 501 });
     expect(firebase.sendEachForMulticast).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves authentication codes and classifies only fixed safe Google error reasons', () => {
+    expect(
+      pushFailureCode({
+        code: 'messaging/authentication-error',
+        message: 'private-token',
+      }),
+    ).toBe('messaging/authentication-error');
+    expect(pushFailureCode({ code: 'app/invalid-credential' })).toBe(
+      'app/invalid-credential',
+    );
+    expect(
+      pushFailureCode({
+        code: 'messaging/unknown-error',
+        httpResponse: {
+          status: 403,
+          data: {
+            error: {
+              details: [
+                {
+                  '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                  reason: 'SERVICE_DISABLED',
+                  metadata: { private: 'must-not-leak' },
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ).toBe('messaging/api-disabled');
+    expect(pushFailureCode({ httpResponse: { status: 403 } })).toBe(
+      'messaging/permission-denied',
+    );
+    expect(pushFailureCode({ httpResponse: { status: 401 } })).toBe(
+      'messaging/authentication-error',
+    );
+    expect(
+      pushFailureCode({
+        code: 'unsafe-provider-code',
+        message: 'private-token',
+      }),
+    ).toBe('messaging/unknown-error');
+    expect(pushFailureCode(null, 'messaging/request-failed')).toBe(
+      'messaging/request-failed',
+    );
+  });
+
+  it('reports a thrown credential error without resending the batch', async () => {
+    firebase.sendEachForMulticast.mockRejectedValueOnce({
+      code: 'app/invalid-credential',
+      message: 'private-key-details',
+    });
+    const result = await sender.sendTest('test@example.test', 7);
+    expect(result.failures).toEqual([
+      { code: 'app/invalid-credential', count: 2 },
+    ]);
+    expect(firebase.sendEachForMulticast).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(result)).not.toContain('private-key-details');
   });
 
   it('honors Redis throttling before looking up a target or contacting Firebase', async () => {

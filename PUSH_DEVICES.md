@@ -146,3 +146,20 @@ scoped lint pass. Browser preview: /tmp/cms-push-notifications-preview.png (mock
 acceptance counts, not evidence of real Firebase delivery). No private server key
 was provided/configured and no live FCM send was attempted. Assessment reminder
 scheduling and native iOS delivery remain separate work.
+
+### Failure diagnostics
+
+Test failures preserve fixed SDK authentication/credential codes. Structured Google
+ErrorInfo SERVICE_DISABLED becomes messaging/api-disabled; IAM_PERMISSION_DENIED
+or insufficient OAuth scope becomes messaging/permission-denied. HTTP 401/403 have
+safe authentication/permission fallbacks. CMS displays specific action hints.
+Raw provider messages, HTTP payloads, credential details and device tokens remain
+hidden. Unsupported errors still report unknown-error rather than exposing raw
+text. No send is automatically replayed.
+
+If the member app PUT /me/push-devices succeeds but a table appears empty, check
+`member_push_devices` (plural), confirm the request API host uses the database being
+viewed, and keep the member logged in: logout/session deletion cascades the row.
+A CMS attempted count greater than zero means its API found eligible registered
+devices; Firebase acceptance zero is then a provider-send problem, not missing
+registration for that request.
