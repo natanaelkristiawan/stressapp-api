@@ -1,7 +1,7 @@
 # Baseline assessment API
 
-Implemented 18 October 2026. API first; CMS screens and mobile integration are
-pending. Uses the existing `mimate` datasource, MemberAuthGuard and live CMS admin
+Implemented 18 October 2026; CMS configuration/history views added 19 October.
+Mobile integration remains pending. Uses the existing `mimate` datasource, MemberAuthGuard and live CMS admin
 authentication. No new dependencies, seed questionnaire or migration commands.
 Development startup synchronizes `assessment_versions`, `assessment_settings`
 and `member_assessments`. Existing standalone datasource discovers these entities.
@@ -14,7 +14,8 @@ when mobile routing is integrated. The native splash remains startup branding.
 Initial mood is a distinct onboarding step, never a daily Mood Tracker record.
 CMS owns questions, answer labels/values, reverse scoring, category ranges and
 interpretation/disclaimer text. All active CMS admins can configure instruments;
-these routes do **not** grant access to member answers/results.
+configuration routes do not return member responses. The user separately approved
+read-only assessment history for all active CMS admins on 19 October 2026.
 
 This increment supports one baseline per member. Week-two/week-four timing,
 late measurements and retakes remain undecided and are not implemented. Saved
@@ -141,3 +142,45 @@ negative inputs, two-member privacy, saved history and concurrent submissions.
 Queue and Redis transport are mocked; no application `.env` is loaded. Unit
 checks cover score boundaries 6,9,10,15,16,24 and configurable reverse scoring.
 No questionnaire content in these synthetic tests is production seed data.
+
+## CMS assessment history (approved 19 October 2026)
+
+`GET /cms-assessments/history` accepts required `from`/`to` YYYY-MM-DD calendar
+dates (UTC completion dates, inclusive, ordered range ≤366 days), optional trimmed
+`name` ≤100, `page`/`pageSize` with the same bounds as versions, `sortBy`
+(`memberName`, `completedAt`, `score`) and `sortOrder` (`asc`, `desc`). Defaults:
+page 1, pageSize 20, completedAt descending with descending member-ID tie-breaker.
+Filtering, sorting and pagination run on the server. Lists current eligible mobile
+accounts including suspended accounts, excluding deleted/legacy/staff profiles,
+and only completed assessments. `data` contains `items`, `total`, `page`,
+`pageSize`; each item has string `id` (baseline member ID), `memberName`,
+`versionId`, UTC `completedAt`, `score`, `maxScore`, `category`.
+
+`GET /cms-assessments/history/:id` returns the same scoped baseline's member name,
+version ID/title, completion time, stored result and six ordered answers. Answers
+include original `questionId`, `question`, chosen `answer` label, selected `value`,
+actual awarded `points`, and `reverseScored`. Details derive wording and points
+from the immutable submitted version, not the currently active instrument.
+No email, credentials, initial mood or other private feature data is returned.
+Unauthorized reads are 401; unknown/ineligible/incomplete records are 404.
+Explicit nulls and no-store headers remain. Submission edit/delete/export routes
+are not provided; CMS configuration changes never modify member history.
+
+CMS routes under Mood Tracker:
+`/mood-participation/assessments/questions`, `/results`, `/history`.
+Question and Result share one RHF draft and a scoped server-snapshot Context.
+Question contains the repeated answer labels/point fields; Result edits category
+ranges. The user removed the separate Answers view on 19 October 2026 because
+answers are already managed within Question. Save validates the entire instrument. Publish
+requires a saved clean draft and explicit scoring confirmation. Published versions
+are read-only; copy to a new draft to change them. History uses a remote TanStack
+DataTable with URL-owned filters/pagination/sorting and a read-only detail dialog.
+Private snapshots reset on account transitions and requests cancel on navigation.
+
+Expanded integration checks cover history roles, read-only method rejection,
+original direct/reverse points, totals, paging/filter/sort, UTC date boundaries,
+and exclusion of deleted/legacy/staff accounts. Optional local UI fixture mode:
+`ASSESSMENT_TEST_SERVE=1 ASSESSMENT_HTTP_PORT=3199 ASSESSMENT_TEST_PORT=<isolated port>`
+keeps the synthetic API available until SIGTERM/SIGINT; it still drops only its own
+schema on exit. Preview the CMS with `VITE_API_URL=http://127.0.0.1:3199` on port
+5188; no application .env or deployed data is used.

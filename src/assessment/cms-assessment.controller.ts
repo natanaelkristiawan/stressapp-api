@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import {
   AssessmentDefinitionDto,
+  AssessmentHistoryDto,
   AssessmentIdDto,
   AssessmentListDto,
   EditAssessmentDto,
@@ -38,6 +39,20 @@ export class CmsAssessmentController {
   @Header('Cache-Control', 'private, no-store')
   async list(@Query() query: AssessmentListDto) {
     return { data: await this.assessments.list(query) };
+  }
+
+  /** Lists completed member assessments. Returns read-only remote history for active CMS admins. */
+  @Get('history')
+  @Header('Cache-Control', 'private, no-store')
+  async history(@Query() query: AssessmentHistoryDto) {
+    return { data: await this.assessments.history(query) };
+  }
+
+  /** Reads original answers and awarded points. Returns no member edit operations. */
+  @Get('history/:id')
+  @Header('Cache-Control', 'private, no-store')
+  async historyDetail(@Param() params: AssessmentIdDto) {
+    return { data: await this.assessments.historyDetail(params.id) };
   }
 
   /** Loads questionnaire configuration. Returns no member responses. */

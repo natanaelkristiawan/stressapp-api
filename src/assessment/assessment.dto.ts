@@ -6,6 +6,10 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsDateString,
+  IsIn,
+  IsOptional,
+  MaxLength,
   IsString,
   Length,
   Matches,
@@ -101,4 +105,15 @@ export class SubmitAssessmentDto {
   @ValidateNested({ each: true })
   @Type(() => AssessmentAnswerDto)
   answers: AssessmentAnswerDto[];
+}
+
+export class AssessmentHistoryDto extends AssessmentListDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsDateString({ strict: true }) from: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsDateString({ strict: true }) to: string;
+  @IsOptional() @Transform(trim) @IsString() @MaxLength(100) name?: string;
+  @IsIn(['memberName', 'completedAt', 'score']) sortBy:
+    | 'memberName'
+    | 'completedAt'
+    | 'score' = 'completedAt';
+  @IsIn(['asc', 'desc']) sortOrder: 'asc' | 'desc' = 'desc';
 }

@@ -14,6 +14,7 @@ import { MemberAssessment } from '../entity/member-assessment.entity';
 import { Member } from '../entity/user-mimate.entity';
 import {
   AssessmentDefinitionDto,
+  AssessmentHistoryDto,
   AssessmentListDto,
   EditAssessmentDto,
   InitialMoodDto,
@@ -53,6 +54,106 @@ export class AssessmentService {
       createdAt: version.createdAt.toISOString(),
       updatedAt: version.updatedAt.toISOString(),
       publishedAt: version.publishedAt?.toISOString() ?? null,
+    };
+  }
+
+  /** Scopes read-only history to completed current mobile accounts, including suspended members. Returns the common SQL builder. */
+  private historyScope() {
+    return this.db
+      .getRepository(MemberAssessment)
+      .createQueryBuilder('entry')
+      .innerJoin(Member, 'member', 'member.id = entry.memberId')
+      .where('entry.completedAt IS NOT NULL')
+      .andWhere('member.memberAuthEnabled = :enabled', { enabled: true })
+      .andWhere('member.deleted_at IS NULL')
+      .andWhere(
+        'NOT EXISTS (SELECT 1 FROM users staff WHERE staff.backup_member_id = member.id)',
+      );
+  }
+
+  /** Lists completed assessments using UTC completion dates and bounded server sorting/filtering. Returns no answer text in list rows. */
+  async history(query: AssessmentHistoryDto) {
+    const days = (Date.parse(query.to) - Date.parse(query.from)) / 86400000 + 1;
+    if (!Number.isInteger(days) || days < 1 || days > 366)
+      throw new BadRequestException(
+        'Choose an ordered range of at most 366 days.',
+      );
+    const until = new Date(Date.parse(query.to) + 86400000);
+    const builder = this.historyScope().andWhere(
+      'entry.completedAt >= :from AND entry.completedAt < :until',
+      {
+        from: new Date(query.from),
+        until,
+      },
+    );
+    if (query.name)
+      builder.andWhere('LOCATE(:name, LOWER(member.name)) > 0', {
+        name: query.name.toLowerCase(),
+      });
+    const total = await builder.getCount();
+    const sort = {
+      memberName: 'member.name',
+      completedAt: 'entry.completedAt',
+      score:
+        "CAST(JSON_UNQUOTE(JSON_EXTRACT(entry.result, '$.score')) AS UNSIGNED)",
+    };
+    const records = await builder
+      .select('entry')
+      .addSelect('member.name', 'memberName')
+      .orderBy(sort[query.sortBy], query.sortOrder === 'asc' ? 'ASC' : 'DESC')
+      .addOrderBy('entry.memberId', 'DESC')
+      .offset((query.page - 1) * query.pageSize)
+      .limit(query.pageSize)
+      .getRawAndEntities<{ memberName: string | null }>();
+    return {
+      items: records.entities.map((entry, index) => ({
+        id: String(entry.memberId),
+        memberName: records.raw[index].memberName || 'Unnamed member',
+        versionId: entry.versionId,
+        completedAt: entry.completedAt.toISOString(),
+        score: entry.result.score,
+        maxScore: entry.result.maxScore,
+        category: entry.result.category,
+      })),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  /** Loads immutable submitted answers and their original scoring direction. Returns read-only member detail or 404. */
+  async historyDetail(memberId: number) {
+    const record = await this.historyScope()
+      .andWhere('entry.memberId = :memberId', { memberId })
+      .select('entry')
+      .addSelect('member.name', 'memberName')
+      .getRawAndEntities<{ memberName: string | null }>();
+    const entry = record.entities[0];
+    if (!entry) throw new NotFoundException('Assessment submission not found.');
+    const version = await this.findVersion(this.db.manager, entry.versionId);
+    return {
+      id: String(entry.memberId),
+      memberName: record.raw[0].memberName || 'Unnamed member',
+      versionId: entry.versionId,
+      title: version.definition.title,
+      completedAt: entry.completedAt.toISOString(),
+      result: entry.result,
+      answers: version.definition.questions.map((question) => {
+        const answer = entry.answers.find(
+          (item) => item.questionId === question.id,
+        );
+        const option = question.options.find(
+          (item) => item.value === answer.value,
+        );
+        return {
+          questionId: question.id,
+          question: question.text,
+          answer: option.label,
+          value: answer.value,
+          points: question.reverseScored ? 5 - answer.value : answer.value,
+          reverseScored: question.reverseScored,
+        };
+      }),
     };
   }
 

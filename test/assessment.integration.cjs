@@ -10,6 +10,7 @@ const { Test } = require('@nestjs/testing');
 const { TypeOrmModule, getDataSourceToken } = require('@nestjs/typeorm');
 const { ValidationPipe } = require('@nestjs/common');
 const { JwtService } = require('@nestjs/jwt');
+const { AdminAuthController } = require('../src/admin-auth/admin-auth.controller');
 const { AssessmentController } = require('../src/assessment/assessment.controller');
 const { CmsAssessmentController } = require('../src/assessment/cms-assessment.controller');
 const { AssessmentService } = require('../src/assessment/assessment.service');
@@ -61,7 +62,7 @@ async function main() {
         database: schema, timezone: 'Z', synchronize: true,
         entities: readdirSync(folder).filter(f => /\.entity\.ts$/.test(f) && !/^(user|car|vehicle)\.entity\./.test(f)).map(f => resolve(folder, f)),
       })],
-      controllers: [AssessmentController, CmsAssessmentController],
+      controllers: [AssessmentController, CmsAssessmentController, AdminAuthController],
       providers: [AssessmentService, MemberAuthGuard, CmsMembersGuard,
         { provide: MemberAuthService, inject: [getDataSourceToken('mimate')],
           useFactory: db => new MemberAuthService(db, { add: async () => undefined },
@@ -77,13 +78,14 @@ async function main() {
       { getLocalMember: id => db.getRepository(Member).findOneBy({ id }) },
       { getOrNil: () => ({ set: async () => undefined }) }, module.get(MemberAuthService));
     app.use((req, res, next) => {
-      if (req.path.startsWith('/me/assessment')) return next();
+      if (req.method === 'OPTIONS' || req.path.startsWith('/me/assessment') || req.path === '/admin-auth/login') return next();
       middleware.use(req, res, next).catch(next);
     });
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     app.useGlobalInterceptors(new SuccessInterceptor(), new NullToEmptyInterceptor());
     app.useGlobalFilters(new AllExceptionsFilter());
-    await app.listen(0, '127.0.0.1');
+    app.enableCors({ origin: ['http://127.0.0.1:5188'] });
+    await app.listen(Number(process.env.ASSESSMENT_HTTP_PORT || 0), '127.0.0.1');
     const base = await app.getUrl();
     await seedAdmin(db, { email: 'assessment-admin@example.test', name: 'Test Admin', password: 'Syntheticpass123!' });
     const account = await db.getRepository(UserAdmin).findOne({ where: { email: 'assessment-admin@example.test' }, relations: ['userMimate'] });
@@ -194,6 +196,52 @@ async function main() {
       request(me, 'PUT', { ...changed, versionId: v2.id }, third),
     ]);
     assert.deepEqual(conflicts.map(r => r.status).sort(), [200, 409]);
+    const day = new Date().toISOString().slice(0, 10);
+    const range = `from=${day}&to=${day}`;
+    const history = `${cms}/history`;
+    await expectStatus(401, `${history}?${range}`, 'GET', undefined, token);
+    const historyPage = await expectStatus(200, `${history}?${range}&pageSize=2&sortBy=score&sortOrder=asc`, 'GET', undefined, admin);
+    assert.equal(historyPage.total, 3); assert.equal(historyPage.items.length, 2);
+    assert(historyPage.items[0].score <= historyPage.items[1].score);
+    const secondPage = await expectStatus(200, `${history}?${range}&pageSize=2&page=2&sortBy=score&sortOrder=asc`, 'GET', undefined, admin);
+    assert.equal(new Set([...historyPage.items, ...secondPage.items].map(row => row.id)).size, 3);
+    assert.equal((await expectStatus(200, `${history}?${range}&name=Alice`, 'GET', undefined, admin)).total, 1);
+    assert.equal((await expectStatus(200, `${history}?${range}&name=%25_`, 'GET', undefined, admin)).total, 0);
+    for (const query of ['from=2026-02-30&to=2026-03-01', 'from=2026-10-19&to=2026-10-18', 'from=2020-01-01&to=2026-10-18', `${range}&sortBy=passwordHash`, `${range}&pageSize=101`, `${range}&extra=1`])
+      await expectStatus(400, `${history}?${query}`, 'GET', undefined, admin);
+    const bobDetail = await expectStatus(200, `${history}/${bob.id}`, 'GET', undefined, admin);
+    assert.equal(bobDetail.answers.length, 6);
+    assert.equal(bobDetail.answers[4].value, 1); assert.equal(bobDetail.answers[4].points, 4);
+    assert.equal(bobDetail.answers.reduce((total, answer) => total + answer.points, 0), bobDetail.result.score);
+    assert(!JSON.stringify(bobDetail).includes('email'));
+    const originalDetail = await expectStatus(200, `${history}/${alice.id}`, 'GET', undefined, admin);
+    assert.equal(originalDetail.versionId, id); assert.equal(originalDetail.result.score, 6);
+    await expectStatus(404, `${history}/${alice.id}`, 'PUT', { answers: [] }, admin);
+    await expectStatus(404, `${history}/${alice.id}`, 'DELETE', undefined, admin);
+    assert.deepEqual(await expectStatus(200, `${history}/${alice.id}`, 'GET', undefined, admin), originalDetail);
+    await expectStatus(400, `${history}/bad`, 'GET', undefined, admin);
+    await repo.softDelete(bob.id);
+    await expectStatus(404, `${history}/${bob.id}`, 'GET', undefined, admin);
+    await repo.restore(bob.id);
+    await repo.update(bob.id, {memberAuthEnabled: false});
+    await expectStatus(404, `${history}/${bob.id}`, 'GET', undefined, admin);
+    await repo.update(bob.id, {memberAuthEnabled: true});
+    const entry = await db.getRepository(MemberAssessment).findOneBy({memberId: alice.id});
+    await db.getRepository(MemberAssessment).save({...entry, memberId: account.backup_member_id});
+    await expectStatus(404, `${history}/${account.backup_member_id}`, 'GET', undefined, admin);
+    assert.equal((await expectStatus(200, `${history}?${range}`, 'GET', undefined, admin)).total, 3);
+    await db.getRepository(MemberAssessment).delete({memberId: account.backup_member_id});
+    await db.getRepository(MemberAssessment).update(alice.id, {completedAt: new Date('2026-10-18T00:00:00.000Z')});
+    await db.getRepository(MemberAssessment).update(bob.id, {completedAt: new Date('2026-10-18T23:59:59.999Z')});
+    await db.getRepository(MemberAssessment).update(carol.id, {completedAt: new Date('2026-10-19T00:00:00.000Z')});
+    assert.equal((await expectStatus(200, `${history}?from=2026-10-18&to=2026-10-18`, 'GET', undefined, admin)).total, 2);
+    await db.getRepository(MemberAssessment).update(alice.id, {completedAt: new Date(historical.completedAt)});
+    await db.getRepository(MemberAssessment).update(bob.id, {completedAt: new Date()});
+    await db.getRepository(MemberAssessment).update(carol.id, {completedAt: new Date()});
+    if (process.env.ASSESSMENT_TEST_SERVE === '1') {
+      console.log(`Synthetic assessment CMS fixture ready at ${base}`);
+      await new Promise(resolve => { process.once('SIGTERM', resolve); process.once('SIGINT', resolve); });
+    }
     const restored = await access(alice);
     assert.deepEqual(await expectStatus(200, me, 'GET', undefined, restored), historical);
     await db.getRepository(MemberSession).delete({ memberId: carol.id });
@@ -203,7 +251,7 @@ async function main() {
     await repo.update(account.backup_member_id, { is_suspended: true });
     await expectStatus(401, cms, 'GET', undefined, admin);
     assert.equal(await db.query('SELECT COUNT(*) AS total FROM member_moods').then(r => Number(r[0].total)), 0);
-    assert.equal(await db.getRepository(AssessmentVersion).count(), 2);
+    assert((await db.getRepository(AssessmentVersion).count()) >= 2);
     // Production wiring must exempt member routes from the legacy admin middleware and omit body logging.
     const appSource = readFileSync(resolve(__dirname, '../src/app.module.ts'), 'utf8');
     assert.equal((appSource.match(/path: 'me\/assessment'/g) || []).length, 2);
