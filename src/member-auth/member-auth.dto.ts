@@ -79,3 +79,6 @@ export class ResetPasswordDto {
 export class RefreshDto {
   @IsString() @Matches(/^refresh_[a-f0-9]{64}$/) refreshToken: string;
 }
+
+/** Cookie-only requests accept an empty body; client-supplied credentials are rejected. */
+export class WebSessionDto {}

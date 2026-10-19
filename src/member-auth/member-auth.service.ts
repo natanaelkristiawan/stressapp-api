@@ -78,7 +78,12 @@ export class MemberAuthService {
    * @returns A truthy eligibility result; null/false when access is disallowed.
    */
   private active(member: Member | null) {
-    return member && member.memberAuthEnabled && !member.is_suspended && !member.deleted_at;
+    return (
+      member &&
+      member.memberAuthEnabled &&
+      !member.is_suspended &&
+      !member.deleted_at
+    );
   }
   /** Builds the public member identity without credentials or private columns.
    * @returns The member ID, email, display name and verification status.
@@ -443,6 +448,28 @@ export class MemberAuthService {
       .delete({ tokenHash: this.claims(token).sid });
     return { message: 'Berhasil keluar.' };
   }
+  /** Revokes only the session owning this refresh cookie. Expired/missing sessions are already logged out. */
+  async logoutByRefreshToken(refreshToken: string): Promise<void> {
+    const session = await this.db.getRepository(MemberSession).findOneBy({
+      refreshHash: this.hash(refreshToken),
+    });
+    if (!session) {
+      return;
+    }
+
+    await this.db.transaction(async (manager) => {
+      // Match refresh/reset locking and revoke the stable session ID even if its token just rotated.
+      await manager.findOne(Member, {
+        where: { id: session.memberId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      await manager.delete(MemberSession, {
+        tokenHash: session.tokenHash,
+        memberId: session.memberId,
+      });
+    });
+  }
+
   /** Consumes recovery proof, changes the password and revokes all member sessions.
    * @returns A password-reset confirmation; invalid/reused proof throws an error.
    */

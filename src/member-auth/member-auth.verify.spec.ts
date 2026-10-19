@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import { getQueueToken } from '@nestjs/bullmq';
 import { OTP_EMAIL_QUEUE } from './member-auth.email.processor';
-import { createHmac } from 'crypto';
+import { createHash, createHmac } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { MemberAuthService } from './member-auth.service';
 import { Member } from '../entity/user-mimate.entity';
@@ -21,7 +21,8 @@ describe('registration OTP session', () => {
       id: 7,
       name: 'Test',
       email: 'test@example.test',
-      is_suspended: false, memberAuthEnabled: true,
+      is_suspended: false,
+      memberAuthEnabled: true,
       deleted_at: null,
       verifiedAt: purpose === 'recovery' ? new Date() : null,
     });
@@ -57,12 +58,19 @@ describe('registration OTP session', () => {
         async (entity: unknown, value?: unknown) => value || entity,
       ),
     };
+    const sessions = {
+      findOneBy: jest.fn(async () => ({
+        tokenHash: 'a'.repeat(64),
+        memberId: 7,
+      })),
+    };
     const module = await Test.createTestingModule({
       providers: [
         MemberAuthService,
         {
           provide: getDataSourceToken('mimate'),
           useValue: {
+            getRepository: () => sessions,
             transaction: async (
               work: (value: typeof manager) => Promise<unknown>,
             ) => {
@@ -90,8 +98,22 @@ describe('registration OTP session', () => {
       otp,
       manager,
       emails,
+      sessions,
     };
   }
+  it('cookie logout hashes the credential and deletes only its stable session ID', async () => {
+    const { service, manager, sessions } = await setup('recovery');
+    const refreshToken = `refresh_${'b'.repeat(64)}`;
+    await service.logoutByRefreshToken(refreshToken);
+    expect(sessions.findOneBy).toHaveBeenCalledWith({
+      refreshHash: createHash('sha256').update(refreshToken).digest('hex'),
+    });
+    expect(manager.delete).toHaveBeenCalledWith(MemberSession, {
+      tokenHash: 'a'.repeat(64),
+      memberId: 7,
+    });
+  });
+
   it('queues delivery only after OTP commit and surfaces queue failure', async () => {
     const { service, member, emails } = await setup('registration');
     await service.sendOtp(member.email, 'registration');
@@ -155,10 +177,17 @@ describe('registration OTP session', () => {
     member.memberAuthEnabled = false;
     await service.sendOtp(member.email, 'registration');
     expect(emails.add).not.toHaveBeenCalled();
-    await expect(service.verify({
-      email: member.email, purpose: 'registration', code: '1234', password: 'Testpass123!',
-    })).rejects.toThrow();
-    expect(manager.save.mock.calls.some(call => call[0] === MemberSession)).toBe(false);
+    await expect(
+      service.verify({
+        email: member.email,
+        purpose: 'registration',
+        code: '1234',
+        password: 'Testpass123!',
+      }),
+    ).rejects.toThrow();
+    expect(
+      manager.save.mock.calls.some((call) => call[0] === MemberSession),
+    ).toBe(false);
   });
   it('returns reset proof without a login session for recovery', async () => {
     const { service, member, manager } = await setup('recovery');

@@ -18,6 +18,7 @@ export class LoggingInterceptor implements NestInterceptor {
     if (
       [
         'MemberAuthController',
+        'MemberWebAuthController',
         'PushDevicesController',
         'AdminAuthController',
         'CmsMembersController',
