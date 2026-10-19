@@ -21,19 +21,31 @@ import { PushDevicesService } from './push-devices.service';
 @Controller('me/push-devices')
 export class PushDevicesController {
   /** Injects session-owned token registration. Returns member-only routes. */
-  constructor(private readonly devices: PushDevicesService) {}
+  constructor(private readonly pushDevicesService: PushDevicesService) {}
 
   /** Saves current device after login or OTP registration. Returns safe subscription metadata. */
   @Put()
-  async save(@Req() req: MemberRequest, @Body() input: SavePushDeviceDto) {
+  async save(@Req() request: MemberRequest, @Body() input: SavePushDeviceDto) {
     return {
-      data: await this.devices.save(req.member.id, req.sessionId, input),
+      data: await this.pushDevicesService.save(
+        request.member.id,
+        request.sessionId,
+        input,
+      ),
     };
   }
 
   /** Unsubscribes only the current session/platform. Returns idempotent confirmation. */
   @Delete(':platform')
-  async remove(@Req() req: MemberRequest, @Param() params: PushPlatformDto) {
-    return { data: await this.devices.remove(req.sessionId, params.platform) };
+  async remove(
+    @Req() request: MemberRequest,
+    @Param() params: PushPlatformDto,
+  ) {
+    return {
+      data: await this.pushDevicesService.remove(
+        request.sessionId,
+        params.platform,
+      ),
+    };
   }
 }

@@ -74,10 +74,11 @@ export class AssessmentService {
   /** Lists completed assessments using UTC completion dates and bounded server sorting/filtering. Returns no answer text in list rows. */
   async history(query: AssessmentHistoryDto) {
     const days = (Date.parse(query.to) - Date.parse(query.from)) / 86400000 + 1;
-    if (!Number.isInteger(days) || days < 1 || days > 366)
+    if (!Number.isInteger(days) || days < 1 || days > 366) {
       throw new BadRequestException(
         'Choose an ordered range of at most 366 days.',
       );
+    }
     const until = new Date(Date.parse(query.to) + 86400000);
     const builder = this.historyScope().andWhere(
       'entry.completedAt >= :from AND entry.completedAt < :until',
@@ -86,10 +87,11 @@ export class AssessmentService {
         until,
       },
     );
-    if (query.name)
+    if (query.name) {
       builder.andWhere('LOCATE(:name, LOWER(member.name)) > 0', {
         name: query.name.toLowerCase(),
       });
+    }
     const total = await builder.getCount();
     const sort = {
       memberName: 'member.name',
@@ -129,7 +131,9 @@ export class AssessmentService {
       .addSelect('member.name', 'memberName')
       .getRawAndEntities<{ memberName: string | null }>();
     const entry = record.entities[0];
-    if (!entry) throw new NotFoundException('Assessment submission not found.');
+    if (!entry) {
+      throw new NotFoundException('Assessment submission not found.');
+    }
     const version = await this.findVersion(this.db.manager, entry.versionId);
     return {
       id: String(entry.memberId),
@@ -226,8 +230,9 @@ export class AssessmentService {
 
   /** Publishes an explicitly approved draft atomically. Returns an immutable active version. */
   async publish(id: number, input: PublishAssessmentDto, adminId: number) {
-    if (input.scoringApproved !== true)
+    if (input.scoringApproved !== true) {
       throw new BadRequestException('Scoring approval is required.');
+    }
     return this.db.transaction(async (manager) => {
       await manager
         .createQueryBuilder()
@@ -246,8 +251,9 @@ export class AssessmentService {
         version.publishedAt &&
         settings.activeVersionId === id &&
         version.revision === input.revision + 1
-      )
+      ) {
         return this.versionView(version);
+      }
       this.requireDraft(version, input.revision);
       validateDefinition(version.definition);
       version.publishedAt = new Date();
@@ -267,17 +273,19 @@ export class AssessmentService {
       where: { id },
       ...(lock ? { lock: { mode: 'pessimistic_write' as const } } : {}),
     });
-    if (!version)
+    if (!version) {
       throw new NotFoundException('Questionnaire version not found.');
+    }
     return version;
   }
 
   /** Enforces immutable publications and optimistic edits. Returns nothing or a conflict. */
   private requireDraft(version: AssessmentVersion, revision: number): void {
-    if (version.publishedAt || version.revision !== revision)
+    if (version.publishedAt || version.revision !== revision) {
       throw new ConflictException(
         'Version is published or has changed. Reload and create a new draft if needed.',
       );
+    }
   }
 
   /** Locks a member against concurrent baseline writes/account suspension. Returns nothing or unauthorized. */
@@ -294,8 +302,9 @@ export class AssessmentService {
       !member.memberAuthEnabled ||
       !member.verifiedAt ||
       member.is_suspended
-    )
+    ) {
       throw new UnauthorizedException('Sesi tidak valid.');
+    }
   }
 
   /** Maps the immutable instrument for mobile display. Returns no CMS-only notes or scoring controls. */
@@ -352,9 +361,10 @@ export class AssessmentService {
     return this.db.transaction(async (manager) => {
       await this.lockMember(manager, memberId);
       let entry = await manager.findOneBy(MemberAssessment, { memberId });
-      if (entry?.completedAt)
+      if (entry?.completedAt) {
         throw new ConflictException('Initial assessment is already complete.');
-      if (!entry)
+      }
+      if (!entry) {
         entry = manager.create(MemberAssessment, {
           memberId,
           versionId: null,
@@ -362,6 +372,7 @@ export class AssessmentService {
           result: null,
           completedAt: null,
         });
+      }
       if (entry.initialMoodScore !== input.score) {
         entry.initialMoodScore = input.score;
         entry.moodSubmittedAt = new Date();
@@ -380,16 +391,18 @@ export class AssessmentService {
     return this.db.transaction(async (manager) => {
       await this.lockMember(manager, memberId);
       const entry = await manager.findOneBy(MemberAssessment, { memberId });
-      if (!entry)
+      if (!entry) {
         throw new BadRequestException('Complete the initial mood step first.');
+      }
       if (entry.completedAt) {
         if (
           entry.versionId !== input.versionId ||
           !sameAnswers(entry.answers, input.answers)
-        )
+        ) {
           throw new ConflictException(
             'Initial assessment is already complete.',
           );
+        }
         return {
           versionId: entry.versionId,
           result: entry.result,
@@ -401,14 +414,16 @@ export class AssessmentService {
         where: { id: 1 },
         lock: { mode: 'pessimistic_read' },
       });
-      if (!settings?.activeVersionId)
+      if (!settings?.activeVersionId) {
         throw new ServiceUnavailableException(
           'Assessment is not configured yet.',
         );
-      if (settings.activeVersionId !== input.versionId)
+      }
+      if (settings.activeVersionId !== input.versionId) {
         throw new ConflictException(
           'Questionnaire changed. Reload the current version before submitting.',
         );
+      }
       const version = await this.findVersion(manager, input.versionId);
       entry.result = scoreAssessment(version.definition, input.answers);
       entry.answers = version.definition.questions.map((q) =>

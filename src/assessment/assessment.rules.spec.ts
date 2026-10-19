@@ -80,8 +80,9 @@ describe('assessment scoring boundaries', () => {
       [...answers.slice(0, 5), answers[0]],
       answers.map((a, i) => (i ? a : { questionId: 'unknown', value: 1 })),
       answers.map((a, i) => (i ? a : { ...a, value: 5 })),
-    ])
+    ]) {
       expect(() => scoreAssessment(instrument, invalid)).toThrow();
+    }
     expect(sameAnswers(answers, [...answers].reverse())).toBe(true);
     expect(
       sameAnswers(
