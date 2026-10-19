@@ -144,6 +144,7 @@ async function bootstrap() {
 
   const adminDoc = SwaggerModule.createDocument(app, adminConfig, {
     include: [
+      PushDevicesModule,
       AssessmentModule,
       CmsMoodParticipationModule,
       AdminDashboardModule, 
