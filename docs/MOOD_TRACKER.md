@@ -113,3 +113,8 @@ Existing deployment: if member_mood_attachments contains previous uploads, copy
 those metadata rows into backup_assets before resuming mood reads. Keep UUIDs,
 member ownership, stored bucket/key and original files unchanged. See the
 non-destructive SQL in SERVER_INFRA.md. The retired table is not dropped.
+
+Android M4A compatibility (19 October 2026): shared UploadService accepts
+audio/mp4, audio/x-m4a, audio/m4a and audio/mp4a-latm for MP4-signature audio,
+normalizing to audio/mp4 with .m4a/.mp4 names. This does not accept raw AAC or
+arbitrary bytes merely because their MIME is an alias. Size/auth checks remain.

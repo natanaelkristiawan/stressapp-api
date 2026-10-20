@@ -103,8 +103,14 @@ export class UploadService {
     if (isAudio) {
       const buffer = file.buffer;
       const mime = file.mimetype.split(';')[0].trim();
+      const mp4MimeTypes = [
+        'audio/mp4',
+        'audio/x-m4a',
+        'audio/m4a',
+        'audio/mp4a-latm',
+      ];
       const valid =
-        (['audio/mp4', 'audio/x-m4a', 'audio/m4a'].includes(mime) &&
+        (mp4MimeTypes.includes(mime) &&
           buffer.length >= 12 &&
           buffer.toString('ascii', 4, 8) === 'ftyp') ||
         (mime === 'audio/webm' &&
@@ -121,14 +127,13 @@ export class UploadService {
               buffer[0] === 0xff &&
               (buffer[1] & 0xe0) === 0xe0)));
       if (!valid) throw new BadRequestException('Format audio tidak didukung.');
-      file = {
-        ...file,
-        mimetype: ['audio/x-m4a', 'audio/m4a'].includes(mime)
-          ? 'audio/mp4'
-          : mime === 'audio/x-wav'
-          ? 'audio/wav'
-          : mime,
-      };
+      let normalizedMime = mime;
+      if (mp4MimeTypes.includes(mime)) {
+        normalizedMime = 'audio/mp4';
+      } else if (mime === 'audio/x-wav') {
+        normalizedMime = 'audio/wav';
+      }
+      file = { ...file, mimetype: normalizedMime };
     }
     const extensions: Record<string, string[]> = {
       'image/jpeg': ['.jpg', '.jpeg'],
