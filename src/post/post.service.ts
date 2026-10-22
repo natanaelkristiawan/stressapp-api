@@ -147,8 +147,8 @@ export class PostService {
         if (countingTotalPost) {
             totalData = await this.postRepository.count(
                 skipHiddenFilter
-                    ? {}
-                    : { where: { isHidden: false } },
+                    ? { where: { isPsychoeducation: false } }
+                    : { where: { isHidden: false, isPsychoeducation: false } },
             )
         }
 
@@ -181,6 +181,7 @@ export class PostService {
 
         if (mode == 'member') {
             let whereCond: any = {
+                isPsychoeducation: false,
                 member: {
                     id: IDvalue
                 },
@@ -195,6 +196,7 @@ export class PostService {
 
         else if (mode == 'space') {
             let whereCond: any = {
+                isPsychoeducation: false,
                 space: {
                     id: IDvalue
                 },
@@ -223,6 +225,7 @@ export class PostService {
 
         else if (mode == 'highlight') {
             let whereCond: any = {
+                isPsychoeducation: false,
                 is_highlight: true,
             };
             if (!skipHiddenFilter) {
@@ -248,6 +251,7 @@ export class PostService {
 
             // get total data with following
             let whereCond: any = {
+                isPsychoeducation: false,
                 member: {
                     id: In(following.map(item => item.followingId))
                 },
@@ -261,7 +265,7 @@ export class PostService {
             // get post following
             config = { where: whereCond, ...config }
         } else {
-            let whereCond: any = {};
+            let whereCond: any = { isPsychoeducation: false };
             if (!skipHiddenFilter) {
                 whereCond.isHidden = false
             }
@@ -480,12 +484,13 @@ export class PostService {
 
     async detailPost(id: number, userId: number): Promise<Post> {
         // update views count
-        await this.postRepository.update({ id: id }, { viewsCount: () => 'viewsCount + 1' })
+        await this.postRepository.update({ id: id, isPsychoeducation: false }, { viewsCount: () => 'viewsCount + 1' })
 
         const query = await this.postRepository.find(
             {
                 where: {
                     id: id,
+                    isPsychoeducation: false,
                     deleted_at: IsNull()
                 },
                 take: 1,
@@ -813,7 +818,7 @@ export class PostService {
     // wrap as function 
     async updateTotalPost(memberId: number, spaceId: number) {
         // calculating total_post in member, first get post who user upload, count and updte in table member
-        let postMember = await this.postRepository.find({ where: { member: { id: memberId } } })
+        let postMember = await this.postRepository.find({ where: { member: { id: memberId }, isPsychoeducation: false } })
         let totalPost = postMember.length
         await this.userMimateRepository.update({ id: memberId }, { total_posts: totalPost })
 
@@ -827,7 +832,7 @@ export class PostService {
     async updatePost(postId: number, params: CreatePostDto, memberId: number, userId: number): Promise<Post> {
 
         const existingPost = await this.postRepository.findOne({
-            where: { id: postId },
+            where: { id: postId, isPsychoeducation: false },
             relations: ['member', 'space']
         });
 
@@ -960,7 +965,7 @@ export class PostService {
     async deletePost(postId: number, memberId: number): Promise<Boolean> {
 
         const existingPost = await this.postRepository.findOne({
-            where: { id: postId },
+            where: { id: postId, isPsychoeducation: false },
             relations: ['member', 'space']
         });
 
@@ -1111,7 +1116,7 @@ export class PostService {
     // clean all post, comment, and reaction
     async cleanAllPost(): Promise<boolean> {
 
-        let posts = await this.postRepository.find({ where: { postId: IsNull() } })
+        let posts = await this.postRepository.find({ where: { postId: IsNull(), isPsychoeducation: false } })
 
         // loop each member
         for (let index = 0; index < posts.length; index++) {

@@ -16,3 +16,7 @@ Run setup and test commands from the project root unless stated otherwise.
 - [Member push registrations](PUSH_DEVICES.md)
 - [Existing server services and PM2 API](SERVER_INFRA.md)
 - [API deployment](SETUP.md)
+
+- [Post/comment/reaction column audit](POST_ENTITY_AUDIT.md)
+
+- [CMS psychoeducation API](PSYCHOEDUCATION.md)

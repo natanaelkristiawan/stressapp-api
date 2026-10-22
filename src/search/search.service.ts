@@ -78,6 +78,7 @@ export class SearchService {
                 createdAt: 'ASC'
             },
             where: {
+                isPsychoeducation: false,
                 title: Raw((alias) => `LOWER(${alias}) LIKE LOWER(:title)`, { title: `%${keyword}%` })
             },
             relations: ['member', 'space']
@@ -289,7 +290,8 @@ export class SearchService {
             where: {
                 tag: {
                     id: tagId
-                }
+                },
+                post: { isPsychoeducation: false }
             },
             relations: ['post', 'post.space', 'post.member']
         }

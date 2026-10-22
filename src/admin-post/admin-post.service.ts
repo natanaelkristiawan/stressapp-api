@@ -64,7 +64,7 @@ export class AdminPostService {
         }, 'post_view_count');
     
       // WHERE builder
-      const whereParts: string[] = [];
+      const whereParts: string[] = ['post.isPsychoeducation = false'];
       const params: Record<string, any> = {};
     
       if (spaceId) {
@@ -250,7 +250,7 @@ export class AdminPostService {
             .where('al.postId = post.id')
             .andWhere("al.action = 'view'");
         }, 'post_view_count')
-        .where('post.id IN (:...ids)', { ids });
+        .where('post.id IN (:...ids)', { ids }).andWhere('post.isPsychoeducation = false');
 
       const { entities: posts, raw } = await qb.getRawAndEntities();
       const items: DataPost[] = posts.map((post, idx) => {
@@ -302,9 +302,12 @@ export class AdminPostService {
     async detail(id: number): Promise<DataPost>{
         const post = await this.postRepository
             .findOne({ 
-                where: { id },
+                where: { id, isPsychoeducation: false },
                 relations : ['space','member']
             });
+        if (!post) {
+            throw new NotFoundException('Post not found');
+        }
         return {
             id: post.id,
             backup_member_id: post.backup_member_id,
@@ -359,7 +362,7 @@ export class AdminPostService {
             .where('al.postId = post.id')
             .andWhere("al.action = 'view'");
         }, 'post_view_count')
-        .where('1=1');
+        .where('post.isPsychoeducation = false');
     
       // Space filter
       if (spaceId) {
@@ -527,7 +530,7 @@ export class AdminPostService {
     // create post highlight
     async createPostHighlight(dto: CreatePostHighlightDto): Promise<PostEntity> {
         const { post_id, is_highlight } = dto;
-        const post = await this.postRepository.findOne({ where: { id: post_id },relations: ['member'] });
+        const post = await this.postRepository.findOne({ where: { id: post_id, isPsychoeducation: false },relations: ['member'] });
         if (!post) {
             throw new NotFoundException('Post not found');
         }   
@@ -539,7 +542,7 @@ export class AdminPostService {
 
     // hide post
     async hideShowPost(post_id: number, hide: boolean): Promise<boolean> {
-        const post = await this.postRepository.findOne({ where: { id: post_id } });
+        const post = await this.postRepository.findOne({ where: { id: post_id, isPsychoeducation: false } });
         if (!post) {
             throw new NotFoundException('Post not found');
         }
@@ -552,7 +555,7 @@ export class AdminPostService {
 
     // move post to space
     async movePostToSpace(post_id: number, space_id: number, userId: number): Promise<boolean> {
-        const post = await this.postRepository.findOne({ where: { id: post_id } });
+        const post = await this.postRepository.findOne({ where: { id: post_id, isPsychoeducation: false } });
         const space = await this.spaceRepository.findOne({ where: { id: space_id } });
 
         const user = await this.userRepository.findOne({ where: { id: userId } });

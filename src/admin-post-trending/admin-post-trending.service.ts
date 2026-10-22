@@ -20,7 +20,7 @@ export class AdminPostTrendingService {
 
     // list trending post
     async listTrendingPost():Promise<AdminPostTrendingInterface[]> {
-        const posts = await this.postRepository.find({ where: { is_highlight: true }, order: { order: 'ASC' } });
+        const posts = await this.postRepository.find({ where: { is_highlight: true, isPsychoeducation: false }, order: { order: 'ASC' } });
         return posts.map(post => ({
             id: post.id,
             title: post.title,
@@ -32,7 +32,7 @@ export class AdminPostTrendingService {
     // update order of trending post
     async updateOrder(updateOrderDto: PostTrendingUpdateOrderDto):Promise<AdminPostTrendingInterface[]> {
         // get post
-        const posts = await this.postRepository.find({ where: { id: In(updateOrderDto.order.map(item => item.id)) } });
+        const posts = await this.postRepository.find({ where: { id: In(updateOrderDto.order.map(item => item.id)), isPsychoeducation: false } });
         // update order
         posts.forEach(post => {
             post.order = updateOrderDto.order.find(item => item.id === post.id)?.order;
@@ -54,7 +54,7 @@ export class AdminPostTrendingService {
         query.orderBy('post.createdAt', 'DESC');
         // select post.id, post.title, post.createdAt
         query.select(['post.id', 'post.title', 'post.createdAt']);
-        const posts = await query.getMany();
+        const posts = await query.andWhere('post.isPsychoeducation = false').getMany();
 
         return posts.map(post => ({
             id: post.id,
@@ -98,7 +98,7 @@ export class AdminPostTrendingService {
     // set trending post
     async setTrendingPost(postId: number, order: number):Promise<AdminPostTrendingInterface> {
         // get post
-        const post = await this.postRepository.findOne({ where: { id: postId }, relations: ['member'] });
+        const post = await this.postRepository.findOne({ where: { id: postId, isPsychoeducation: false }, relations: ['member'] });
         if (!post) {
             throw new NotFoundException('Post not found');
         }

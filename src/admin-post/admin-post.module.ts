@@ -1,3 +1,7 @@
+import { PsychoeducationController } from './psychoeducation.controller';
+import { AdminPostContentService } from './admin-post-content.service';
+import { AdminAuthModule } from '../admin-auth/admin-auth.module';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { Module } from '@nestjs/common';
 import { AdminPostController } from './admin-post.controller';
 import { AdminPostService } from './admin-post.service';
@@ -14,11 +18,24 @@ import { Activity } from 'src/entity/activity.entity';
 import { AdminPostActivityService } from './admin-post-activity.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([PostEntity, SpaceEntity, UserMimateEntity, TagsEntity, Activity ], 'mimate'), QueueModule, PostModule, ActivityModule,
-  MemberVoteModule
-],
-  controllers: [AdminPostController],
-  providers: [AdminPostService, AdminPostActivityService],
-  exports: [AdminPostService]
+  imports: [
+    AdminAuthModule,
+    TypeOrmModule.forFeature(
+      [PostEntity, SpaceEntity, UserMimateEntity, TagsEntity, Activity],
+      'mimate',
+    ),
+    QueueModule,
+    PostModule,
+    ActivityModule,
+    MemberVoteModule,
+  ],
+  controllers: [AdminPostController, PsychoeducationController],
+  providers: [
+    AdminPostService,
+    AdminPostActivityService,
+    AdminPostContentService,
+    CmsMembersGuard,
+  ],
+  exports: [AdminPostService],
 })
 export class AdminPostModule {}

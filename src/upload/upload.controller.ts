@@ -1,7 +1,9 @@
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import {
   BadRequestException,
   Controller,
   Get,
+  Header,
   Param,
   Post,
   Req,
@@ -9,6 +11,7 @@ import {
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
+  UseGuards,
 } from '@nestjs/common';
 import { UploadService } from './upload.service';
 import {
@@ -37,6 +40,60 @@ export class UploadController {
     private uploadService: UploadService,
     private readonly memberAuth: MemberAuthService,
   ) {}
+
+  /** Uploads CMS article images/video files through the existing shared storage service. */
+  @Post('cms')
+  @Header('Cache-Control', 'private, no-store')
+  @UseGuards(CmsMembersGuard)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: multer.memoryStorage(),
+      limits: { files: 1, fileSize: 100 * 1024 * 1024 },
+      fileFilter: (_request, file, callback) => {
+        if (
+          ![
+            'image/jpeg',
+            'image/png',
+            'image/webp',
+            'video/mp4',
+            'video/webm',
+          ].includes(file.mimetype)
+        ) {
+          callback(
+            new BadRequestException(
+              'Upload a JPEG, PNG, WebP, MP4 or WebM file.',
+            ),
+            false,
+          );
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async uploadCms(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() request: Request,
+  ) {
+    const memberId = request['userData'].id;
+    await this.memberAuth.limit('cms-upload', String(memberId), 30, 3600);
+    return {
+      data: await this.uploadService.upload(
+        file,
+        undefined,
+        memberId,
+        'cms-content',
+      ),
+    };
+  }
 
   // upload video
   @Post('image')

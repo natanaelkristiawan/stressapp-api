@@ -1,3 +1,5 @@
+import { AdminAuthModule } from '../admin-auth/admin-auth.module';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { MemberAuthModule } from '../member-auth/member-auth.module';
 import { Module } from '@nestjs/common';
 import { UploadService } from './upload.service';
@@ -9,9 +11,10 @@ import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 @Module({
   imports: [
     MemberAuthModule,
+    AdminAuthModule,
     TypeOrmModule.forFeature([AssetsEntity, UserMimateEntity], 'mimate'),
   ],
-  providers: [UploadService],
+  providers: [UploadService, CmsMembersGuard],
   controllers: [UploadController],
 })
 export class UploadModule {}

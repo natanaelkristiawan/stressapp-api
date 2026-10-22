@@ -40,7 +40,6 @@ import { MemberVoteModule } from './member-vote/member-vote.module';
 import { AdminHighlightModule } from './admin-highlight/admin-highlight.module';
 import { AdminPostTrendingModule } from './admin-post-trending/admin-post-trending.module';
 import { AdminPostReportModule } from './admin-post-report/admin-post-report.module';
-import { CaptureBsiModule } from './capture-bsi/capture-bsi.module';
 import { WinnerModule } from './winner/winner.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -69,17 +68,6 @@ async function bootstrap() {
       challenge: true,
       users: {
         'ktb': 'ktb2025!', // Change credentials here
-      },
-    }),
-  );
-
-
-  app.use(
-    ['/bsi-documentation'], // Adjust the paths if needed
-    basicAuth({
-      challenge: true,
-      users: {
-        'bsi': 'bsi2025', // Change credentials here
       },
     }),
   );
@@ -153,6 +141,7 @@ async function bootstrap() {
       AdminStaffModule, 
       AdminAuthModule,
       AdminPostModule,
+      UploadModule,
       AdminTagModule,
       AdminSpaceModule,
       AdminHighlightModule,
@@ -165,37 +154,6 @@ async function bootstrap() {
 
 
 
-  const bsiConfig = new DocumentBuilder()
-    .setTitle('Mimate BSI API')
-    .setDescription(
-      'Admin endpoints for Mimate.<br/><strong>All endpoints require Basic Auth.</strong><br/>Click "Authorize" and enter your username and password.',
-    )
-    .setVersion('1.0')
-    .addBasicAuth(
-      {
-        type: 'http',
-        scheme: 'basic',
-        in: 'header',
-        name: 'Authorization',
-        description: 'Use your admin username and password',
-      },
-      'basic-auth',
-    )
-    .build();
-
-  // Generate the Swagger document
-  const bsiDoc = SwaggerModule.createDocument(app, bsiConfig, {
-    include: [CaptureBsiModule],
-  });
-
-  // Serve it at /admin-bsi
-  SwaggerModule.setup('bsi-documentation', app, bsiDoc, {
-    swaggerOptions: { persistAuthorization: true },
-    customSiteTitle: 'Mimate BSI Admin API',
-  });
-
-
-    
   await app.listen(process.env.PORT ?? 3111);
 }
 bootstrap();

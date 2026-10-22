@@ -75,10 +75,20 @@ export class UploadService {
     file: Express.Multer.File,
     assetID?: number,
     memberId?: number,
+    purpose?: 'cms-content',
   ): Promise<any> {
     if (!file?.buffer?.length) throw new BadRequestException('File kosong.');
     const isAudio = file.mimetype.startsWith('audio/');
-    if (file.buffer.length > (isAudio ? 10 : 5) * 1024 * 1024)
+    let maxBytes = 5 * 1024 * 1024;
+    if (isAudio) {
+      maxBytes = 10 * 1024 * 1024;
+    } else if (
+      purpose === 'cms-content' &&
+      file.mimetype.startsWith('video/')
+    ) {
+      maxBytes = 100 * 1024 * 1024;
+    }
+    if (file.buffer.length > maxBytes)
       throw new BadRequestException('File terlalu besar.');
     let width: number | null = null;
     let height: number | null = null;
@@ -135,7 +145,23 @@ export class UploadService {
       }
       file = { ...file, mimetype: normalizedMime };
     }
+    if (file.mimetype.startsWith('video/')) {
+      const buffer = file.buffer;
+      const validMp4 =
+        file.mimetype === 'video/mp4' &&
+        buffer.length >= 12 &&
+        buffer.toString('ascii', 4, 8) === 'ftyp';
+      const validWebm =
+        file.mimetype === 'video/webm' &&
+        buffer.length >= 4 &&
+        buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+      if (!validMp4 && !validWebm) {
+        throw new BadRequestException('Upload a valid MP4 or WebM video.');
+      }
+    }
     const extensions: Record<string, string[]> = {
+      'video/mp4': ['.mp4'],
+      'video/webm': ['.webm'],
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],
       'image/webp': ['.webp'],
@@ -154,7 +180,7 @@ export class UploadService {
       : originalExtension;
     if (!/^\.[a-z0-9]{1,10}$/.test(extension))
       throw new BadRequestException('Ekstensi file tidak valid.');
-    if (file.buffer.length > (isAudio ? 10 : 5) * 1024 * 1024)
+    if (file.buffer.length > maxBytes)
       throw new BadRequestException('File terlalu besar.');
     const isImage = file.mimetype.startsWith('image/');
     const isVideo = file.mimetype.startsWith('video/');

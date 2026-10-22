@@ -26,7 +26,7 @@ export class PostReportService {
         const {postId, reason, description} = createPostReportDto
 
         // check if post exist
-        const post = await this.postRepository.findOne({where: {id: postId}})
+        const post = await this.postRepository.findOne({where: {id: postId, isPsychoeducation: false}})
         if (!post) {
             throw new NotFoundException('Post not found')
         }

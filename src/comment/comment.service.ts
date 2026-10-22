@@ -1,3 +1,4 @@
+import { assertPostInteractionsVisible } from '../post/post-visibility';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm'; 
 import { IsNull, Not, Repository } from 'typeorm';
@@ -45,7 +46,7 @@ export class CommentService {
      async cleanAllComment():Promise<boolean> {
 
         // grab member with condition
-        let comments = await this.commentRepository.find({where: {commentId:IsNull()}})    
+        let comments = await this.commentRepository.find({where: {commentId:IsNull(), post: { isPsychoeducation: false }}})
 
         // loop each member
         for (let index = 0; index < comments.length; index++) {
@@ -80,6 +81,7 @@ export class CommentService {
     }   
 
     async getComments(post_id: number, limit: number, after: string, userId: number): Promise<CommentCollectionResponse> {
+        assertPostInteractionsVisible(await this.postRepository.findOneBy({ id: post_id }));
         let totalData = 0;
         let page = 1;
         let offset = 0;
@@ -298,6 +300,7 @@ export class CommentService {
             relations: ['member']
         })
 
+        assertPostInteractionsVisible(post);
         let parent:CommentEntity|null = null
 
 
@@ -306,12 +309,16 @@ export class CommentService {
             
             parent = await this.commentRepository.findOne({
                 where: {
-                    id: comment_id
+                    id: comment_id,
+                    post: { id: post_id }
                 }
             })
 
 
             
+            if (!parent) {
+                throw new HttpException('Parent comment not found', HttpStatus.NOT_FOUND);
+            }
             // append repliesCount
             parent.repliesCount = parent.repliesCount + 1
             await this.commentRepository.save(parent)
@@ -437,6 +444,7 @@ export class CommentService {
             relations: ['member', 'post']   
         })
 
+        assertPostInteractionsVisible(comment?.post);
         let name = this.getMemberName(comment.member.name, comment.member.mmid_fullname, comment.member.id) 
 
         if(comment.member.id != memberId) {
@@ -496,6 +504,7 @@ export class CommentService {
             throw new HttpException('Comment not found', HttpStatus.NOT_FOUND)
         }
 
+        assertPostInteractionsVisible(comment.post);
         return comment
     }
 

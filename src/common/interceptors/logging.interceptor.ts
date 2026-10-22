@@ -23,6 +23,7 @@ export class LoggingInterceptor implements NestInterceptor {
         'CmsPushSettingsController',
         'AdminAuthController',
         'CmsMembersController',
+        'PsychoeducationController',
         'CmsMoodParticipationController',
         'MoodTrackerController',
         'AssessmentController',

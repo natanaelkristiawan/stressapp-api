@@ -1,0 +1,247 @@
+// Uses a new schema on an explicitly supplied disposable local MySQL server; storage is mocked.
+require('ts-node/register');
+require('tsconfig-paths/register');
+const assert = require('node:assert/strict');
+const { readdirSync } = require('node:fs');
+const { resolve } = require('node:path');
+const { createConnection } = require('mysql2/promise');
+const { Test } = require('@nestjs/testing');
+const { TypeOrmModule, getDataSourceToken } = require('@nestjs/typeorm');
+const { ConfigModule } = require('@nestjs/config');
+const { JwtService } = require('@nestjs/jwt');
+const { ValidationPipe } = require('@nestjs/common');
+const { PsychoeducationController } = require('../src/admin-post/psychoeducation.controller');
+const { AdminPostContentService } = require('../src/admin-post/admin-post-content.service');
+const { CmsMembersGuard } = require('../src/cms-members/cms-members.guard');
+const { AdminAuthModule } = require('../src/admin-auth/admin-auth.module');
+const { AdminAuthService } = require('../src/admin-auth/admin-auth.service');
+const { AuthService } = require('../src/auth/auth.service');
+const { RedisTokenMiddleware } = require('../src/middleware/redis-token.middleware');
+const { MemberAuthService } = require('../src/member-auth/member-auth.service');
+const { UploadController } = require('../src/upload/upload.controller');
+const { UploadService } = require('../src/upload/upload.service');
+const { SuccessInterceptor } = require('../src/common/interceptors/success.interceptor');
+const { NullToEmptyInterceptor } = require('../src/common/interceptors/null-to-empty.interceptor');
+const { AllExceptionsFilter } = require('../src/common/filters/http-exception.filter');
+const { Member } = require('../src/entity/user-mimate.entity');
+const { UserAdmin } = require('../src/entity/user-admin.entity');
+const { SpaceEntity } = require('../src/entity/space.entity');
+const { SearchService } = require('../src/search/search.service');
+const { PostEntity } = require('../src/entity/post.entity');
+const { AssetsEntity } = require('../src/entity/asset.entity');
+const { CommentEntity } = require('../src/entity/comment.entity');
+const { Activity } = require('../src/entity/activity.entity');
+const { ReactionEntity } = require('../src/entity/reaction.entity');
+const { PostService } = require('../src/post/post.service');
+const { AdminPostService } = require('../src/admin-post/admin-post.service');
+const { CommentService } = require('../src/comment/comment.service');
+const { ReactionService } = require('../src/reaction/reaction.service');
+const { assertPostInteractionsVisible } = require('../src/post/post-visibility');
+const { seedAdmin } = require('../src/database/seeds/admin.seed');
+const secret = 'synthetic-psychoeducation-test-secret';
+const password = 'Synthetic123!';
+
+async function main() {
+  const port = Number(process.env.PSYCHOEDUCATION_TEST_PORT);
+  assert(Number.isInteger(port) && port > 0 && port <= 65535, 'Supply PSYCHOEDUCATION_TEST_PORT for disposable MySQL');
+  const schema = `psychoeducation_test_${process.pid}_${Date.now()}`;
+  const connection = await createConnection({ host: '127.0.0.1', port, user: 'root', password: '' });
+  let app;
+  try {
+    await connection.query(`CREATE DATABASE \`${schema}\``);
+    const folder = resolve(__dirname, '../src/entity');
+    const module = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, load: [() => ({ JWT_SECRET: secret })] }),
+        TypeOrmModule.forRoot({ name: 'mimate', type: 'mysql', host: '127.0.0.1', port, username: 'root', password: '', database: schema, timezone: 'Z', synchronize: true,
+          entities: readdirSync(folder).filter(file => /\.entity\.ts$/.test(file) && !/^(user|car|vehicle)\.entity\./.test(file)).map(file => resolve(folder, file)),
+        }),
+        TypeOrmModule.forFeature([PostEntity, AssetsEntity, Member], 'mimate'), AdminAuthModule,
+      ],
+      controllers: [PsychoeducationController, UploadController],
+      providers: [AdminPostContentService, CmsMembersGuard, UploadService, { provide: MemberAuthService, useValue: { limit: async () => undefined } }],
+    }).compile();
+    app = module.createNestApplication();
+    const db = module.get(getDataSourceToken('mimate'));
+    await db.synchronize();
+    const jwt = new JwtService({ secret });
+    const middleware = new RedisTokenMiddleware(jwt, new AuthService(db.getRepository(Member)), { getOrNil: () => ({ set: async () => undefined }) });
+    app.use((req, res, next) => middleware.use(req, res, next).catch(error => res.status(error.getStatus?.() || 500).json({ message: error.message })));
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
+    app.useGlobalInterceptors(new SuccessInterceptor(), new NullToEmptyInterceptor());
+    app.useGlobalFilters(new AllExceptionsFilter());
+    await app.listen(0, '127.0.0.1');
+    const base = await app.getUrl();
+    await seedAdmin(db, { email: 'content-admin@example.test', name: 'Content Admin', password });
+    await seedAdmin(db, { email: 'second-admin@example.test', name: 'Second Admin', password });
+    const admins = await db.getRepository(UserAdmin).find({ relations: ['userMimate'], order: { id: 'ASC' } });
+    const cmsAuth = module.get(AdminAuthService);
+    const token = await cmsAuth.login(admins[0]);
+    const otherToken = await cmsAuth.login(admins[1]);
+    const ordinary = await db.getRepository(Member).save({ name: 'Member', email: 'member@example.test', memberAuthEnabled: true });
+    const forgedRoleToken = jwt.sign({ iss: 'https://mimate.otesuto.com/admin-auth/login', aud: 'cms', kind: 'admin-access', id: ordinary.id });
+    const service = module.get(AdminPostContentService);
+    const upload = module.get(UploadService);
+    upload.storageSettings = { bucket: 'synthetic-content', endpointUrl: 'https://storage.example.test', baseUrl: 'https://api.example.test', client: {} };
+    let storageCalls = 0;
+    upload.storageClient = { send: async () => { storageCalls += 1; return {}; } };
+    async function call(method, path, body, credential = token) {
+      const response = await fetch(`${base}/admin-post/psychoeducation${path}`, { method, headers: { ...(credential ? { Authorization: `Bearer ${credential}` } : {}), 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: response.status, body: await response.json() };
+    }
+    async function uploadFile(buffer, mime, name, credential = token) {
+      const form = new FormData();
+      if (buffer) form.append('file', new Blob([buffer], { type: mime }), name);
+      const response = await fetch(`${base}/upload/cms`, { method: 'POST', headers: { Authorization: `Bearer ${credential}` }, body: form });
+      return { status: response.status, body: await response.json() };
+    }
+    assert.equal((await call('GET', '', undefined, '')).status, 401);
+    assert.equal((await call('GET', '', undefined, forgedRoleToken)).status, 401);
+    const expired = jwt.sign({ iss: 'https://mimate.otesuto.com/admin-auth/login', aud: 'cms', kind: 'admin-access', id: admins[0].backup_member_id, exp: 1 });
+    assert.equal((await call('GET', '', undefined, expired)).status, 401);
+    await db.getRepository(Member).update(admins[1].backup_member_id, { is_suspended: true });
+    assert.equal((await call('GET', '', undefined, otherToken)).status, 401);
+    await db.getRepository(Member).update(admins[1].backup_member_id, { is_suspended: false });
+    const article = { contentType: 'article', title: 'Understanding loneliness', body: '<h2>Hello</h2><p onclick="evil()">Text <strong>safe</strong><script>alert(1)</script><a href="javascript:alert(1)">link</a></p>', status: 'draft' };
+    assert.equal((await call('POST', '', { ...article, isPsychoeducation: false })).status, 400);
+    assert.equal((await call('POST', '', { ...article, contentType: 'infographic' })).status, 400);
+    assert.equal((await call('POST', '', { ...article, title: ' ' })).status, 400);
+    assert.equal((await call('POST', '', { ...article, body: '<script>alert(1)</script>' })).status, 400);
+    assert.equal((await call('POST', '', { ...article, body: '<p>Text<img src="https://foreign.example/x.jpg"></p>' })).status, 400);
+    assert.equal((await call('POST', '', { ...article, videoUrl: 'https://foreign.example/x.mp4' })).status, 400);
+    assert.equal((await call('GET', '?pageSize=101')).status, 400);
+    assert.equal((await call('GET', '?sort=title;DROP')).status, 400);
+    assert.equal((await call('GET', '/invalid')).status, 400);
+    assert.equal((await uploadFile(null)).status, 400);
+    assert.equal((await uploadFile(Buffer.from('bad'), 'video/mp4', 'bad.mp4')).status, 400);
+    assert.equal((await uploadFile(Buffer.from('bad'), 'image/jpeg', 'bad.jpg')).status, 400);
+    assert.equal((await uploadFile(Buffer.from('bad'), 'application/json', 'bad.json')).status, 400);
+    assert.equal((await uploadFile(Buffer.from('bad'), 'video/mp4', 'bad.mp4', forgedRoleToken)).status, 401);
+    assert.equal(storageCalls, 0);
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(20)]);
+    const videoUpload = await uploadFile(mp4, 'video/mp4', 'synthetic.mp4');
+    assert.equal(videoUpload.status, 201, JSON.stringify(videoUpload));
+    const videoUrl = videoUpload.body.data.url;
+    const png = await require('sharp')({ create: { width: 2, height: 2, channels: 3, background: '#ffffff' } }).png().toBuffer();
+    const imageUpload = await uploadFile(png, 'image/png', 'synthetic.png');
+    assert.equal(imageUpload.status, 201);
+    const imageUrl = imageUpload.body.data.url;
+    const ordinaryAsset = await db.getRepository(AssetsEntity).save({ memberId: ordinary.id, type: 'Video', contentType: 'video/mp4', path: 'private.mp4', url_open: 'https://storage.example.test/private.mp4', url: 'https://api.example.test/private' });
+    assert.equal((await call('POST', '', { contentType: 'video', title: 'Video', status: 'draft' })).status, 400);
+    assert.equal((await call('POST', '', { contentType: 'video', title: 'Video', status: 'draft', videoUrl: ordinaryAsset.url_open })).status, 400);
+    assert.equal((await call('POST', '', { contentType: 'video', title: 'Video', status: 'draft', videoUrl: imageUrl })).status, 400);
+    assert.equal((await call('POST', '', { contentType: 'video', title: 'Video', status: 'draft', videoUrl, body: 'wrong' })).status, 400);
+    const created = await call('POST', '', { ...article, thumbnailUrl: imageUrl });
+    assert.equal(created.status, 201, JSON.stringify(created));
+    const content = created.body.data;
+    assert.equal(content.isPsychoeducation, true);
+    assert.equal(content.revision, 1);
+    assert.equal(content.publishedAt, null);
+    assert.equal(content.videoUrl, null);
+    assert(content.body.includes('<strong>safe</strong>'));
+    assert(!/onclick|javascript:|script|alert\(/.test(content.body));
+    const video = await call('POST', '', { contentType: 'video', title: 'Breathing video', status: 'published', videoUrl, thumbnailUrl: imageUrl });
+    assert.equal(video.status, 201);
+    assert.equal(video.body.data.body, null);
+    assert.equal(video.body.data.videoUrl, videoUrl);
+    assert(video.body.data.publishedAt);
+    assert.equal((await call('GET', '?contentType=video&status=published&search=breathing')).body.data.total, 1);
+    const forumSpace = await db.getRepository(SpaceEntity).save({ name: 'Forum', description: 'Forum' });
+    const forum = await db.getRepository(PostEntity).save({ title: 'Ordinary forum post', status: 'PUBLISHED', member: { id: ordinary.id }, space: forumSpace, type: 'image', published_at: new Date() });
+    assert.equal(forum.isPsychoeducation, false);
+    assert.equal((await call('GET', `/${forum.id}`)).status, 404);
+    assert.equal((await call('PATCH', `/${forum.id}`, { ...article, revision: 1 })).status, 404);
+    assert.equal((await call('DELETE', `/${forum.id}`, { revision: 1 })).status, 404);
+    assert.equal((await call('GET', '')).body.data.total, 2);
+    assert.equal((await call('PATCH', `/${content.id}`, { ...article, revision: 999 })).status, 409);
+    const edits = await Promise.all([call('PATCH', `/${content.id}`, { ...article, title: 'One', status: 'published', revision: 1 }), call('PATCH', `/${content.id}`, { ...article, title: 'Two', status: 'published', revision: 1 }, otherToken)]);
+    assert.deepEqual(edits.map(value => value.status).sort(), [200, 409]);
+    let current = (await call('GET', `/${content.id}`)).body.data;
+    assert.equal(current.revision, 2);
+    assert(current.publishedAt);
+    await db.getRepository(CommentEntity).save({ title: 'Comment', description: 'Comment text', member: { id: ordinary.id }, post: { id: content.id }, repliesCount: 0 });
+    const deletedComment = await db.getRepository(CommentEntity).save({ title: 'Deleted', description: 'Deleted', member: { id: ordinary.id }, post: { id: content.id }, repliesCount: 0 });
+    await db.getRepository(CommentEntity).softDelete(deletedComment.id);
+    await db.getRepository(ReactionEntity).save({ reaction: '+1', member: { id: ordinary.id }, post: { id: content.id } });
+    current = (await call('GET', `/${content.id}`)).body.data;
+    assert.equal(current.commentCount, 1);
+    assert.equal(current.likeCount, 1);
+    assert.equal(current.viewCount, 0);
+    // Human moderation is scoped to educational content and preserves other replies.
+    const targetComment = await db.getRepository(CommentEntity).save({ title: 'Synthetic', description: 'Synthetic moderation fixture', member: { id: ordinary.id }, post: { id: video.body.data.id }, repliesCount: 1 });
+    const keptReply = await db.getRepository(CommentEntity).save({ title: 'Reply', description: 'Reply retained', member: { id: ordinary.id }, post: { id: video.body.data.id }, parent: targetComment, repliesCount: 0 });
+    await db.getRepository(Member).update(ordinary.id, { total_comments: 2 });
+    const moderationList = await call('GET', `/${video.body.data.id}/comments`);
+    assert.equal(moderationList.status, 200);
+    assert.equal(moderationList.body.data.total, 2);
+    assert(!JSON.stringify(moderationList.body).includes('member@example.test'));
+    const reviewed = moderationList.body.data.items.find(item => item.id === targetComment.id);
+    assert.match(reviewed.version, /^[a-f0-9]{64}$/);
+    assert.equal((await call('GET', `/${forum.id}/comments`)).status, 404);
+    assert.equal((await call('GET', `/${video.body.data.id}/comments?pageSize=101`)).status, 400);
+    assert.equal((await call('DELETE', `/${content.id}/comments/${targetComment.id}`, { reason: 'sara', version: reviewed.version })).status, 404);
+    assert.equal((await call('DELETE', `/${video.body.data.id}/comments/${targetComment.id}`, { reason: 'other', version: reviewed.version })).status, 400);
+    assert.equal((await call('DELETE', `/${video.body.data.id}/comments/${targetComment.id}`, { reason: 'sara', version: reviewed.version }, forgedRoleToken)).status, 401);
+    await db.getRepository(CommentEntity).update(targetComment.id, { description: 'Changed synthetic text' });
+    assert.equal((await call('DELETE', `/${video.body.data.id}/comments/${targetComment.id}`, { reason: 'sara', version: reviewed.version })).status, 409);
+    const freshReview = (await call('GET', `/${video.body.data.id}/comments`)).body.data.items.find(item => item.id === targetComment.id);
+    const removals = await Promise.all([call('DELETE', `/${video.body.data.id}/comments/${targetComment.id}`, { reason: 'sara', version: freshReview.version }), call('DELETE', `/${video.body.data.id}/comments/${targetComment.id}`, { reason: 'sara', version: freshReview.version }, otherToken)]);
+    assert.deepEqual(removals.map(value => value.status).sort(), [200, 404]);
+    assert.equal((await call('GET', `/${video.body.data.id}/comments`)).body.data.total, 1);
+    assert(await db.getRepository(CommentEntity).findOneBy({ id: keptReply.id }));
+    assert((await db.getRepository(CommentEntity).findOne({ where: { id: targetComment.id }, withDeleted: true })).deleted_at);
+    assert.equal((await db.getRepository(Member).findOneBy({ id: ordinary.id })).total_comments, 1);
+    assert.equal((await call('GET', `/${video.body.data.id}`)).body.data.commentCount, 1);
+    const moderationAudit = await db.getRepository(Activity).find({ where: { commentId: targetComment.id, source: 'cms-psychoeducation' } });
+    assert.equal(moderationAudit.length, 1);
+    assert.equal(moderationAudit[0].message, 'SARA policy violation');
+    assert(!JSON.stringify(moderationAudit).includes('Changed synthetic text'));
+    // Existing forum services must not accept educational posts via their CRUD/detail routes.
+    const legacyPosts = Object.create(PostService.prototype);
+    legacyPosts.postRepository = db.getRepository(PostEntity);
+    await assert.rejects(() => legacyPosts.detailPost(content.id, ordinary.id), error => error.getStatus() === 404);
+    await assert.rejects(() => legacyPosts.updatePost(content.id, {}, ordinary.id, ordinary.id), error => error.getStatus() === 404);
+    await assert.rejects(() => legacyPosts.deletePost(content.id, ordinary.id), error => error.getStatus() === 404);
+    const legacyAdmin = new AdminPostService();
+    legacyAdmin.postRepository = db.getRepository(PostEntity);
+    await assert.rejects(() => legacyAdmin.detail(content.id), error => error.getStatus() === 404);
+    legacyPosts.redis = { get: async () => null, set: async () => undefined };
+    legacyPosts.userAdminRepository = db.getRepository(UserAdmin);
+    legacyPosts.dateHelper = { getDateRange: () => 'now' };
+    legacyPosts.activityService = { createActivity: async () => undefined };
+    const forumList = await legacyPosts.collectPosts('latest', 20, '', undefined, undefined, ordinary.id);
+    assert.equal(forumList.data.length, 1);
+    assert.equal(forumList.data[0].id, forum.id);
+    const search = Object.create(SearchService.prototype);
+    search.postRepository = db.getRepository(PostEntity);
+    search.redis = legacyPosts.redis;
+    search.dateHelper = legacyPosts.dateHelper;
+    const searchResult = await search.searchPost('', ordinary.id, 20, '');
+    assert.equal(searchResult.data.length, 1);
+    const switched = await call('PATCH', `/${content.id}`, { contentType: 'video', title: 'Changed type', status: 'draft', videoUrl, revision: current.revision });
+    assert.equal(switched.status, 200);
+    assert.equal(switched.body.data.body, null);
+    const hidden = await db.getRepository(PostEntity).findOneBy({ id: content.id });
+    assert.throws(() => assertPostInteractionsVisible(hidden), error => error.getStatus() === 404);
+    const comments = new CommentService(undefined, undefined, undefined, undefined, undefined, { getOrNil: () => ({}) }, undefined);
+    comments.postRepository = db.getRepository(PostEntity);
+    await assert.rejects(() => comments.getComments(content.id, 20, '', ordinary.id), error => error.getStatus() === 404);
+    const reactions = new ReactionService();
+    reactions.postRepository = db.getRepository(PostEntity);
+    await assert.rejects(() => reactions.createReaction(content.id, '+1', ordinary.id), error => error.getStatus() === 404);
+    await assert.rejects(() => reactions.getReactionByPostId(content.id, 'all', ordinary.id), error => error.getStatus() === 404);
+    assert.equal((await call('DELETE', `/${content.id}`, { revision: 1 })).status, 409);
+    assert.equal((await call('DELETE', `/${content.id}`, { revision: switched.body.data.revision })).status, 200);
+    assert.equal((await call('GET', `/${content.id}`)).status, 404);
+    assert.equal((await call('GET', '')).body.data.total, 1);
+    assert.equal(Number((await db.query('SELECT COUNT(*) AS total FROM backup_comments WHERE backup_post_with_attribute_id = ? AND deleted_at IS NULL', [content.id]))[0].total), 1);
+    assert.equal(await db.getRepository(AssetsEntity).count(), 3);
+    assert((await db.getRepository(PostEntity).findOne({ where: { id: content.id }, withDeleted: true })).deleted_at);
+    console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility and soft deletion.');
+  } finally {
+    if (app) await app.close();
+    await connection.query(`DROP DATABASE IF EXISTS \`${schema}\``);
+    await connection.end();
+  }
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

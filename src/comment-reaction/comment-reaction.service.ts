@@ -1,3 +1,4 @@
+import { assertPostInteractionsVisible } from '../post/post-visibility';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { CommentReactionEntity } from 'src/entity/comment-reaction.entity';
@@ -37,6 +38,7 @@ export class CommentReactionService {
             throw new NotFoundException('Comment not found')
         }
 
+        assertPostInteractionsVisible(comment.post);
         // find member by member_id
         const member = await this.memberRepository.findOne({
             where: {
@@ -115,13 +117,14 @@ export class CommentReactionService {
                 comment: {id: comment_id},
                 member: {id: member_id}
             },
-            relations: ['member', 'comment']
+            relations: ['member', 'comment', 'comment.post']
         })
 
         if(!reaction) {
             throw new NotFoundException('Reaction not found')
         }
 
+        assertPostInteractionsVisible(reaction?.comment?.post);
         // compare member_id with reaction.member.id
         if (reaction.member.id !== member_id) {
             throw new ForbiddenException('You are not allowed to delete this reaction')
@@ -150,6 +153,8 @@ export class CommentReactionService {
    // find reaction by comment_id sort by created_at desc
    async getReactionByCommentId(comment_id: number, type: string): Promise<Reaction[]> {
 
+    const comment = await this.commentRepository.findOne({ where: { id: comment_id }, relations: ['post'] });
+    assertPostInteractionsVisible(comment?.post);
     let params:{
         comment: { id: number },    
         reaction?: string
@@ -163,7 +168,7 @@ export class CommentReactionService {
     // get reaction by comment_id
     let reaction = await this.commentReactionRepository.find({
         where: params,
-        relations: ['member', 'comment']
+        relations: ['member', 'comment', 'comment.post']
     })
 
     return reaction.map(item => ({

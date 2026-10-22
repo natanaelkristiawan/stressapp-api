@@ -83,7 +83,6 @@ import { MoengageModule } from './moengage/moengage.module';
 import { Visitor } from './entity/visitor.entity';
 import { VoteEntity } from './entity/vote.entity';
 import { VoteMemberEntity } from './entity/vote-member.entity';
-import { CaptureBsiModule } from './capture-bsi/capture-bsi.module';
 import { MemberVoteModule } from './member-vote/member-vote.module';
 import { AdminSettingModule } from './admin-setting/admin-setting.module';
 import { SettingEntity } from './entity/setting.entity';
@@ -224,7 +223,6 @@ import { CronModule } from './cron/cron.module';
 
     }),
     MoengageModule,
-    CaptureBsiModule,
     MemberVoteModule,
     AdminSettingModule,
     WinnerModule,
@@ -260,8 +258,6 @@ export class AppModule {
         { path: 'admin-auth/login/(.*)', method: RequestMethod.ALL },
         { path: 'upload/files', method: RequestMethod.ALL },
         { path: 'upload/files/:mediaId', method: RequestMethod.ALL },
-        { path: 'capture-bsi', method: RequestMethod.ALL },
-        { path: 'capture-bsi/(.*)', method: RequestMethod.ALL },
         { path: 'hof/realtime/public', method: RequestMethod.GET },
         { path: 'winner', method: RequestMethod.GET },
         { path: 'winner/list', method: RequestMethod.GET },
@@ -289,6 +285,9 @@ export class AppModule {
       { path: 'me/assessment/(.*)', method: RequestMethod.ALL },
       { path: 'upload/image', method: RequestMethod.POST },
       { path: 'upload/audio', method: RequestMethod.POST },
+      { path: 'upload/cms', method: RequestMethod.POST },
+      { path: 'admin-post/psychoeducation', method: RequestMethod.ALL },
+      { path: 'admin-post/psychoeducation/(.*)', method: RequestMethod.ALL },
     ).forRoutes({ path: '*', method: RequestMethod.ALL });
 
   }

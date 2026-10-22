@@ -16,6 +16,19 @@ export enum PostType {
 
 @Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "backup_post_with_attributes"})
 export class PostEntity {
+    @Index()
+    @Column({ default: false })
+    isPsychoeducation?: boolean;
+
+    @Column({ type: 'enum', enum: ['article', 'video'], nullable: true })
+    contentType?: 'article' | 'video' | null;
+
+    @Column({ type: 'varchar', length: 2048, nullable: true })
+    videoUrl?: string | null;
+
+    @Column({ type: 'int', unsigned: true, default: 1 })
+    contentRevision?: number;
+
     @PrimaryGeneratedColumn()
     id?: number;
 
@@ -23,12 +36,6 @@ export class PostEntity {
     @Column({nullable: true,})
     postId?: string;
 
-    @Column({ nullable: true, type: "longtext"})
-    mappingFields?: string;
-
-    @Column({ nullable: true, type: "longtext"})
-    fields?: string;
-    
     @Column({nullable: true,})
     subscribersCount: number;
 
@@ -36,44 +43,16 @@ export class PostEntity {
     isHidden?: boolean;
 
     @Column({nullable: true,})
-    postTypeId?: string;
-
-    @Column({nullable: true,})
     reactionsCount: number;
 
     @Column({nullable: true,})
     hasMoreContent: number;
 
-    @Column({nullable: true,})
-    isAnonymous?: string;
-
     @Column({nullable: true,  type: "longtext"})
     shortContent?: string;
 
-    @Column({nullable: true,  type: "longtext"})
-    htmlContent?: string;
-
     @Column({nullable: true,})
     createdAt?: string;
-
-    @Column({nullable: true,})
-    publishedAt?: string;
-
-    @Index()
-    @Column({nullable: true,})
-    ownerId?: string;
-
-    @Index()
-    @Column({nullable: true,})
-    externalId?: string;
-
-    @Index()
-    @Column({nullable: true,})
-    userId?: number;
-    
-    @Index()
-    @Column({nullable: true,})
-    createdById?: string;
 
     @Column({nullable: true,})
     status: string;
@@ -87,9 +66,6 @@ export class PostEntity {
 
     @Column({nullable: true,})
     totalRepliesCount: number;
-
-    @Column({nullable: true,})
-    locked?: string;
 
     @Column({nullable: true,  type: "longtext"})
     title: string;
@@ -107,23 +83,11 @@ export class PostEntity {
     mediaIds?: string;
 
     @Column({ nullable: true})
-    is_checked_asset?: boolean;
-
-    @Column({ nullable: true})
-    is_download_asset?: boolean;
-
-    @Column({ nullable: true})
     image?: string;
 
     @Index()
     @Column({ nullable: true})
     image_path?: string;
-
-    @Column({nullable: true,})
-    relativeUrl?: string;
-
-    @Column({nullable: true,})
-    url?: string;
 
     @Column({ nullable: true, type: "longtext"})
     createdBy?: string;
@@ -131,31 +95,9 @@ export class PostEntity {
     @Column({ nullable: true, type: "longtext"})
     tags: string;
 
-    @Column({ nullable: true, type: "longtext"})
-    reactions?: string;
-
-    @Index()
-    @Column({nullable: true,})
-    is_check_comment?: boolean;
-
-
     @Index()
     @Column({nullable: false, default: false})
     is_highlight?: boolean;
-
-    @Index()
-    @Column({nullable: true,})
-    is_check_reaction?: boolean;
-
-    @Column({nullable: true,})
-    after?: string;
-    
-    @Column({
-        type: 'datetime',
-        nullable: true,
-    })
-    curlAt?: Date;
-
 
     @CreateDateColumn()
     created_at: Date;
@@ -172,21 +114,17 @@ export class PostEntity {
     })
     published_at: Date;
 
-
     @ManyToOne(()=>UserMimateEntity, (member) => member.id)
     @JoinColumn({ name: 'backup_member_id' })
     member?: UserMimateEntity
-
 
     @ManyToOne(()=>SpaceEntity, (space) => space.id)
     @JoinColumn({ name: 'backup_space_id' })
     space?: SpaceEntity
 
-
     @OneToMany(()=>ReactionEntity, (reaction) => reaction.post)
     @JoinColumn({ name: 'id' })
     reactionList?: ReactionEntity[]
-
 
     @OneToMany(()=>AssetsEntity, (asset) => asset.post)
     @JoinColumn({ name: 'id' })
@@ -196,7 +134,6 @@ export class PostEntity {
     @OneToMany(()=>CommentEntity, (comment) => comment.post)
     @JoinColumn({ name: 'id' })
     comments?: CommentEntity[]
-    
 
     // create type with enum image or video default is image
     @Column({
@@ -206,16 +143,12 @@ export class PostEntity {
     })
     type?: string;
 
-
-
     @OneToMany(() => PostReport, report => report.post)
     reports?: PostReport[];
-
 
     // quest point details
     @OneToMany(() => QuestPointDetail, (questPointDetail) => questPointDetail.post)
     questPointDetails?: QuestPointDetail[];
-
 
     @Column({nullable: true,})
     backup_member_id?: number;
@@ -232,7 +165,6 @@ export class PostEntity {
     // image_open_url
     @Column({nullable: true,})
     image_open_url?:string;
-
 
     @Column({nullable: true, default: 0})
     viewsCount?: number;

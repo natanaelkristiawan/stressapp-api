@@ -1,3 +1,4 @@
+import { assertPostInteractionsVisible } from '../post/post-visibility';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PostEntity } from 'src/entity/post.entity';
@@ -40,7 +41,7 @@ export class ReactionService {
       // clean all reaction
       async cleanAllReaction():Promise<boolean> {
         // delete all reaction
-        let reactions = await this.reactionRepository.find({where: {reactionId:IsNull()}})
+        let reactions = await this.reactionRepository.find({where: {reactionId:IsNull(), post: { isPsychoeducation: false }}})
 
         // loop each reaction
         for (let index = 0; index < reactions.length; index++) {
@@ -64,6 +65,7 @@ export class ReactionService {
             relations: ['member']
         })
 
+        assertPostInteractionsVisible(post);
         if (!post) {
             throw new NotFoundException('Post not found')
         }
@@ -159,6 +161,7 @@ export class ReactionService {
             relations: ['member', 'post']
         })
 
+        assertPostInteractionsVisible(reaction?.post);
         // compare member_id with reaction.member.id
         if (reaction.member.id !== member_id) {
             throw new ForbiddenException('You are not allowed to delete this reaction')
@@ -202,6 +205,7 @@ export class ReactionService {
     // find reaction by post_id sort by created_at desc
     async getReactionByPostId(post_id: number, type: string, member_id:number): Promise<Reaction[]> {
 
+        assertPostInteractionsVisible(await this.postRepository.findOneBy({ id: post_id }));
         // filter if type is all then get all reaction
         let param:{
             post: { id: number },
