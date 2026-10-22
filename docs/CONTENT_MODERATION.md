@@ -38,6 +38,24 @@ new member-auth forum integration remains separate. Future member handlers must
 use the default moderated call, including when a member also has an admin account.
 No decision is based on a mobile/browser user agent or client-supplied role.
 
+## CMS Settings test
+
+Settings → Content Moderation calls admin-only `GET /cms-settings/moderation`
+for safe setup presence/model and `POST /cms-settings/moderation/test` with
+`{"content":"text to test"}`. The existing CMS JWT middleware and live
+`CmsMembersGuard` protect both routes. DTOs reject blank/non-text/over-10000-
+character content and unknown body fields. Test bodies are excluded from routine
+request logs and responses use `Cache-Control: private, no-store`.
+
+The test deliberately calls `moderateContent` directly, without the CMS publication
+bypass. It returns `{ data: { action, categories, model, policy, checkedAt, error? } }`
+inside the normal success envelope. Publish/reject/pending are test decisions,
+all HTTP 200; invalid input/auth/rate-limit errors retain normal 400/401/429 behavior.
+Existing rate limits, caching and pending classification retries apply. No content
+is inserted, published, edited or notified. Repeated text may show a cached result
+for 15 minutes; pending results can be checked again after a minute. Configuration
+presence does not prove connectivity or model/schema compatibility.
+
 ## Setup
 
 Set API-only environment variables (never in app/CMS builds):

@@ -277,4 +277,13 @@ describe('ContentModerationService', () => {
     ).rejects.toMatchObject({ status: 422 });
     expect(completionCreate).toHaveBeenCalledTimes(1);
   });
+  it('reports setup presence without returning credentials', () => {
+    expect(service.status()).toEqual({
+      configured: true,
+      model: 'glm-5.3-flash',
+    });
+    expect(JSON.stringify(service.status())).not.toContain(
+      'synthetic-test-key',
+    );
+  });
 });

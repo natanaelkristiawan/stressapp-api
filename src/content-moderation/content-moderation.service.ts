@@ -68,6 +68,14 @@ export class ContentModerationService {
     }
   }
 
+  /** Returns safe settings presence; this does not prove provider connectivity or model compatibility. */
+  status(): { configured: boolean; model: string } {
+    return {
+      configured: Boolean(this.apiKey && this.model),
+      model: this.model,
+    };
+  }
+
   /** Validates configuration bounds; invalid server settings fail startup. */
   private integerSetting(
     name: string,
