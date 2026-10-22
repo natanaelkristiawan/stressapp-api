@@ -1,6 +1,6 @@
 # OpenCode content moderation
 
-The shared `ContentModerationService.assertPublishable(fields, actorId)` protects
+The shared `ContentModerationService.assertPublishable(fields, actorId)` moderates
 forum post create/edit, comments/replies create/edit (including psychoeducation
 comments), and admin re-publication of hidden forum posts. Existing controllers,
 authorization and success response contracts remain. No public AI endpoint or
@@ -16,7 +16,27 @@ The model must consider Indonesian/English slang and context. Uncertain, refused
 truncated, malformed, unavailable or rate-limited classifications never approve.
 No OCR/audio/video scanning, private chat/mood scanning, or unrelated classification.
 CMS-authored educational article/video content is outside this user-content filter.
-Existing manual CMS soft deletion remains available; no new override bypass exists.
+Existing manual CMS soft deletion remains available. Server-authorized CMS writes
+skip AI as described below.
+
+## Authorized CMS bypass
+
+The post/comment create/edit handlers and admin forum edit/show handlers now use
+`CmsMembersGuard`, after the existing CMS JWT middleware. It calls the existing
+`AdminAuthService.currentAdmin` lookup to verify the live admin record and active,
+nondeleted linked profile. Only those guarded handlers pass the internal bypass
+argument; request bodies, query strings and source headers cannot set it.
+
+Authorized CMS writes do not call OpenCode, Redis moderation cache/rate limiting,
+or the retry queue. Saved metadata records `cms-admin-bypass-v1`, `model:not-used`,
+the CMS profile ID as `approvedByAdmin`, and a UTC timestamp. Existing DTO validation,
+post/comment ownership, content visibility and other authorization remain.
+
+Service calls default to moderation unless explicitly authorized by a guarded CMS
+handler. The existing legacy post/comment controllers currently accept CMS JWTs;
+new member-auth forum integration remains separate. Future member handlers must
+use the default moderated call, including when a member also has an admin account.
+No decision is based on a mobile/browser user agent or client-supplied role.
 
 ## Setup
 
@@ -58,7 +78,7 @@ quality require live verification with the selected model before deployment.
    strict schema containing only `categories` and `uncertain`. Output is capped
    at 120 tokens; no generated explanations or model chain. HTTP timeout is bounded,
    redirects disabled, response limited to 16 KiB. Parse and validate JSON locally.
-5. Empty categories + certain = publish. Any agreed violation = HTTP 422. Uncertain
+5. For member/default calls, empty categories + certain = publish. Any agreed violation = HTTP 422. Uncertain
    or failed classification = HTTP 503 and no publication/write/notification/points.
 6. Pending classifications enqueue bounded exponential retries (15/30/60 seconds,
    subject to queue availability). Jobs older than 15 minutes are ignored; completed
@@ -79,7 +99,8 @@ this service deduplicates AI requests, not the existing post creation contract.
 ## Storage and responses
 
 Post and Comment each add one nullable `moderation` JSON column (`select:false`):
-action, categories, actual provider model, policy version and UTC check timestamp.
+action, categories, provider model (or not-used for CMS bypass), policy version,
+UTC check timestamp and CMS approver profile ID when applicable.
 Existing rows stay null; ordinary reads do not expose the metadata. Current
 user-approved `synchronize:true` applies the columns on startup; no migrations or
 production/schema startup were run in this task. Pending/rejected decision metadata

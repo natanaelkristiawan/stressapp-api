@@ -28,6 +28,7 @@ export type ModerationResult = {
   model: string;
   policy: string;
   checkedAt: string;
+  approvedByAdmin?: number;
   error?: 'unavailable' | 'uncertain';
 };
 export type ModerationJob = { key: string; text: string; expiresAt: number };
@@ -175,11 +176,26 @@ export class ContentModerationService {
     }
   }
 
-  /** Blocks writes before any publication side effect; preserves the existing response envelope. */
+  /** Checks member writes or records a guarded CMS approval before publication side effects. */
   async assertPublishable(
     fields: unknown[],
     actorId: number,
+    authorizedCmsAdmin = false,
   ): Promise<ModerationResult> {
+    // Internal argument only: controllers set it after CmsMembersGuard succeeds.
+    if (authorizedCmsAdmin === true) {
+      if (!Number.isSafeInteger(actorId) || actorId < 1) {
+        throw new BadRequestException('Invalid admin identity');
+      }
+      return {
+        action: 'publish',
+        categories: [],
+        model: 'not-used',
+        policy: 'cms-admin-bypass-v1',
+        checkedAt: new Date().toISOString(),
+        approvedByAdmin: actorId,
+      };
+    }
     const result = await this.moderateContent(fields, actorId);
     if (result.action === 'reject') {
       throw new HttpException(

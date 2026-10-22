@@ -542,7 +542,7 @@ export class AdminPostService {
     }
 
     // hide post
-    async hideShowPost(post_id: number, hide: boolean, actorId: number): Promise<boolean> {
+    async hideShowPost(post_id: number, hide: boolean, actorId: number, authorizedCmsAdmin = false): Promise<boolean> {
         const post = await this.postRepository.findOne({ where: { id: post_id, isPsychoeducation: false }, relations: ['votes'] });
         if (!post) {
             throw new NotFoundException('Post not found');
@@ -550,7 +550,7 @@ export class AdminPostService {
 
         if (!hide) {
             post.moderation = await this.moderation.assertPublishable(
-                [post.title, post.textContent, ...(post.votes ?? []).map((option) => option.vote)], actorId,
+                [post.title, post.textContent, ...(post.votes ?? []).map((option) => option.vote)], actorId, authorizedCmsAdmin,
             );
         }
         post.isHidden = hide;

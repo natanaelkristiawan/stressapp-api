@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res } from '@nestjs/common';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AdminAuditListDto, AdminPostAnalyticsDto, AdminPostExportDto, AdminPostListDto, CreatePostHighlightDto, MovePostToSpaceDto } from './dtos/admin-post.dto';
@@ -274,9 +275,10 @@ export class AdminPostController {
         },
         "data": {}
       }}) 
+    @UseGuards(CmsMembersGuard)
     async updatePost(@Param('id') id: number, @Body() dto: CreatePostDto, @Req() request): Promise<GlobalResponse<PostInterface>> {
       const { id:userId } = request.userData; // admin
-      const data = await this.postService.updatePost(id, dto, userId, userId);
+      const data = await this.postService.updatePost(id, dto, userId, userId, true);
       return { message: 'Success', data: data };
     }
 
@@ -336,9 +338,10 @@ export class AdminPostController {
         },
         "data": {}
       }})
+    @UseGuards(CmsMembersGuard)
     async showPost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
       const { id:userId } = request.userData; // admin
-      const data = await this.adminPostService.hideShowPost(id, false, request.userData.id);
+      const data = await this.adminPostService.hideShowPost(id, false, request.userData.id, true);
 
       await this.adminPostActivityService.createActivity({
         userId,

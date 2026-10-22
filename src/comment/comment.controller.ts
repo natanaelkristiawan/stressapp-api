@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req } from '@nestjs/common';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { CommentService } from './comment.service';
 import { GetCommentsDto } from './dtos/get-comment.dto';
 import { GlobalResponse } from 'src/interfaces/global.interface';
@@ -469,13 +470,14 @@ export class CommentController {
         },  
         "data": null
     }})
+    @UseGuards(CmsMembersGuard)
     async createComment(@Body() body: CreateCommentDto, @Req() request): Promise<GlobalResponse<CommentInterface>> {
         const {id:memberId, userId} = request.userData
 
        
 
 
-        let response = await this.commentService.createComment(body, memberId)
+        let response = await this.commentService.createComment(body, memberId, true)
 
         // save activity
         await this.activityService.createActivity({
@@ -550,11 +552,12 @@ export class CommentController {
         "updated_at": "2025-04-23T10:49:40.000Z"
       }
     }})
+    @UseGuards(CmsMembersGuard)
     async updateComment(@Param('commentId') commentId: number, @Body() body: UpdateCommentDto, @Req() request): Promise<GlobalResponse<CommentInterface>> {
         const {id:memberId} = request.userData
 
 
-        let response = await this.commentService.updateComment(commentId, body, memberId)
+        let response = await this.commentService.updateComment(commentId, body, memberId, true)
 
         // save activity
         await this.activityService.createActivity({

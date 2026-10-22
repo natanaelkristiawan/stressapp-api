@@ -671,14 +671,14 @@ export class PostService {
             .replace(/-+/g, '-');            // Collapse multiple -
     }
 
-    async createPost(params: CreatePostDto, memberId: number, userId: number): Promise<Post> {
+    async createPost(params: CreatePostDto, memberId: number, userId: number, authorizedCmsAdmin = false): Promise<Post> {
 
         // set input
         const { title, content, spaceId, tags, mediaIds, type, post_type: postType = PostType.Post, vote_start: voteStart, vote_end: voteEnd } = params;
 
 
         const moderation = await this.moderation.assertPublishable(
-            [title, content, ...(params.tags ?? []), ...(params.votes ?? []).map((option) => option.vote)], memberId,
+            [title, content, ...(params.tags ?? []), ...(params.votes ?? []).map((option) => option.vote)], memberId, authorizedCmsAdmin,
         );
 
         let shortenText = this.shortenText(content)
@@ -836,7 +836,7 @@ export class PostService {
     }
 
 
-    async updatePost(postId: number, params: CreatePostDto, memberId: number, userId: number): Promise<Post> {
+    async updatePost(postId: number, params: CreatePostDto, memberId: number, userId: number, authorizedCmsAdmin = false): Promise<Post> {
 
         const existingPost = await this.postRepository.findOne({
             where: { id: postId, isPsychoeducation: false },
@@ -864,7 +864,7 @@ export class PostService {
         const { title, content, spaceId, tags, mediaIds, type, post_type: postType, vote_start: voteStart, vote_end: voteEnd } = params;
         existingPost.moderation = await this.moderation.assertPublishable(
             [title ?? existingPost.title, content ?? existingPost.textContent,
-                ...(params.tags ?? []), ...(params.votes ?? []).map((option) => option.vote)], memberId,
+                ...(params.tags ?? []), ...(params.votes ?? []).map((option) => option.vote)], memberId, authorizedCmsAdmin,
         );
         const timestamp = new Date()
 

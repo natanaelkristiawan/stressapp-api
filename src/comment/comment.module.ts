@@ -1,3 +1,5 @@
+import { AdminAuthModule } from '../admin-auth/admin-auth.module';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
 import { CommentController } from './comment.controller';
@@ -12,6 +14,7 @@ import { ActivityModule } from 'src/activity/activity.module';
 import { CommentReactionEntity } from 'src/entity/comment-reaction.entity';
 @Module({
   imports: [
+    AdminAuthModule,
     ContentModerationModule,
     TypeOrmModule.forFeature(
       [
@@ -27,6 +30,6 @@ import { CommentReactionEntity } from 'src/entity/comment-reaction.entity';
     ActivityModule,
   ],
   controllers: [CommentController],
-  providers: [CommentService],
+  providers: [CmsMembersGuard, CommentService],
 })
 export class CommentModule {}

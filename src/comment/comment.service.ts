@@ -290,7 +290,7 @@ export class CommentService {
 
 
 
-    async createComment(body: CreateCommentDto, memberId: number): Promise<CommentInterface> {
+    async createComment(body: CreateCommentDto, memberId: number, authorizedCmsAdmin = false): Promise<CommentInterface> {
         const {post_id, comment_id, content} = body
 
 
@@ -303,7 +303,7 @@ export class CommentService {
         })
 
         assertPostInteractionsVisible(post);
-        const moderation = await this.moderation.assertPublishable([content], memberId);
+        const moderation = await this.moderation.assertPublishable([content], memberId, authorizedCmsAdmin);
         let parent:CommentEntity|null = null
 
 
@@ -438,7 +438,7 @@ export class CommentService {
         return true
     }
 
-    async updateComment(id: number, body: UpdateCommentDto, memberId: number): Promise<CommentInterface> {
+    async updateComment(id: number, body: UpdateCommentDto, memberId: number, authorizedCmsAdmin = false): Promise<CommentInterface> {
         const {content} = body
 
         const comment = await this.commentRepository.findOne({
@@ -469,7 +469,7 @@ export class CommentService {
     
 
 
-        comment.moderation = await this.moderation.assertPublishable([content], memberId);
+        comment.moderation = await this.moderation.assertPublishable([content], memberId, authorizedCmsAdmin);
         comment.title = this.shortenText(content)
         comment.description = content
         comment.updated_at = new Date()

@@ -255,4 +255,26 @@ describe('ContentModerationService', () => {
         ),
     ).toThrow('OPENCODE_MODERATION_MODEL');
   });
+  it('skips AI/cache/queue only for an internally authorized CMS admin', async () => {
+    const result = await service.assertPublishable(['CMS text'], 7, true);
+    expect(result).toMatchObject({
+      action: 'publish',
+      policy: 'cms-admin-bypass-v1',
+      approvedByAdmin: 7,
+    });
+    expect(completionCreate).not.toHaveBeenCalled();
+    expect(redis.get).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+    await expect(
+      service.assertPublishable(['text'], 0, true),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('continues checking member content without the authorized CMS argument', async () => {
+    completionCreate.mockResolvedValue(completion(['profanity']));
+    await expect(
+      service.assertPublishable(['goblog'], 7),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(completionCreate).toHaveBeenCalledTimes(1);
+  });
 });

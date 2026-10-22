@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Req, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Req, UseGuards, UploadedFile, UploadedFiles, UseInterceptors } from '@nestjs/common';
 import { GetPostHighlightDto, GetPostsDto } from './dtos/get-posts.dto';
 import { PostService } from './post.service';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -2599,6 +2600,7 @@ export class PostController {
       "data": null
     }
   })
+  @UseGuards(CmsMembersGuard)
   async createPost(@Body() param: CreatePostDto, @Req() request): Promise<GlobalResponse<PostInterface>> {
 
     const { id: userId, member_verified, name } = request.userData
@@ -2616,7 +2618,7 @@ export class PostController {
       delete param.notifMessage
     }
 
-    let response = await this.postService.createPost(param, userId, userId)
+    let response = await this.postService.createPost(param, userId, userId, true)
 
     if (param.post_type === PostType.Vote && param.votes?.length) {
       const createdVotes = await this.voteService.createVotesForPost(response.id, param.votes);
@@ -2822,6 +2824,7 @@ export class PostController {
       "data": null
     }
   })
+  @UseGuards(CmsMembersGuard)
   async updatePost(
     @Param('id') postId: number,
     @Body() param: CreatePostDto,
@@ -2829,7 +2832,7 @@ export class PostController {
   ): Promise<GlobalResponse<PostInterface>> {
 
     const { id: userId } = request.userData;
-    const updatedPost = await this.postService.updatePost(postId, param, userId, userId);
+    const updatedPost = await this.postService.updatePost(postId, param, userId, userId, true);
 
     if (param.voteDeleted?.length || param.votes?.length) {
       await this.voteService.updateVotesForPost(

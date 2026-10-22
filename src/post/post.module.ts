@@ -1,3 +1,5 @@
+import { AdminAuthModule } from '../admin-auth/admin-auth.module';
+import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
 import { PostService } from './post.service';
@@ -23,6 +25,7 @@ import { MoengageModule } from 'src/moengage/moengage.module';
 import { MemberVoteModule } from 'src/member-vote/member-vote.module';
 @Module({
   imports: [
+    AdminAuthModule,
     ContentModerationModule,
     TypeOrmModule.forFeature(
       [
@@ -48,7 +51,7 @@ import { MemberVoteModule } from 'src/member-vote/member-vote.module';
     MemberVoteModule,
   ],
   exports: [PostService, VoteService],
-  providers: [PostService, VoteService],
+  providers: [CmsMembersGuard, PostService, VoteService],
   controllers: [PostController],
 })
 export class PostModule {}
