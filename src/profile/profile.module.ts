@@ -1,3 +1,4 @@
+import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
 import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
@@ -21,6 +22,7 @@ import { UserAdmin } from 'src/entity/user-admin.entity';
 
 @Module({
   imports:[
+    ContentModerationModule,
     TypeOrmModule.forFeature([UserMimateEntity, PostEntity, TagsEntity,  PostTagsEntity, AssetsEntity, SpaceEntity, ReactionEntity, UserFollowEntity, MemberSpaceEntity, CommentEntity, UserAdmin], 'mimate'),
     QueueModule,
     ActivityModule,
