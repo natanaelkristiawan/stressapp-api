@@ -20,11 +20,11 @@ export class AdminDashboardDto {
 }
 
 export class DateRangeDto {
-    @ApiProperty({ example: '2025-08-01', description: 'Start date (YYYY-MM-DD), local +08:00' })
+    @ApiProperty({ example: '2025-08-01', description: 'Start date (YYYY-MM-DD), local Z' })
     @IsDateString()
     start_date: string;
   
-    @ApiProperty({ example: '2025-08-19', description: 'End date (YYYY-MM-DD), local +08:00' })
+    @ApiProperty({ example: '2025-08-19', description: 'End date (YYYY-MM-DD), local Z' })
     @IsDateString()
     end_date: string;
   }

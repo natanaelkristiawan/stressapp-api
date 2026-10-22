@@ -72,7 +72,7 @@ export class LeaderboardService implements OnModuleInit, OnModuleDestroy {
     return this.redisService.getOrThrow();
   }
   private prefix(period: string) {
-    return `hof:${period}:`;
+    return `hof:utc:${period}:`;
   }
   private pointer(period: string) {
     return `${this.prefix(period)}active`;

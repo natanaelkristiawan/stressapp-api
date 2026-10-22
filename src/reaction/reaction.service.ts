@@ -94,14 +94,13 @@ export class ReactionService {
 
         let name = this.getMemberName(member.name, member.mmid_fullname, member.id)
 
-        let dateCurl = new Date()
-        let utc7 = new Date(dateCurl.toLocaleString('en-US', { timeZone: 'Asia/Makassar' }));
+        const timestamp = new Date();
                 
 
         if (reaction) {
             // update reaction
             reaction.reaction = type
-            reaction.updated_at = utc7
+            reaction.updated_at = timestamp
 
         } else {
             // create new reaction
@@ -109,8 +108,8 @@ export class ReactionService {
             reaction.post = post
             reaction.member = member
             reaction.reaction = type
-            reaction.created_at = utc7
-            reaction.updated_at = utc7
+            reaction.created_at = timestamp
+            reaction.updated_at = timestamp
 
             modeCreate = true
  

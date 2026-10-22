@@ -43,8 +43,7 @@ export class PostReportService {
             throw new BadRequestException('You have already reported this post')
         }
         
-        let dateCurl = new Date()
-        let utc7 = new Date(dateCurl.toLocaleString('en-US', { timeZone: 'Asia/Makassar' }));
+        const timestamp = new Date();
    
 
             
@@ -54,11 +53,11 @@ export class PostReportService {
         newPostReport.reportedBy = user
         newPostReport.reason = reason
         newPostReport.description = description
-        newPostReport.created_at = utc7
+        newPostReport.created_at = timestamp
         newPostReport.status = true
         newPostReport.is_solved = false
         newPostReport.solved_description = ''
-        newPostReport.updated_at = utc7
+        newPostReport.updated_at = timestamp
 
 
      

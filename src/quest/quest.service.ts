@@ -298,18 +298,12 @@ export class QuestService {
 
         // check here if interval is daily, user already  make point or yet
         if (quest.interval == 'daily') {
-            // date now is GMT +8 date start add 00:00:00 and date end add 23:59_59
+            // Daily activity windows use UTC calendar days.
             const now = new Date();
-            const gmt8Offset = 8 * 60 * 60 * 1000; // 8 hours in milliseconds
-            const gmt8Time = new Date(now.getTime() + gmt8Offset);
-
-            const dateStart = new Date(gmt8Time);
+            const dateStart = new Date(now);
             dateStart.setUTCHours(0, 0, 0, 0);
-            dateStart.setTime(dateStart.getTime() - gmt8Offset);
-
-            const dateEnd = new Date(gmt8Time);
+            const dateEnd = new Date(now);
             dateEnd.setUTCHours(23, 59, 59, 999);
-            dateEnd.setTime(dateEnd.getTime() - gmt8Offset);
 
 
 

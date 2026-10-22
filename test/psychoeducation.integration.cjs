@@ -30,6 +30,7 @@ const { SearchService } = require('../src/search/search.service');
 const { PostEntity } = require('../src/entity/post.entity');
 const { AssetsEntity } = require('../src/entity/asset.entity');
 const { CommentEntity } = require('../src/entity/comment.entity');
+const { ActivityService } = require('../src/activity/activity.service');
 const { Activity } = require('../src/entity/activity.entity');
 const { ReactionEntity } = require('../src/entity/reaction.entity');
 const { PostService } = require('../src/post/post.service');
@@ -237,7 +238,34 @@ async function main() {
     assert.equal(Number((await db.query('SELECT COUNT(*) AS total FROM backup_comments WHERE backup_post_with_attribute_id = ? AND deleted_at IS NULL', [content.id]))[0].total), 1);
     assert.equal(await db.getRepository(AssetsEntity).count(), 3);
     assert((await db.getRepository(PostEntity).findOne({ where: { id: content.id }, withDeleted: true })).deleted_at);
-    console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility and soft deletion.');
+    // UTC filtering, returned instants and SQL day buckets agree on hosts with different local calendars.
+    const timestamp = new Date('2026-03-08T00:00:00.000Z');
+    const utcBefore = new Date('2026-03-07T23:59:59.000Z');
+    const boundaryPosts = [];
+    for (const created_at of [utcBefore, timestamp]) {
+      boundaryPosts.push(await db.getRepository(PostEntity).save({ title: 'UTC boundary', description: '', textContent: '', type: 'image', member: { id: ordinary.id }, space: forumSpace, status: 'PUBLISHED', isHidden: false, created_at, updated_at: created_at, published_at: created_at }));
+      await db.getRepository(CommentEntity).save({ title: 'UTC boundary', description: 'UTC boundary', post: forum, member: ordinary, created_at, updated_at: created_at, repliesCount: 0 });
+    }
+    const analytics = Object.create(ActivityService.prototype);
+    analytics.commentRepository = db.getRepository(CommentEntity);
+    const previousTimezone = process.env.TZ;
+    try {
+      for (const timezone of ['UTC', 'Asia/Makassar', 'America/New_York']) {
+        process.env.TZ = timezone;
+        const page = await legacyAdmin.getPost({ page: 1, limit: 20, start_date: timestamp, end_date: timestamp, sort: 'created_at', order: 'asc' });
+        assert.equal(page.items.length, 1);
+        assert.equal(page.items[0].id, boundaryPosts[1].id);
+        assert.equal(page.items[0].created_at.toISOString(), timestamp.toISOString());
+        const daily = await analytics.getRepliesAnalytics({ start_date: timestamp, end_date: timestamp }, forum.id);
+        assert.equal(daily.count, 1);
+        assert.equal(daily.detail.length, 1);
+        assert.equal(daily.detail[0].date, '2026-03-08');
+        assert.equal(daily.detail[0].count, 1);
+      }
+    } finally {
+      if (previousTimezone === undefined) { delete process.env.TZ; } else { process.env.TZ = previousTimezone; }
+    }
+    console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility, soft deletion and UTC filters/report buckets across three host timezones.');
   } finally {
     if (app) await app.close();
     await connection.query(`DROP DATABASE IF EXISTS \`${schema}\``);

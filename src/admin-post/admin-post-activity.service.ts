@@ -1,9 +1,10 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Activity } from "src/entity/activity.entity";
 import { PostEntity } from "src/entity/post.entity";
 import { Repository } from "typeorm";
-import { format } from "date-fns";
+
 import { AdminActivityDto } from "./dtos/admin-activity.dto";
 
 @Injectable()
@@ -101,7 +102,7 @@ export class AdminPostActivityService {
                 row.user.id,
             );
 
-            const wording = `${memberName} admin ${row.action} on post ${postId} at ${row.createdAt.toLocaleString()}`;
+            const wording = `${memberName} admin ${row.action} on post ${postId} at ${row.createdAt.toISOString()}`;
 
             items.push({
                 id: row.id,

@@ -230,10 +230,7 @@ export class UploadService {
       ? 'Lottie'
       : 'unknown';
 
-    const dateCurl = new Date();
-    const utc7 = new Date(
-      dateCurl.toLocaleString('en-US', { timeZone: 'Asia/Makassar' }),
-    );
+    const timestamp = new Date();
 
     const insert = new AssetsEntity();
     insert.memberId = memberId;
@@ -241,7 +238,7 @@ export class UploadService {
     insert.size = file.buffer.length;
     insert.bucket = this.bucket;
     insert.url = url;
-    insert.created_at = utc7;
+    insert.created_at = timestamp;
     insert.type = type;
     insert.path = key;
     insert.mediaId = mediaId;
@@ -359,10 +356,7 @@ export class UploadService {
       };
     }
 
-    const dateCurl = new Date();
-    const utc7 = new Date(
-      dateCurl.toLocaleString('en-US', { timeZone: 'Asia/Makassar' }),
-    );
+    const timestamp = new Date();
 
     const insert: AssetsEntity = {
       url: videoUrl,
@@ -370,7 +364,7 @@ export class UploadService {
       path: videoKey,
       url_open: videoUrlOpen,
       url_old: videoUrl,
-      created_at: utc7,
+      created_at: timestamp,
       type: 'Video',
     };
 

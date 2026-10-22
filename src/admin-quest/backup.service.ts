@@ -1,3 +1,4 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { QuestPoint } from "src/entity/quest-point.entity";
@@ -7,7 +8,7 @@ import { Repository } from "typeorm";
 import { BackupMode, BackupResultInterface } from "./interfaces/backup.interface";
 import { LogResetDto } from "./dtos/log-reset.dto";
 import { LogResetItemInterface, LogResetResponseInterface } from "./interfaces/log-reset.interface";
-import { format, addHours } from "date-fns";
+
 
 
 @Injectable()
@@ -194,7 +195,7 @@ export class BackupService {
 
         const formattedItems: LogResetItemInterface[] = items.map((item) => {
             const resetAt = item.createdAt
-                ? format(addHours(new Date(item.createdAt), 8), 'yyyy-MM-dd HH:mm:ss')
+                ? format(new Date(item.createdAt), 'yyyy-MM-dd HH:mm:ss')
                 : '-';
 
             return {

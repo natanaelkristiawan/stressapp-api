@@ -1,10 +1,11 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { QuestPointDetail } from "src/entity/quest-point-detail.entity";
 import { HistoryUserDto } from "./dtos/history-user.dto";
 import { HistoryUserItemInterface, HistoryUserResponseInterface } from "./interfaces/history-user.interface";
-import { format, addHours } from "date-fns";
+
 
 @Injectable()
 export class HistoryService {
@@ -39,22 +40,21 @@ export class HistoryService {
       );
     }
 
-    const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-    // Date filter: interpret start/end as local UTC+8 days -> convert to UTC
+    // Date filter: interpret start/end as UTC days -> convert to UTC
     if (dto.startDate && dto.startDate.trim() !== '') {
-      const startLocal = new Date(dto.startDate.trim());
-      startLocal.setHours(0, 0, 0, 0);
-      const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
+      const startDay = new Date(dto.startDate.trim());
+      startDay.setUTCHours(0, 0, 0, 0);
+      const startUtc = new Date(startDay.getTime());
       qb.andWhere('qpd.created_at >= :startDate', {
         startDate: startUtc,
       });
     }
 
     if (dto.endDate && dto.endDate.trim() !== '') {
-      const endLocal = new Date(dto.endDate.trim());
-      endLocal.setHours(23, 59, 59, 999);
-      const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+      const endDay = new Date(dto.endDate.trim());
+      endDay.setUTCHours(23, 59, 59, 999);
+      const endUtc = new Date(endDay.getTime());
       qb.andWhere('qpd.created_at <= :endDate', {
         endDate: endUtc,
       });
@@ -94,7 +94,7 @@ export class HistoryService {
         item.post?.postId ||
         (postId ? `#${postId}` : '-');
       const createdAtStr = item.created_at
-        ? format(addHours(new Date(item.created_at), 8), 'yyyy-MM-dd HH:mm:ss')
+        ? format(new Date(item.created_at), 'yyyy-MM-dd HH:mm:ss')
         : '-';
 
       return {

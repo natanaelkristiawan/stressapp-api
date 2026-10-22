@@ -42,6 +42,7 @@ import { AdminPostTrendingModule } from './admin-post-trending/admin-post-trendi
 import { AdminPostReportModule } from './admin-post-report/admin-post-report.module';
 import { WinnerModule } from './winner/winner.module';
 async function bootstrap() {
+  process.env.TZ = 'UTC';
   const app = await NestFactory.create(AppModule);
   // Apply success response wrapper
   app.useGlobalInterceptors(new SuccessInterceptor(), new NullToEmptyInterceptor());

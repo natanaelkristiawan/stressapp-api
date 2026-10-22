@@ -73,17 +73,17 @@ export class ExportRevisionService {
         start_date: Date,
         end_date: Date
     ): Promise<{ buffer: Buffer; filename: string }> {
-        // Build LOCAL (UTC+8) bounds
-        const startLocal = new Date(start_date);
-        startLocal.setHours(0, 0, 0, 0);
+        // Build UTC bounds
+        const startDay = new Date(start_date);
+        startDay.setUTCHours(0, 0, 0, 0);
 
-        const endLocal = new Date(end_date);
-        endLocal.setHours(23, 59, 59, 999);
+        const endDay = new Date(end_date);
+        endDay.setUTCHours(23, 59, 59, 999);
 
-        // Convert LOCAL → UTC for DB query
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-        const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+        // Convert UTC → UTC for DB query
+
+        const startUtc = new Date(startDay.getTime());
+        const endUtc = new Date(endDay.getTime());
 
         // Query using UTC bounds
         const data = await this.memberRepository
@@ -105,10 +105,9 @@ export class ExportRevisionService {
 
 
 
-        // Map to LOCAL (UTC+8) for display in Excel
+        // Map to UTC for display in Excel
         const mapData: DataUser[] = data.map(user => {
-            const toLocal = (date: Date | null) =>
-                date ? new Date(date.getTime() + TZ_OFFSET_MS) : null;
+
 
 
 
@@ -120,8 +119,8 @@ export class ExportRevisionService {
                 userId: user.userId,
                 name: this.getMemberName(user.name, user.mmid_fullname, user.id),
                 email: user.email,
-                createdAt: toLocal(user.activated_at) as any,   // now LOCAL
-                updatedAt: toLocal(user.updated_at) as any,   // now LOCAL
+                createdAt: user.activated_at as any,   // now UTC
+                updatedAt: user.updated_at as any,   // now UTC
                 username: user.mmid_fullname,
                 status: user.status,
                 siteRole: this.siteRole[user.member_role],
@@ -134,7 +133,7 @@ export class ExportRevisionService {
                 likes: user.total_likes,
                 shares: user.total_shares,
                 quizWinner: 0,
-                last_seen_at: toLocal(user.last_seen_at) as any, // now LOCAL
+                last_seen_at: user.last_seen_at as any, // now UTC
             };
         });
 
@@ -148,17 +147,17 @@ export class ExportRevisionService {
         start_date: Date,
         end_date: Date
     ): Promise<{ buffer: Buffer; filename: string }> {
-        // Build LOCAL (UTC+8) bounds
-        const startLocal = new Date(start_date);
-        startLocal.setHours(0, 0, 0, 0);
+        // Build UTC bounds
+        const startDay = new Date(start_date);
+        startDay.setUTCHours(0, 0, 0, 0);
 
-        const endLocal = new Date(end_date);
-        endLocal.setHours(23, 59, 59, 999);
+        const endDay = new Date(end_date);
+        endDay.setUTCHours(23, 59, 59, 999);
 
-        // Convert LOCAL → UTC for querying
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-        const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+        // Convert UTC → UTC for querying
+
+        const startUtc = new Date(startDay.getTime());
+        const endUtc = new Date(endDay.getTime());
 
         // Query active members within the UTC bounds
         const activeUsers = await this.activityRepository
@@ -202,15 +201,15 @@ export class ExportRevisionService {
                 last_seen_at: Date | null;
             }>();
 
-        // Map to export shape in LOCAL (UTC+8)
-        const toLocal = (d: Date | null) => (d ? new Date(new Date(d).getTime() + TZ_OFFSET_MS) : null);
+        // Map to export shape in UTC
+
 
         const mapData: DataUser[] = activeUsers.map((user) => ({
             id: Number(user.id),
             name: user.name,
             email: user.email,
-            createdAt: toLocal(user.created_at) as any,  // LOCAL (UTC+8)
-            updatedAt: toLocal(user.updated_at) as any,  // LOCAL (UTC+8)
+            createdAt: user.created_at as any,  // UTC
+            updatedAt: user.updated_at as any,  // UTC
             username: user.mmid_fullname,
             status: user.status,
             siteRole: this.siteRole[user.member_role],
@@ -223,7 +222,7 @@ export class ExportRevisionService {
             likes: Number(user.total_likes) || 0,
             shares: Number(user.total_shares) || 0,
             quizWinner: 0,
-            last_seen_at: toLocal(user.last_seen_at) as any, // LOCAL (UTC+8)
+            last_seen_at: user.last_seen_at as any, // UTC
         }));
 
         const { buffer, filename } = await this.writeToExcel(
@@ -279,15 +278,14 @@ export class ExportRevisionService {
 
         // Add time to dates for proper filtering
         const startDate = new Date(start_date);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         const endDate = new Date(end_date);
-        endDate.setHours(23, 59, 59, 999);
+        endDate.setUTCHours(23, 59, 59, 999);
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-        // Treat this.dateStart/End and *Before as LOCAL (UTC+8) bounds.
-        const startUtc = new Date(startDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(endDate.getTime() - TZ_OFFSET_MS);
+        // Treat this.dateStart/End and *Before as UTC bounds.
+        const startUtc = new Date(startDate.getTime());
+        const endUtc = new Date(endDate.getTime());
 
         const handlers = [
             'getAllHighlight',
@@ -300,20 +298,20 @@ export class ExportRevisionService {
         ];
 
 
-        // Daily breakdown by LOCAL (UTC+8) calendar day
+        // Daily breakdown by UTC calendar day
         const detailRows = await this.requestLogEntity
             .createQueryBuilder('log')
-            .select("DATE(DATE_ADD(log.createdAt, INTERVAL 8 HOUR))", "date")
+            .select("DATE(log.createdAt)", "date")
             .addSelect("COUNT(log.backup_member_id)", "count")
             .where("log.handler IN (:...handlers)", { handlers })
             .andWhere("log.backup_member_id IS NOT NULL")
             .andWhere("log.createdAt BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-            .groupBy("DATE(DATE_ADD(log.createdAt, INTERVAL 8 HOUR))")
+            .groupBy("DATE(log.createdAt)")
             .orderBy("date", "ASC")
             .getRawMany<{ date: string; count: string }>();
 
         const detailCount = detailRows.map(r => ({
-            date: r.date,                      // 'YYYY-MM-DD' (local day)
+            date: r.date,                      // 'YYYY-MM-DD' (UTC day)
             count: parseInt(r.count, 10) || 0, // number
         }));
 
@@ -754,12 +752,11 @@ export class ExportRevisionService {
         const idToUserId = new Map<number, number>();
         for (const v of userIds) idToUserId.set(v, v);
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        end.setUTCHours(23, 59, 59, 999);
 
-        const endUtc = end ? new Date(end.getTime() - TZ_OFFSET_MS) : undefined;
+        const endUtc = end ? new Date(end.getTime()) : undefined;
 
 
         // --- Fetch users
@@ -806,16 +803,14 @@ export class ExportRevisionService {
         usersWorksheet.addRow(['ID', 'Email', 'Full Name', 'userId', 'Activated At', 'Last Access']);
 
 
-        let covertInUtc8 = (d: Date | null) => (d ? new Date(new Date(d).getTime() + TZ_OFFSET_MS) : null);
-
         for (const u of queryUsers) {
             usersWorksheet.addRow([
                 u.id,
                 u.email ?? '',
                 u.fullname ?? '', // adjust if your entity uses a different property name
                 u.userId,
-                u.activatedAt ? covertInUtc8(new Date(u.activatedAt)) : null, // keep as Date so Excel formats it
-                u.lastAccess ? covertInUtc8(new Date(u.lastAccess)) : null,
+                u.activatedAt ? new Date(u.activatedAt) : null, // keep as Date so Excel formats it
+                u.lastAccess ? new Date(u.lastAccess) : null,
             ]);
         }
 

@@ -76,9 +76,9 @@ export class AdminDashboardService {
         
         // Add time to dates for proper filtering
         const startDate = new Date(start_date);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         const endDate = new Date(end_date);
-        endDate.setHours(23, 59, 59, 999);
+        endDate.setUTCHours(23, 59, 59, 999);
         
         query.where('user.created_at BETWEEN :start_date AND :end_date', { 
             start_date: startDate, 
@@ -120,9 +120,9 @@ export class AdminDashboardService {
         
         // Add time to dates for proper filtering
         const startDate = new Date(start_date);
-        startDate.setHours(0, 0, 0, 0);
+        startDate.setUTCHours(0, 0, 0, 0);
         const endDate = new Date(end_date);
-        endDate.setHours(23, 59, 59, 999);
+        endDate.setUTCHours(23, 59, 59, 999);
         
         query.where('user.last_seen_at BETWEEN :start_date AND :end_date', { 
             start_date: startDate, 
@@ -663,18 +663,18 @@ export class AdminDashboardService {
 
        
         this.start_date = new Date(start_date);
-        this.start_date.setHours(0, 0, 0, 0); // Set time to 00:00:00
+        this.start_date.setUTCHours(0, 0, 0, 0); // Set time to 00:00:00
         
         this.end_date = new Date(end_date);
-        this.end_date.setHours(23, 59, 59, 999); // Set time to 23:59:59.999
+        this.end_date.setUTCHours(23, 59, 59, 999); // Set time to 23:59:59.999
         
         const range_day = this.getRangeDay() + 1;
         
         this.start_date_before = new Date(this.start_date.getTime() - (range_day * 24 * 60 * 60 * 1000));
-        this.start_date_before.setHours(0, 0, 0, 0);
+        this.start_date_before.setUTCHours(0, 0, 0, 0);
         
         this.end_date_before = new Date(this.end_date.getTime() - (range_day * 24 * 60 * 60 * 1000));
-        this.end_date_before.setHours(23, 59, 59, 999);
+        this.end_date_before.setUTCHours(23, 59, 59, 999);
 
 
 

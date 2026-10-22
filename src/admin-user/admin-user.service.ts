@@ -1,3 +1,4 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AdminUserAnalyticsDto, AdminUserExportDto, AdminUserListDto, AdminUserSuspendDto, AdminUserUpdateDto, AdminUserUpdateQuizWinnerDto, AdminUserQuestDetailDto } from './dtos/admin-user.dto';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
@@ -9,7 +10,7 @@ import { Activity } from 'src/entity/activity.entity';
 import { ActivityService } from 'src/activity/activity.service';
 import { QuestPoint } from 'src/entity/quest-point.entity';
 import { QuestPointDetail } from 'src/entity/quest-point-detail.entity';
-import { format, addHours } from 'date-fns';
+
 import { DataSource } from 'typeorm';
 import { QuestService } from 'src/quest/quest.service';
 import { DeductPointDto } from './dtos/deduct-point.dto';
@@ -129,19 +130,19 @@ export class AdminUserService {
       }
     }
 
-    // Date filter (treat start_date/end_date as LOCAL UTC+8 days)
+    // Date filter (treat start_date/end_date as UTC days)
     if (start_date && end_date) {
-      // Build local 00:00:00.000 → 23:59:59.999
-      const startLocal = new Date(start_date as any);
-      startLocal.setHours(0, 0, 0, 0);
+      // Build UTC 00:00:00.000 → 23:59:59.999
+      const startDay = new Date(start_date as any);
+      startDay.setUTCHours(0, 0, 0, 0);
 
-      const endLocal = new Date(end_date as any);
-      endLocal.setHours(23, 59, 59, 999);
+      const endDay = new Date(end_date as any);
+      endDay.setUTCHours(23, 59, 59, 999);
 
-      // Convert LOCAL → UTC for DB filtering
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-      const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-      const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+      // Compare UTC calendar bounds directly.
+
+      const startUtc = new Date(startDay.getTime());
+      const endUtc = new Date(endDay.getTime());
 
       query.andWhere('user.activated_at BETWEEN :start_date AND :end_date', {
         start_date: startUtc,
@@ -266,18 +267,18 @@ export class AdminUserService {
       baseQuery.where('user.name LIKE :search OR user.email LIKE :search', { search: `%${search}%` });
     }
 
-    // Treat start_date/end_date as LOCAL (UTC+8) calendar days
+    // Treat start_date/end_date as UTC calendar days
     if (start_date && end_date) {
-      const startLocal = new Date(start_date as any);
-      startLocal.setHours(0, 0, 0, 0);
+      const startDay = new Date(start_date as any);
+      startDay.setUTCHours(0, 0, 0, 0);
 
-      const endLocal = new Date(end_date as any);
-      endLocal.setHours(23, 59, 59, 999);
+      const endDay = new Date(end_date as any);
+      endDay.setUTCHours(23, 59, 59, 999);
 
-      // Convert LOCAL → UTC for DB filtering
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-      const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-      const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+      // Compare UTC calendar bounds directly.
+
+      const startUtc = new Date(startDay.getTime());
+      const endUtc = new Date(endDay.getTime());
 
       baseQuery.andWhere('user.activated_at BETWEEN :start_date AND :end_date', {
         start_date: startUtc,
@@ -287,9 +288,8 @@ export class AdminUserService {
 
     baseQuery.orderBy('user.activated_at', 'ASC');
 
-    // Show timestamps in LOCAL (UTC+8) in the export
-    const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-    const toLocal = (d?: Date | null) => (d ? new Date(new Date(d).getTime() + TZ_OFFSET_MS) : null);
+    // Show timestamps in UTC in the export
+
 
     // Create workbook first
     const workbook = new ExcelJS.Workbook();
@@ -332,8 +332,8 @@ export class AdminUserService {
           user.total_likes || 0,
           user.total_shares || 0,
           0, // quizWinner
-          toLocal(user.activated_at) || '',
-          toLocal(user.updated_at) || '',
+          user.activated_at || '',
+          user.updated_at || '',
         ];
         worksheet.addRow(rowData);
       }
@@ -369,18 +369,18 @@ export class AdminUserService {
       baseQuery.where('user.name LIKE :search OR user.email LIKE :search', { search: `%${search}%` });
     }
 
-    // Treat start_date/end_date as LOCAL (UTC+8) calendar days
+    // Treat start_date/end_date as UTC calendar days
     if (start_date && end_date) {
-      const startLocal = new Date(start_date as any);
-      startLocal.setHours(0, 0, 0, 0);
+      const startDay = new Date(start_date as any);
+      startDay.setUTCHours(0, 0, 0, 0);
 
-      const endLocal = new Date(end_date as any);
-      endLocal.setHours(23, 59, 59, 999);
+      const endDay = new Date(end_date as any);
+      endDay.setUTCHours(23, 59, 59, 999);
 
-      // Convert LOCAL → UTC for DB filtering
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-      const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-      const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+      // Compare UTC calendar bounds directly.
+
+      const startUtc = new Date(startDay.getTime());
+      const endUtc = new Date(endDay.getTime());
 
       baseQuery.andWhere('user.activated_at BETWEEN :start_date AND :end_date', {
         start_date: startUtc,
@@ -390,9 +390,8 @@ export class AdminUserService {
 
     baseQuery.orderBy('user.activated_at', 'ASC');
 
-    // Show timestamps in LOCAL (UTC+8) in the export
-    const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-    const toLocal = (d?: Date | null) => (d ? new Date(new Date(d).getTime() + TZ_OFFSET_MS) : null);
+    // Show timestamps in UTC in the export
+
 
     // Helper function to escape CSV values
     const escapeCsv = (value: any): string => {
@@ -444,8 +443,8 @@ export class AdminUserService {
           user.total_likes || 0,
           user.total_shares || 0,
           0, // quizWinner
-          toLocal(user.activated_at) || '',
-          toLocal(user.updated_at) || '',
+          user.activated_at || '',
+          user.updated_at || '',
 
           user.userId,
           phone,
@@ -628,22 +627,22 @@ export class AdminUserService {
 
       // create wording
       if (list.targetType === 'comment') {
-        wording = `${memberName} comment with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toLocaleString()}`;
+        wording = `${memberName} comment with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toISOString()}`;
       } else if (list.targetType === 'reaction') {
-        wording = `${memberName} reacted with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toLocaleString()}`;
+        wording = `${memberName} reacted with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toISOString()}`;
       } else if (list.targetType === 'post') {
-        wording = `${memberName} created a post with action ${list.action} at ${list.createdAt.toLocaleString()}`;
+        wording = `${memberName} created a post with action ${list.action} at ${list.createdAt.toISOString()}`;
       } else if (list.targetType === 'login') {
-        wording = `${memberName} logged in with action ${list.action} at ${list.createdAt.toLocaleString()}`;
+        wording = `${memberName} logged in with action ${list.action} at ${list.createdAt.toISOString()}`;
       } else {
-        wording = `${memberName} activity at ${list.createdAt.toLocaleString()}`;
+        wording = `${memberName} activity at ${list.createdAt.toISOString()}`;
       }
 
       data.push({
         id: list.id,
         status: wording,
         type: list.targetType,
-        createdAt: list.createdAt.toLocaleString(),
+        createdAt: list.createdAt.toISOString(),
       });
     }
     return {
@@ -878,7 +877,7 @@ export class AdminUserService {
 
     const formattedData = data.map((item) => ({
       ...item,
-      created_at: format(addHours(new Date(item.created_at), 7), 'yyyy-MM-dd HH:mm:ss'),
+      created_at: format(new Date(item.created_at), 'yyyy-MM-dd HH:mm:ss'),
     }));
 
     return {
@@ -907,7 +906,7 @@ export class AdminUserService {
       point: item.points,
       postId: item.post_id ? `${this.baseUrl}/post/${item.post_id}` : '',
       note: item.note || '',
-      published_at: format(addHours(new Date(item.created_at), 7), 'yyyy-MM-dd HH:mm:ss'),
+      published_at: format(new Date(item.created_at), 'yyyy-MM-dd HH:mm:ss'),
     }));
 
     return await this.writeToExcelQuestDetail(formattedData, 'Quest Detail', 'quest_detail');

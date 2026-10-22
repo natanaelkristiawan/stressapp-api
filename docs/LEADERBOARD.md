@@ -1,3 +1,8 @@
+UTC policy update (2026-10-22): month/cohort calculations now use UTC. Projection
+keys use `hof:utc:<period>:`; rebuild the current projection after deployment.
+Historical snapshots and old Redis keys remain untouched. See [UTC policy](UTC.md).
+Current schema uses synchronize:true; older migration instructions below are historical.
+
 # Leaderboard module
 
 One BullMQ queue and one Redis projection are shared by all three pods. Each pod
@@ -13,8 +18,8 @@ existing standalone Redis configuration, not Redis Cluster.
    This code change does not run a migration or change deployment configuration.
 2. Set `LEADERBOARD_ENABLED=true` on all pods; keep
    `LEADERBOARD_READ_ENABLED=false` during shadow validation.
-3. Invoke authenticated `GET /cron/daily-hof` to backfill the current GMT+8 month.
-   The existing external scheduler continues to hit this endpoint at 00:00 GMT+8.
+3. Invoke authenticated `GET /cron/daily-hof` to backfill the current UTC month.
+   External scheduler timing is unchanged; period calculations now use UTC.
    No internal HOF scheduler is enabled. Concurrent daily calls are rejected
    through a MySQL named lock shared across pods.
 4. Invoke Basic-Auth protected `GET /cron/leaderboard-validate` to compare all

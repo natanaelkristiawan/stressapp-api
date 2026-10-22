@@ -7,6 +7,7 @@ dotenv.config();
 
 export const AppDataSource = new DataSource({
   type: 'mysql',
+  timezone: 'Z',
   host: process.env.DB_HOST,
   port: parseInt(process.env.DB_PORT || '3306', 10),
   username: process.env.DB_USERNAME,

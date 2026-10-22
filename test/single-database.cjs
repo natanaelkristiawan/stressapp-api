@@ -27,6 +27,7 @@ async function visit(item) {
 async function check() {
   await visit(AppModule);
   assert.deepEqual(roots.map(options => options.name), ['mimate']);
+  assert.equal(roots[0].timezone, 'Z', 'MySQL timestamps must use UTC');
   const source = new DataSource(roots[0]);
   await source.buildMetadatas();
   assert.equal(source.entityMetadatas.filter(entity => entity.tableName === 'users').length, 1);

@@ -16,20 +16,20 @@ export class ReportService {
     ) { }
 
     private parseDateRangeUtc(dateStart?: string, dateEnd?: string): { startUtc?: Date; endUtc?: Date } {
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
         let startUtc: Date | undefined;
         let endUtc: Date | undefined;
 
         if (dateStart && dateStart.trim() !== '') {
-            const startLocal = new Date(dateStart.trim());
-            startLocal.setHours(0, 0, 0, 0);
-            startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
+            const startDay = new Date(dateStart.trim());
+            startDay.setUTCHours(0, 0, 0, 0);
+            startUtc = new Date(startDay.getTime());
         }
 
         if (dateEnd && dateEnd.trim() !== '') {
-            const endLocal = new Date(dateEnd.trim());
-            endLocal.setHours(23, 59, 59, 999);
-            endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+            const endDay = new Date(dateEnd.trim());
+            endDay.setUTCHours(23, 59, 59, 999);
+            endUtc = new Date(endDay.getTime());
         }
 
         return { startUtc, endUtc };
@@ -147,7 +147,7 @@ export class ReportService {
     async dailyPointCollection(filterDto?: ReportFilterDto): Promise<DailyPointCollectionResponse> {
         const qb = this.questPointDetailRepository
             .createQueryBuilder('qpd')
-            .select('DAYOFWEEK(DATE_ADD(qpd.created_at, INTERVAL 8 HOUR))', 'day_num')
+            .select('DAYOFWEEK(qpd.created_at)', 'day_num')
             .addSelect('COALESCE(SUM(qpd.points), 0)', 'total_points')
             .where('qpd.points > 0')
             .andWhere('qpd.note != :none', { none: 'Get point for activated account' })
@@ -155,7 +155,7 @@ export class ReportService {
 
         this.applyDateFilter(qb, filterDto?.date_start, filterDto?.date_end);
 
-        qb.groupBy('DAYOFWEEK(DATE_ADD(qpd.created_at, INTERVAL 8 HOUR))');
+        qb.groupBy('DAYOFWEEK(qpd.created_at)');
 
         const rawResults = await qb.getRawMany();
 
@@ -544,26 +544,26 @@ export class ReportService {
         const totalRecentPoints = collectors.reduce((acc, curr) => acc + curr.points, 0);
 
         // 2. Fetch Hourly Velocity Trend for the latest active date (or today)
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
         let latestDateStr = '';
         if (rawCollectors.length > 0 && rawCollectors[0].created_at) {
             const d = new Date(rawCollectors[0].created_at);
-            const dLocal = new Date(d.getTime() + TZ_OFFSET_MS);
-            latestDateStr = dLocal.toISOString().slice(0, 10);
+            const dateUtc = new Date(d.getTime());
+            latestDateStr = dateUtc.toISOString().slice(0, 10);
         } else {
-            const nowLocal = new Date(Date.now() + TZ_OFFSET_MS);
-            latestDateStr = nowLocal.toISOString().slice(0, 10);
+            const nowUtc = new Date(Date.now());
+            latestDateStr = nowUtc.toISOString().slice(0, 10);
         }
 
         const hourlyQb = this.questPointDetailRepository
             .createQueryBuilder('qpd')
-            .select('HOUR(DATE_ADD(qpd.created_at, INTERVAL 8 HOUR))', 'hour')
+            .select('HOUR(qpd.created_at)', 'hour')
             .addSelect('COALESCE(SUM(qpd.points), 0)', 'total_points')
             .where('qpd.points > 0')
             .andWhere('qpd.note != :none', { none: 'Get point for activated account' })
             .andWhere('(qpd.post_id IS NOT NULL OR qpd.comment_id IS NOT NULL OR qpd.reaction_id IS NOT NULL)')
-            .andWhere('DATE(DATE_ADD(qpd.created_at, INTERVAL 8 HOUR)) = :targetDate', { targetDate: latestDateStr })
-            .groupBy('HOUR(DATE_ADD(qpd.created_at, INTERVAL 8 HOUR))')
+            .andWhere('DATE(qpd.created_at) = :targetDate', { targetDate: latestDateStr })
+            .groupBy('HOUR(qpd.created_at)')
             .orderBy('hour', 'ASC');
 
         const hourlyRaw = await hourlyQb.getRawMany();

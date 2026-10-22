@@ -1,3 +1,4 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable } from "@nestjs/common";
 import { PostEntity, PostType } from "src/entity/post.entity";
 import { InjectDataSource, InjectRepository } from "@nestjs/typeorm";
@@ -13,7 +14,7 @@ import { TopSpace } from "./interfaces/admin-dashboard.interface";
 import { DataSource } from 'typeorm';
 import { SpaceEntity } from "src/entity/space.entity";
 import { Visitor } from "src/entity/visitor.entity";
-import { format } from 'date-fns'; 
+
 import {RequestLogEntity} from "src/entity/log.entity"
 import * as ExcelJS from 'exceljs';
 
@@ -60,18 +61,18 @@ export class CardRevisionService {
 
     async getActivity(start_date: Date, end_date: Date){
       this.dateStart = new Date(start_date);
-      this.dateStart.setHours(0, 0, 0, 0); 
+      this.dateStart.setUTCHours(0, 0, 0, 0);
       
       this.dateEnd = new Date(end_date);
-      this.dateEnd.setHours(23, 59, 59, 999); 
+      this.dateEnd.setUTCHours(23, 59, 59, 999);
       
       const range_day = this.getRangeDay();
       
       this.dateStartBefore = new Date(this.dateStart.getTime() - (range_day * 24 * 60 * 60 * 1000));
-      this.dateStartBefore.setHours(0, 0, 0, 0);
+      this.dateStartBefore.setUTCHours(0, 0, 0, 0);
       
       this.dateEndBefore = new Date(this.dateEnd.getTime() - (range_day * 24 * 60 * 60 * 1000));
-      this.dateEndBefore.setHours(23, 59, 59, 999);
+      this.dateEndBefore.setUTCHours(23, 59, 59, 999);
 
       // new member
       const {total: new_member, percentage: new_member_percentage, detailCount: new_member_detailCount} = await this.cardNewMembers();
@@ -131,18 +132,18 @@ export class CardRevisionService {
 
     async getPostActivity(start_date: Date, end_date: Date){
       this.dateStart = new Date(start_date);
-      this.dateStart.setHours(0, 0, 0, 0); 
+      this.dateStart.setUTCHours(0, 0, 0, 0);
       
       this.dateEnd = new Date(end_date);
-      this.dateEnd.setHours(23, 59, 59, 999); 
+      this.dateEnd.setUTCHours(23, 59, 59, 999);
 
       const range_day = this.getRangeDay();
       
       this.dateStartBefore = new Date(this.dateStart.getTime() - (range_day * 24 * 60 * 60 * 1000));
-      this.dateStartBefore.setHours(0, 0, 0, 0);
+      this.dateStartBefore.setUTCHours(0, 0, 0, 0);
       
       this.dateEndBefore = new Date(this.dateEnd.getTime() - (range_day * 24 * 60 * 60 * 1000));
-      this.dateEndBefore.setHours(23, 59, 59, 999);
+      this.dateEndBefore.setUTCHours(23, 59, 59, 999);
 
       // new posts
       const {total: new_posts, percentage: new_posts_percentage, detailCount: new_posts_detailCount} = await this.cardNewPosts();
@@ -180,29 +181,29 @@ export class CardRevisionService {
 
     // card new posts
     async cardNewPosts() {
-      // Treat this.dateStart/End as LOCAL (UTC+8) bounds like "YYYY-MM-DD 00:00:00" → "23:59:59.999"
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+      // Treat this.dateStart/End as UTC bounds like "YYYY-MM-DD 00:00:00" → "23:59:59.999"
+
 
       // Current window: local -> UTC for WHERE
-      const startUtc  = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-      const endUtc    = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+      const startUtc  = new Date(this.dateStart.getTime());
+      const endUtc    = new Date(this.dateEnd.getTime());
 
       // Previous window: local -> UTC for WHERE
-      const startUtcPrev = new Date(this.dateStartBefore.getTime() - TZ_OFFSET_MS);
-      const endUtcPrev   = new Date(this.dateEndBefore.getTime()   - TZ_OFFSET_MS);
+      const startUtcPrev = new Date(this.dateStartBefore.getTime());
+      const endUtcPrev   = new Date(this.dateEndBefore.getTime());
 
       // Total posts (current range, deduped by row)
       const count_1 = await this.postRepository.count({
         where: { published_at: Between(startUtc, endUtc) },
       });
 
-      // Daily breakdown by LOCAL (UTC+8) day: shift published_at +8h before DATE()
+      // Daily breakdown by UTC day: group published_at directly with DATE()
       const detailRows = await this.postRepository
         .createQueryBuilder('post')
-        .select("DATE(DATE_ADD(post.published_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(post.published_at)", "date")
         .addSelect("COUNT(*)", "count")
         .where("post.published_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(post.published_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(post.published_at)")
         .orderBy("date", "ASC")
         .getRawMany<{ date: string; count: string }>();
 
@@ -229,15 +230,15 @@ export class CardRevisionService {
 
     // card new replies
     async cardNewReplies() {
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-      // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-      const startUtc  = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-      const endUtc    = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+
+      // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+      const startUtc  = new Date(this.dateStart.getTime());
+      const endUtc    = new Date(this.dateEnd.getTime());
 
       // Previous window
-      const startUtcPrev = new Date(this.dateStartBefore.getTime() - TZ_OFFSET_MS);
-      const endUtcPrev   = new Date(this.dateEndBefore.getTime()   - TZ_OFFSET_MS);
+      const startUtcPrev = new Date(this.dateStartBefore.getTime());
+      const endUtcPrev   = new Date(this.dateEndBefore.getTime());
 
       // Totals
       const count_1 = await this.commentRepository.count({
@@ -246,10 +247,10 @@ export class CardRevisionService {
 
       const detailRows = await this.commentRepository
         .createQueryBuilder('comment')
-        .select("DATE(DATE_ADD(comment.created_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(comment.created_at)", "date")
         .addSelect("COUNT(*)", "count")
         .where("comment.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(comment.created_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(comment.created_at)")
         .orderBy("date", "ASC")
         .getRawMany<{ date: string; count: string }>();
 
@@ -269,15 +270,15 @@ export class CardRevisionService {
 
     // card new reactions
     async cardNewReactions() {
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
 
       // Current window (local -> UTC)
-      const startUtc  = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-      const endUtc    = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+      const startUtc  = new Date(this.dateStart.getTime());
+      const endUtc    = new Date(this.dateEnd.getTime());
 
       // Previous window (local -> UTC)
-      const startUtcPrev = new Date(this.dateStartBefore.getTime() - TZ_OFFSET_MS);
-      const endUtcPrev   = new Date(this.dateEndBefore.getTime()   - TZ_OFFSET_MS);
+      const startUtcPrev = new Date(this.dateStartBefore.getTime());
+      const endUtcPrev   = new Date(this.dateEndBefore.getTime());
 
       // Totals
       const count_1 = await this.reactionRepository.count({
@@ -286,10 +287,10 @@ export class CardRevisionService {
 
       const detailRows = await this.reactionRepository
         .createQueryBuilder('reaction')
-        .select("DATE(DATE_ADD(reaction.created_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(reaction.created_at)", "date")
         .addSelect("COUNT(*)", "count")
         .where("reaction.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(reaction.created_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(reaction.created_at)")
         .orderBy("date", "ASC")
         .getRawMany<{ date: string; count: string }>();
 
@@ -312,28 +313,28 @@ export class CardRevisionService {
       startDate: Date,
       endDate: Date
     ): Promise<{ date: string; activity: number }[]> {
-      // Build local (UTC+8) 00:00:00.000 → 23:59:59.999
-      const startLocal = new Date(startDate.getTime());
-      startLocal.setHours(0, 0, 0, 0);
+      // Build UTC 00:00:00.000 → 23:59:59.999
+      const startDay = new Date(startDate.getTime());
+      startDay.setUTCHours(0, 0, 0, 0);
     
-      const endLocal = new Date(endDate.getTime());
-      endLocal.setHours(23, 59, 59, 999);
+      const endDay = new Date(endDate.getTime());
+      endDay.setUTCHours(23, 59, 59, 999);
     
       // Convert that same local window to UTC bounds for WHERE
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-      const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-      const endUtc   = new Date(endLocal.getTime()   - TZ_OFFSET_MS);
+
+      const startUtc = new Date(startDay.getTime());
+      const endUtc   = new Date(endDay.getTime());
     
-      // Group by local day: shift published_at by +8h before DATE()
+      // Group by UTC day: shift published_at directly with DATE()
       const rows = await this.postRepository
         .createQueryBuilder('post')
-        .select("DATE(DATE_ADD(post.published_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(post.published_at)", "date")
         .addSelect("COUNT(*)", "activity")
         .where("post.published_at BETWEEN :start AND :end", {
           start: startUtc,
           end: endUtc,
         })
-        .groupBy("DATE(DATE_ADD(post.published_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(post.published_at)")
         .orderBy("date", "ASC")
         .getRawMany<{ date: string; activity: string }>();
     
@@ -347,28 +348,28 @@ export class CardRevisionService {
 
   // card new members
   async cardNewMembers() {
-    const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-    // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-    const startUtc  = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-    const endUtc    = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+
+    // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+    const startUtc  = new Date(this.dateStart.getTime());
+    const endUtc    = new Date(this.dateEnd.getTime());
 
     // Previous window (local → UTC)
-    const startUtcPrev = new Date(this.dateStartBefore.getTime() - TZ_OFFSET_MS);
-    const endUtcPrev   = new Date(this.dateEndBefore.getTime()   - TZ_OFFSET_MS);
+    const startUtcPrev = new Date(this.dateStartBefore.getTime());
+    const endUtcPrev   = new Date(this.dateEndBefore.getTime());
 
     // Total new members in current window
     const count_1 = await this.memberRepository.count({
       where: { activated_at: Between(startUtc, endUtc) },
     });
 
-    // Daily breakdown by LOCAL (UTC+8) day
+    // Daily breakdown by UTC day
     const detailRows = await this.memberRepository
       .createQueryBuilder('member')
-      .select("DATE(DATE_ADD(member.activated_at, INTERVAL 8 HOUR))", "date")
+      .select("DATE(member.activated_at)", "date")
       .addSelect("COUNT(*)", "count")
       .where("member.activated_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-      .groupBy("DATE(DATE_ADD(member.activated_at, INTERVAL 8 HOUR))")
+      .groupBy("DATE(member.activated_at)")
       .orderBy("date", "ASC")
       .getRawMany<{ date: string; count: string }>();
 
@@ -398,13 +399,13 @@ export class CardRevisionService {
 
   // card active members
   async cardActiveMembers() {
-    const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
 
     // Local → UTC bounds
-    const startUtc      = new Date(this.dateStart.getTime()       - TZ_OFFSET_MS);
-    const endUtc        = new Date(this.dateEnd.getTime()         - TZ_OFFSET_MS);
-    const startUtcPrev  = new Date(this.dateStartBefore.getTime() - TZ_OFFSET_MS);
-    const endUtcPrev    = new Date(this.dateEndBefore.getTime()   - TZ_OFFSET_MS);
+    const startUtc      = new Date(this.dateStart.getTime());
+    const endUtc        = new Date(this.dateEnd.getTime());
+    const startUtcPrev  = new Date(this.dateStartBefore.getTime());
+    const endUtcPrev    = new Date(this.dateEndBefore.getTime());
 
     // Current / previous unique active users (deduped across window)
     const currentActiveUsers  = await this.getUniqueActiveUserIds(startUtc, endUtc);
@@ -413,7 +414,7 @@ export class CardRevisionService {
     const count_1 = currentActiveUsers;
     const count_2 = previousActiveUsers;
 
-    // Daily active user counts by LOCAL (UTC+8) calendar day
+    // Daily active user counts by UTC calendar day
     const detailCount = await this.getDailyActiveUserCounts(startUtc, endUtc);
 
     let percentage: number;
@@ -426,7 +427,7 @@ export class CardRevisionService {
 
   /**
    * Unique active user IDs across the whole (UTC) window.
-   * Pass in UTC bounds that correspond to your selected LOCAL (UTC+8) days.
+   * Pass in UTC bounds that correspond to your selected UTC days.
    */
   private async getUniqueActiveUserIds(startUtc: Date, endUtc: Date): Promise<any> {
     const data = await Promise.all([
@@ -456,47 +457,47 @@ export class CardRevisionService {
   }
 
   /**
-   * Daily active users by LOCAL (UTC+8) calendar day.
+   * Daily active users by UTC calendar day.
    * - Filtering uses UTC bounds (startUtc/endUtc)
-   * - Grouping buckets into UTC+8 days using DATE_ADD(..., INTERVAL 8 HOUR)
+   * - Group buckets into UTC days using DATE(timestamp).
    */
   private async getDailyActiveUserCounts(
     startUtc: Date,
     endUtc: Date,
   ): Promise<Array<{ date: string; count: number }>> {
-    // Each table: count(*) per local (+08:00) day
+    // Each table: count(*) per UTC day
     const [postRows, commentRows, reactionRows] = await Promise.all([
       this.postRepository
         .createQueryBuilder('post')
-        .select("DATE(DATE_ADD(post.created_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(post.created_at)", "date")
         .addSelect("COUNT(*)", "count")
         .where("post.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(post.created_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(post.created_at)")
         .getRawMany<{ date: string; count: string }>(),
   
       this.commentRepository
         .createQueryBuilder('comment')
-        .select("DATE(DATE_ADD(comment.created_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(comment.created_at)", "date")
         .addSelect("COUNT(*)", "count")
         .where("comment.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(comment.created_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(comment.created_at)")
         .getRawMany<{ date: string; count: string }>(),
   
       this.reactionRepository
         .createQueryBuilder('reaction')
-        .select("DATE(DATE_ADD(reaction.created_at, INTERVAL 8 HOUR))", "date")
+        .select("DATE(reaction.created_at)", "date")
         .addSelect("COUNT(*)", "count")
         .where("reaction.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(reaction.created_at, INTERVAL 8 HOUR))")
+        .groupBy("DATE(reaction.created_at)")
         .getRawMany<{ date: string; count: string }>(),
     ]);
 
     const toYMD = (val: any): string => {
       if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
       const d = new Date(val);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
       return `${y}-${m}-${day}`;
     };
   
@@ -512,17 +513,17 @@ export class CardRevisionService {
     add(commentRows);
     add(reactionRows);
   
-    // Fill missing days with 0 (iterate local +08:00 days)
-    const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+    // Fill missing days with 0 (iterate local Z days)
+
     const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-    const startYmd = new Date(startUtc.getTime() + TZ_OFFSET_MS).toISOString().slice(0, 10);
-    const endYmd   = new Date(endUtc.getTime()   + TZ_OFFSET_MS).toISOString().slice(0, 10);
-    const startDayUtc = new Date(`${startYmd}T00:00:00.000+08:00`);
-    const endDayUtc   = new Date(`${endYmd}T00:00:00.000+08:00`);
+    const startYmd = new Date(startUtc.getTime()).toISOString().slice(0, 10);
+    const endYmd   = new Date(endUtc.getTime()).toISOString().slice(0, 10);
+    const startDayUtc = new Date(`${startYmd}T00:00:00.000Z`);
+    const endDayUtc   = new Date(`${endYmd}T00:00:00.000Z`);
   
     const result: Array<{ date: string; count: number }> = [];
     for (let t = startDayUtc.getTime(); t <= endDayUtc.getTime(); t += ONE_DAY_MS) {
-      const ymd = toYMD(new Date(t + TZ_OFFSET_MS));
+      const ymd = toYMD(new Date(t));
       result.push({ date: ymd, count: sumByDate.get(ymd) ?? 0 });
     }
   
@@ -530,13 +531,13 @@ export class CardRevisionService {
   }
     // card page view
     async cardPageView() {
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-      // Treat this.dateStart/End and *Before as LOCAL (UTC+8) bounds.
-      const startUtc      = new Date(this.dateStart.getTime()       - TZ_OFFSET_MS);
-      const endUtc        = new Date(this.dateEnd.getTime()         - TZ_OFFSET_MS);
-      const startUtcPrev  = new Date(this.dateStartBefore.getTime() - TZ_OFFSET_MS);
-      const endUtcPrev    = new Date(this.dateEndBefore.getTime()   - TZ_OFFSET_MS);
+
+      // Treat this.dateStart/End and *Before as UTC bounds.
+      const startUtc      = new Date(this.dateStart.getTime());
+      const endUtc        = new Date(this.dateEnd.getTime());
+      const startUtcPrev  = new Date(this.dateStartBefore.getTime());
+      const endUtcPrev    = new Date(this.dateEndBefore.getTime());
 
       const handlers = [
         'getAllHighlight', //homepage
@@ -557,20 +558,20 @@ export class CardRevisionService {
         .andWhere('log.createdAt BETWEEN :start AND :end', { start: startUtc, end: endUtc })
         .getRawOne<{ total: string }>();
 
-      // Daily breakdown by LOCAL (UTC+8) calendar day
+      // Daily breakdown by UTC calendar day
       const detailRows = await this.requestLogEntity
         .createQueryBuilder('log')
-        .select("DATE(DATE_ADD(log.createdAt, INTERVAL 8 HOUR))", "date")
+        .select("DATE(log.createdAt)", "date")
         .addSelect("COUNT(log.backup_member_id)", "count")
         .where("log.handler IN (:...handlers)", { handlers })
         .andWhere("log.backup_member_id IS NOT NULL")
         .andWhere("log.createdAt BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-        .groupBy("DATE(DATE_ADD(log.createdAt, INTERVAL 8 HOUR))")
+        .groupBy("DATE(log.createdAt)")
         .orderBy("date", "ASC")
         .getRawMany<{ date: string; count: string }>();
 
       const detailCount = detailRows.map(r => ({
-        date: r.date,                      // 'YYYY-MM-DD' (local day)
+        date: r.date,                      // 'YYYY-MM-DD' (UTC day)
         count: parseInt(r.count, 10) || 0, // number
       }));
 
@@ -657,10 +658,10 @@ export class CardRevisionService {
         if (!start_date || !end_date) return {};
       
         const start = new Date(start_date);
-        start.setHours(0, 0, 0, 0);
+        start.setUTCHours(0, 0, 0, 0);
       
         const end = new Date(end_date);
-        end.setHours(23, 59, 59, 999);
+        end.setUTCHours(23, 59, 59, 999);
       
         return { start, end };
     }
@@ -671,10 +672,10 @@ export class CardRevisionService {
       // Your normalizeDateRange returns local 00:00–23:59.999; keep using that
       const { start: date_start, end: date_end } = this.normalizeDateRange(start_date, end_date);
 
-      // Build UTC bounds that represent the same UTC+8 window
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
-      const startUtc = date_start ? new Date(date_start.getTime() - TZ_OFFSET_MS) : undefined;
-      const endUtc   = date_end   ? new Date(date_end.getTime()   - TZ_OFFSET_MS) : undefined;
+      // Build UTC bounds that represent the same UTC window
+
+      const startUtc = date_start ? new Date(date_start.getTime()) : undefined;
+      const endUtc   = date_end   ? new Date(date_end.getTime()) : undefined;
 
       // Check special August 2025 logic (kept as in your code; adjust if needed)
       let isAgust2025 = true;
@@ -682,31 +683,31 @@ export class CardRevisionService {
       // if (
       //   date_start &&
       //   date_end &&
-      //   date_start.getFullYear() >= 2025 &&
-      //   date_end.getFullYear() >= 2025 &&
-      //   date_start.getMonth() >= 7 && // >= August (0=Jan, so 7=August)
-      //   date_end.getMonth() >= 7      // also August or later
+      //   date_start.getUTCFullYear() >= 2025 &&
+      //   date_end.getUTCFullYear() >= 2025 &&
+      //   date_start.getUTCMonth() >= 7 && // >= August (0=Jan, so 7=August)
+      //   date_end.getUTCMonth() >= 7      // also August or later
       // ) {
       //   isAgust2025 = true;
       // }
 
-      // Group BY local day (UTC+8): shift createdAt by +8h before DATE()
+      // Group BY UTC day (UTC): shift createdAt directly with DATE()
       const result = await this.activityRepository
       .createQueryBuilder('activity')
-      .select("DATE(DATE_ADD(activity.createdAt, INTERVAL 8 HOUR))", "date")
+      .select("DATE(activity.createdAt)", "date")
       .addSelect("COUNT(DISTINCT activity.userId)", "activity")
       .where("activity.action = :action", { action: 'login' })
       .andWhere("activity.createdAt BETWEEN :start AND :end", { start: startUtc, end: endUtc })
-      .groupBy("DATE(DATE_ADD(activity.createdAt, INTERVAL 8 HOUR))")
+      .groupBy("DATE(activity.createdAt)")
       .orderBy("date", "ASC")
       .getRawMany<{ date: string; activity: string }>();
 
       const toYMD = (val: any): string => {
         if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
         const d = new Date(val);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(d.getUTCDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
       };
 
@@ -718,13 +719,13 @@ export class CardRevisionService {
       // Helpers
       const handlersToExclude = ['detailMe', 'postHighlight', 'getStatus'];
 
-      // Count DISTINCT users for a specific local (UTC+8) date
+      // Count DISTINCT users for a specific UTC date
       const countDistinctUsersForDate = async (dateStr: string): Promise<{ userId: number }[]> => {
-        // Build the UTC bounds for that entire local day
-        const startLocal = new Date(`${dateStr}T00:00:00.000+08:00`); // this is a UTC instant
-        const endLocal   = new Date(`${dateStr}T23:59:59.999+08:00`);
-        const start = startLocal; // already UTC instants
-        const end   = endLocal;
+        // Build the UTC bounds for that entire UTC day
+        const startDay = new Date(`${dateStr}T00:00:00.000Z`); // this is a UTC instant
+        const endDay   = new Date(`${dateStr}T23:59:59.999Z`);
+        const start = startDay; // already UTC instants
+        const end   = endDay;
 
         const rows = await this.requestLogEntity
           .createQueryBuilder('el')
@@ -1165,21 +1166,21 @@ export class CardRevisionService {
       dateStart = `${dateStart} 00:00:00`
       dateEnd = `${dateEnd} 23:59:59`
 
-        // Build UTC bounds that represent the same UTC+8 window
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
-      const startUtc = dateStart ? new Date(new Date(dateStart).getTime() - TZ_OFFSET_MS) : undefined;
-      const endUtc   = dateEnd   ? new Date(new Date(dateEnd).getTime()   - TZ_OFFSET_MS) : undefined;
+        // Build UTC bounds that represent the same UTC window
+
+      const startUtc = dateStart ? new Date(new Date(dateStart).getTime()) : undefined;
+      const endUtc   = dateEnd   ? new Date(new Date(dateEnd).getTime()) : undefined;
 
 
       // 1=Sun .. 7=Sat (MySQL); group by numeric DOW only
       const rows = await this.requestLogEntity
         .createQueryBuilder('el')
-        .select(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`, 'dow')
+        .select(`DAYOFWEEK(el.createdAt)`, 'dow')
         .addSelect(`COUNT(el.backup_member_id)`, 'count')
         .where('el.handler NOT IN (:...handlers)', { handlers: handlersToExclude })
         .andWhere('el.backup_member_id IS NOT NULL')
         .andWhere('el.createdAt BETWEEN :start AND :end', { start: startUtc, end: endUtc })
-        .groupBy(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`)
+        .groupBy(`DAYOFWEEK(el.createdAt)`)
         .getRawMany<{ dow: string; count: string }>();
       
 
@@ -1209,22 +1210,22 @@ export class CardRevisionService {
       dateStart = `${dateStart} 00:00:00`
       dateEnd = `${dateEnd} 23:59:59`
 
-      // Build UTC bounds that represent the same UTC+8 window
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
-      const startUtc = dateStart ? new Date(new Date(dateStart).getTime() - TZ_OFFSET_MS) : undefined;
-      const endUtc   = dateEnd   ? new Date(new Date(dateEnd).getTime()   - TZ_OFFSET_MS) : undefined;
+      // Build UTC bounds that represent the same UTC window
+
+      const startUtc = dateStart ? new Date(new Date(dateStart).getTime()) : undefined;
+      const endUtc   = dateEnd   ? new Date(new Date(dateEnd).getTime()) : undefined;
 
 
       // Use numeric hour for grouping/ordering, format later
       const rows = await this.requestLogEntity
         .createQueryBuilder('el')
-        .select(`HOUR(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`, 'hour_num')
+        .select(`HOUR(el.createdAt)`, 'hour_num')
         .addSelect(`COUNT(el.backup_member_id)`, 'count')
         .where('el.handler NOT IN (:...handlers)', { handlers: handlersToExclude })
         .andWhere('el.backup_member_id IS NOT NULL')
         .andWhere('el.createdAt BETWEEN :start AND :end', { start: startUtc, end: endUtc })
-        .groupBy(`HOUR(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`)
-        .orderBy(`HOUR(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`, 'ASC')
+        .groupBy(`HOUR(el.createdAt)`)
+        .orderBy(`HOUR(el.createdAt)`, 'ASC')
         .getRawMany<{ hour_num: string; count: string }>();
 
       // Build a full, ordered 00..23 array
@@ -1246,14 +1247,13 @@ export class CardRevisionService {
     // clear member
     async clearMember(canExport:boolean = false): Promise<any> {
       this.dateStart = new Date('2025-08-01');
-      this.dateStart.setHours(0, 0, 0, 0); 
+      this.dateStart.setUTCHours(0, 0, 0, 0);
       
       this.dateEnd = new Date('2025-08-31');
-      this.dateEnd.setHours(23, 59, 59, 999); 
+      this.dateEnd.setUTCHours(23, 59, 59, 999);
 
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000; // UTC+8
-      const startUtc = this.dateStart ? new Date(new Date(this.dateStart).getTime() - TZ_OFFSET_MS) : undefined;
-      const endUtc   = this.dateEnd   ? new Date(new Date(this.dateEnd).getTime()   - TZ_OFFSET_MS) : undefined;
+      const startUtc = this.dateStart ? new Date(new Date(this.dateStart).getTime()) : undefined;
+      const endUtc   = this.dateEnd   ? new Date(new Date(this.dateEnd).getTime()) : undefined;
       
 
       // get data member
@@ -1359,7 +1359,7 @@ export class CardRevisionService {
       const reportItems: PostVoteReportItem[] = [];
       const voteMemberRepo = this.dataSource.getRepository(VoteMemberEntity);
 
-      const now = this.getJakartaNow();
+      const now = new Date();
 
       for (const post of posts) {
         let status: 'Draft' | 'Scheduled' | 'Active' | 'Ended' = 'Active';
@@ -1414,12 +1414,6 @@ export class CardRevisionService {
       return reportItems;
     }
 
-    private getJakartaNow(): Date {
-      const now = new Date();
-      const utcMillis = now.getTime() + now.getTimezoneOffset() * 60_000;
-      const jakartaOffsetMillis = 7 * 60 * 60_000;
-      return new Date(utcMillis + jakartaOffsetMillis);
-    }
 
     async exportPostVotesReportToExcel(): Promise<{ buffer: Buffer; filename: string }> {
       const data = await this.getPostVotesReport();

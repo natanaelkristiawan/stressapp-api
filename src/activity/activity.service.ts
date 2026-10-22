@@ -1,9 +1,10 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual, LessThanOrEqual, Between, Not, IsNull, In } from 'typeorm';
 import { Activity } from '../entity/activity.entity';
 import { ActivityAnalyticsDto, ActivityDto } from './dto/activity.dto';
-import { differenceInDays, format, startOfDay, subDays, addDays } from 'date-fns';
+
 import { PostEntity } from 'src/entity/post.entity';
 import { QuestService } from 'src/quest/quest.service';
 import { CommentEntity } from 'src/entity/comment.entity';
@@ -63,7 +64,7 @@ export class ActivityService {
     // check if already logged in per day
     async checkIfLoggedInPerDay(userId: number): Promise<boolean> {
         const lastLogin = await this.activityRepository.findOne({
-            where: { userId, action: 'login', createdAt: MoreThanOrEqual(startOfDay(new Date())) }
+            where: { userId, action: 'login', createdAt: MoreThanOrEqual(new Date(new Date().setUTCHours(0, 0, 0, 0))) }
         });
         return lastLogin !== null;
     }
@@ -438,10 +439,10 @@ export class ActivityService {
         if (!start_date || !end_date) return {};
 
         const start = new Date(start_date);
-        start.setHours(0, 0, 0, 0);
+        start.setUTCHours(0, 0, 0, 0);
 
         const end = new Date(end_date);
-        end.setHours(23, 59, 59, 999);
+        end.setUTCHours(23, 59, 59, 999);
 
         return { start, end };
     }
@@ -459,22 +460,20 @@ export class ActivityService {
         const date = `${format(normalizedStartDate, 'dd/MM/yyyy')} - ${format(normalizedEndDate, 'dd/MM/yyyy')}`;
 
         // Calculate duration
-        const duration = differenceInDays(normalizedEndDate, normalizedStartDate);
+        const duration = Math.floor((normalizedEndDate.getTime() - normalizedStartDate.getTime()) / 86400000);
 
         // Previous period range
-        const beforeStartDate = subDays(normalizedStartDate, duration);
+        const beforeStartDate = new Date(normalizedStartDate.getTime() - duration * 86400000);
         const beforeEndDate = normalizedStartDate;
 
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-        // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-        const startUtc = new Date(normalizedStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(normalizedEndDate.getTime() - TZ_OFFSET_MS);
+        // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+        const startUtc = new Date(normalizedStartDate.getTime());
+        const endUtc = new Date(normalizedEndDate.getTime());
 
         // Previous window
-        const startUtcPrev = new Date(beforeStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtcPrev = new Date(beforeEndDate.getTime() - TZ_OFFSET_MS);
+        const startUtcPrev = new Date(beforeStartDate.getTime());
+        const endUtcPrev = new Date(beforeEndDate.getTime());
 
         // Totals
         const count_1 = await this.commentRepository.count({
@@ -484,24 +483,24 @@ export class ActivityService {
 
         const detailRows = await this.commentRepository
             .createQueryBuilder('comment')
-            .select("DATE(DATE_ADD(comment.created_at, INTERVAL 8 HOUR))", "date")
+            .select("DATE(comment.created_at)", "date")
             .addSelect("COUNT(*)", "count")
             .where("comment.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
             .andWhere('backup_post_with_attribute_id = :postId', { postId })
-            .groupBy("DATE(DATE_ADD(comment.created_at, INTERVAL 8 HOUR))")
+            .groupBy("DATE(comment.created_at)")
             .orderBy("date", "ASC")
             .getRawMany<{ date: string; count: string }>();
 
         const byDate = new Map<string, number>(
-            detailRows.map(r => [new Date(r.date + TZ_OFFSET_MS).toISOString().slice(0, 10), parseInt(r.count, 10) || 0]),
+            detailRows.map(r => [new Date(r.date).toISOString().slice(0, 10), parseInt(r.count, 10) || 0]),
         );
 
         const detailCount: Array<{ date: string; count: number }> = [];
         const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
         for (let t = normalizedStartDate.getTime(); t <= normalizedEndDate.getTime(); t += ONE_DAY_MS) {
-            // Convert the UTC instant back to local (+08:00) calendar date string YYYY-MM-DD
-            const ymd = new Date(t + TZ_OFFSET_MS).toISOString().slice(0, 10);
+            // Convert the UTC instant back to UTC calendar date string YYYY-MM-DD
+            const ymd = new Date(t).toISOString().slice(0, 10);
             detailCount.push({ date: ymd, count: byDate.get(ymd) ?? 0 });
         }
 
@@ -536,22 +535,20 @@ export class ActivityService {
         const date = `${format(normalizedStartDate, 'dd/MM/yyyy')} - ${format(normalizedEndDate, 'dd/MM/yyyy')}`;
 
         // Calculate duration
-        const duration = differenceInDays(normalizedEndDate, normalizedStartDate);
+        const duration = Math.floor((normalizedEndDate.getTime() - normalizedStartDate.getTime()) / 86400000);
 
         // Previous period range
-        const beforeStartDate = subDays(normalizedStartDate, duration);
+        const beforeStartDate = new Date(normalizedStartDate.getTime() - duration * 86400000);
         const beforeEndDate = normalizedStartDate;
 
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-        // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-        const startUtc = new Date(normalizedStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(normalizedEndDate.getTime() - TZ_OFFSET_MS);
+        // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+        const startUtc = new Date(normalizedStartDate.getTime());
+        const endUtc = new Date(normalizedEndDate.getTime());
 
         // Previous window
-        const startUtcPrev = new Date(beforeStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtcPrev = new Date(beforeEndDate.getTime() - TZ_OFFSET_MS);
+        const startUtcPrev = new Date(beforeStartDate.getTime());
+        const endUtcPrev = new Date(beforeEndDate.getTime());
 
         // Totals
         const count_1 = await this.reactionRepository.count({
@@ -561,24 +558,24 @@ export class ActivityService {
 
         const detailRows = await this.reactionRepository
             .createQueryBuilder('reaction')
-            .select("DATE(DATE_ADD(reaction.created_at, INTERVAL 8 HOUR))", "date")
+            .select("DATE(reaction.created_at)", "date")
             .addSelect("COUNT(*)", "count")
             .where("reaction.created_at BETWEEN :start AND :end", { start: startUtc, end: endUtc })
             .andWhere('backup_post_with_attribute_id = :postId', { postId })
-            .groupBy("DATE(DATE_ADD(reaction.created_at, INTERVAL 8 HOUR))")
+            .groupBy("DATE(reaction.created_at)")
             .orderBy("date", "ASC")
             .getRawMany<{ date: string; count: string }>();
 
         const byDate = new Map<string, number>(
-            detailRows.map(r => [new Date(r.date + TZ_OFFSET_MS).toISOString().slice(0, 10), parseInt(r.count, 10) || 0]),
+            detailRows.map(r => [new Date(r.date).toISOString().slice(0, 10), parseInt(r.count, 10) || 0]),
         );
 
         const detailCount: Array<{ date: string; count: number }> = [];
         const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
         for (let t = normalizedStartDate.getTime(); t <= normalizedEndDate.getTime(); t += ONE_DAY_MS) {
-            // Convert the UTC instant back to local (+08:00) calendar date string YYYY-MM-DD
-            const ymd = new Date(t + TZ_OFFSET_MS).toISOString().slice(0, 10);
+            // Convert the UTC instant back to UTC calendar date string YYYY-MM-DD
+            const ymd = new Date(t).toISOString().slice(0, 10);
             detailCount.push({ date: ymd, count: byDate.get(ymd) ?? 0 });
         }
 
@@ -613,34 +610,32 @@ export class ActivityService {
         const date = `${format(normalizedStartDate, 'dd/MM/yyyy')} - ${format(normalizedEndDate, 'dd/MM/yyyy')}`;
 
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-        // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-        const startUtc = new Date(normalizedStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(normalizedEndDate.getTime() - TZ_OFFSET_MS);
+        // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+        const startUtc = new Date(normalizedStartDate.getTime());
+        const endUtc = new Date(normalizedEndDate.getTime());
 
 
         const detailRows = await this.activityRepository
             .createQueryBuilder('el')
-            .select("DATE(DATE_ADD(el.createdAt, INTERVAL 8 HOUR))", "date")
+            .select("DATE(el.createdAt)", "date")
             .addSelect("COUNT(*)", "count")
             .where("el.createdAt BETWEEN :start AND :end", { start: startUtc, end: endUtc })
             .andWhere('action = :action', { action: 'share' })
             .andWhere('postId = :postId', { postId })
-            .groupBy("DATE(DATE_ADD(el.createdAt, INTERVAL 8 HOUR))")
+            .groupBy("DATE(el.createdAt)")
             .orderBy("date", "ASC")
             .getRawMany<{ date: string; count: string }>();
 
         const byDate = new Map<string, number>(
-            detailRows.map(r => [new Date(r.date + TZ_OFFSET_MS).toISOString().slice(0, 10), parseInt(r.count, 10) || 0]),
+            detailRows.map(r => [new Date(r.date).toISOString().slice(0, 10), parseInt(r.count, 10) || 0]),
         );
 
         const detailCount: Array<{ date: string; count: number }> = [];
         const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
         for (let t = normalizedStartDate.getTime(); t <= normalizedEndDate.getTime(); t += ONE_DAY_MS) {
-            // Convert the UTC instant back to local (+08:00) calendar date string YYYY-MM-DD
-            const ymd = new Date(t + TZ_OFFSET_MS).toISOString().slice(0, 10);
+            // Convert the UTC instant back to UTC calendar date string YYYY-MM-DD
+            const ymd = new Date(t).toISOString().slice(0, 10);
             detailCount.push({ date: ymd, count: byDate.get(ymd) ?? 0 });
         }
 
@@ -684,22 +679,20 @@ export class ActivityService {
         const date = `${format(normalizedStartDate, 'dd/MM/yyyy')} - ${format(normalizedEndDate, 'dd/MM/yyyy')}`;
 
         // Calculate duration
-        const duration = differenceInDays(normalizedEndDate, normalizedStartDate);
+        const duration = Math.floor((normalizedEndDate.getTime() - normalizedStartDate.getTime()) / 86400000);
 
         // Previous period range
-        const beforeStartDate = subDays(normalizedStartDate, duration);
+        const beforeStartDate = new Date(normalizedStartDate.getTime() - duration * 86400000);
         const beforeEndDate = normalizedStartDate;
 
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-        // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-        const startUtc = new Date(normalizedStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(normalizedEndDate.getTime() - TZ_OFFSET_MS);
+        // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+        const startUtc = new Date(normalizedStartDate.getTime());
+        const endUtc = new Date(normalizedEndDate.getTime());
 
         // Previous window
-        const startUtcPrev = new Date(beforeStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtcPrev = new Date(beforeEndDate.getTime() - TZ_OFFSET_MS);
+        const startUtcPrev = new Date(beforeStartDate.getTime());
+        const endUtcPrev = new Date(beforeEndDate.getTime());
 
         const count_1 = await this.activityRepository.count({
             where: {
@@ -728,12 +721,12 @@ export class ActivityService {
 
         const rows = await this.activityRepository
             .createQueryBuilder('el')
-            .select(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`, 'dow') // 1=Sun..7=Sat
+            .select(`DAYOFWEEK(el.createdAt)`, 'dow') // 1=Sun..7=Sat
             .addSelect(`COUNT(el.userId)`, 'count') // distinct users
             .where('el.postId = :postId', { postId })
             .andWhere('el.action = :action', { action: 'view' })
             .andWhere('el.createdAt BETWEEN :start AND :end', { start: startUtc, end: endUtc })
-            .groupBy(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`)
+            .groupBy(`DAYOFWEEK(el.createdAt)`)
             .orderBy('dow', 'ASC')
             .getRawMany<{ dow: string; count: string }>();
 
@@ -814,27 +807,25 @@ export class ActivityService {
         const date = `${format(normalizedStartDate, 'dd/MM/yyyy')} - ${format(normalizedEndDate, 'dd/MM/yyyy')}`;
 
         // Calculate duration
-        const duration = differenceInDays(normalizedEndDate, normalizedStartDate);
+        const duration = Math.floor((normalizedEndDate.getTime() - normalizedStartDate.getTime()) / 86400000);
 
         // Previous period range
-        const beforeStartDate = subDays(normalizedStartDate, duration);
+        const beforeStartDate = new Date(normalizedStartDate.getTime() - duration * 86400000);
         const beforeEndDate = normalizedStartDate;
 
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-        // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-        const startUtc = new Date(normalizedStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(normalizedEndDate.getTime() - TZ_OFFSET_MS);
+        // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+        const startUtc = new Date(normalizedStartDate.getTime());
+        const endUtc = new Date(normalizedEndDate.getTime());
 
         // Previous window
-        const startUtcPrev = new Date(beforeStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtcPrev = new Date(beforeEndDate.getTime() - TZ_OFFSET_MS);
+        const startUtcPrev = new Date(beforeStartDate.getTime());
+        const endUtcPrev = new Date(beforeEndDate.getTime());
 
 
         const rows = await this.activityRepository
             .createQueryBuilder('el')
-            .select(`LPAD(HOUR(CONVERT_TZ(el.createdAt, '+00:00', '+08:00')), 2, '0')`, 'hour_num')
+            .select(`LPAD(HOUR(el.createdAt), 2, '0')`, 'hour_num')
             .addSelect(`COUNT(el.userId)`, 'count')
             .where('el.postId = :postId', { postId })
             .andWhere('el.targetType IN (:...target)', { target: ['post', 'comment', 'reaction'] })
@@ -845,7 +836,7 @@ export class ActivityService {
 
         const rowsBefore = await this.activityRepository
             .createQueryBuilder('el')
-            .select(`LPAD(HOUR(CONVERT_TZ(el.createdAt, '+00:00', '+08:00')), 2, '0')`, 'hour_num')
+            .select(`LPAD(HOUR(el.createdAt), 2, '0')`, 'hour_num')
             .addSelect(`COUNT(el.userId)`, 'count')
             .where('el.postId = :postId', { postId })
             .andWhere('el.targetType IN (:...target)', { target: ['post', 'comment', 'reaction'] })
@@ -894,45 +885,43 @@ export class ActivityService {
         const date = `${format(normalizedStartDate, 'dd/MM/yyyy')} - ${format(normalizedEndDate, 'dd/MM/yyyy')}`;
 
         // Calculate duration
-        const duration = differenceInDays(normalizedEndDate, normalizedStartDate);
+        const duration = Math.floor((normalizedEndDate.getTime() - normalizedStartDate.getTime()) / 86400000);
 
         // Previous period range
-        const beforeStartDate = subDays(normalizedStartDate, duration);
+        const beforeStartDate = new Date(normalizedStartDate.getTime() - duration * 86400000);
         const beforeEndDate = normalizedStartDate;
 
 
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-
-        // Current window (treat this.dateStart/End as LOCAL UTC+8; convert to UTC for WHERE)
-        const startUtc = new Date(normalizedStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(normalizedEndDate.getTime() - TZ_OFFSET_MS);
+        // Current window (treat this.dateStart/End as UTC; use UTC for WHERE)
+        const startUtc = new Date(normalizedStartDate.getTime());
+        const endUtc = new Date(normalizedEndDate.getTime());
 
         // Previous window
-        const startUtcPrev = new Date(beforeStartDate.getTime() - TZ_OFFSET_MS);
-        const endUtcPrev = new Date(beforeEndDate.getTime() - TZ_OFFSET_MS);
+        const startUtcPrev = new Date(beforeStartDate.getTime());
+        const endUtcPrev = new Date(beforeEndDate.getTime());
 
 
         const rows = await this.activityRepository
             .createQueryBuilder('el')
-            .select(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`, 'dow') // 1=Sun..7=Sat
+            .select(`DAYOFWEEK(el.createdAt)`, 'dow') // 1=Sun..7=Sat
             .addSelect(`COUNT(el.userId)`, 'count') // distinct users
             .where('el.postId = :postId', { postId })
             .andWhere('el.targetType IN (:...target)', { target: ['post', 'comment', 'reaction'] })
             // .andWhere('el.action IN (:...action)', {action:['view', 'create']})
             .andWhere('el.createdAt BETWEEN :start AND :end', { start: startUtc, end: endUtc })
-            .groupBy(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`)
+            .groupBy(`DAYOFWEEK(el.createdAt)`)
             .orderBy('dow', 'ASC')
             .getRawMany<{ dow: string; count: string }>();
 
         const rowsBefore = await this.activityRepository
             .createQueryBuilder('el')
-            .select(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`, 'dow') // 1=Sun..7=Sat
+            .select(`DAYOFWEEK(el.createdAt)`, 'dow') // 1=Sun..7=Sat
             .addSelect(`COUNT(el.userId)`, 'count') // distinct users
             .where('el.postId = :postId', { postId })
             .andWhere('el.targetType IN (:...target)', { target: ['post', 'comment', 'reaction'] })
             // .andWhere('el.action IN (:...action)', {action:['view', 'create']})
             .andWhere('el.createdAt BETWEEN :start AND :end', { start: startUtcPrev, end: endUtcPrev })
-            .groupBy(`DAYOFWEEK(CONVERT_TZ(el.createdAt, '+00:00', '+08:00'))`)
+            .groupBy(`DAYOFWEEK(el.createdAt)`)
             .orderBy('dow', 'ASC')
             .getRawMany<{ dow: string; count: string }>();
 
@@ -1029,15 +1018,15 @@ export class ActivityService {
 
             // create wording
             if (list.targetType === 'comment') {
-                wording = `${memberName} comment with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toLocaleString()}`;
+                wording = `${memberName} comment with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toISOString()}`;
             } else if (list.targetType === 'reaction') {
-                wording = `${memberName} reacted with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toLocaleString()}`;
+                wording = `${memberName} reacted with action ${list.action} at ${list.postId ? 'post ' + list.postId : ''} on ${list.createdAt.toISOString()}`;
             } else if (list.targetType === 'post') {
-                wording = `${memberName} created a post with action ${list.action} at ${list.createdAt.toLocaleString()}`;
+                wording = `${memberName} created a post with action ${list.action} at ${list.createdAt.toISOString()}`;
             } else if (list.targetType === 'login') {
-                wording = `${memberName} logged in with action ${list.action} at ${list.createdAt.toLocaleString()}`;
+                wording = `${memberName} logged in with action ${list.action} at ${list.createdAt.toISOString()}`;
             } else {
-                wording = `${memberName} activity at ${list.createdAt.toLocaleString()}`;
+                wording = `${memberName} activity at ${list.createdAt.toISOString()}`;
             }
 
             data.push({

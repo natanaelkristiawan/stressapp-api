@@ -103,6 +103,7 @@ import { CronModule } from './cron/cron.module';
     TypeOrmModule.forRoot({
       name: 'mimate',
       type: 'mysql',
+      timezone: 'Z',
       host: process.env.DB_HOST,
       port: parseInt(process.env.DB_PORT),
       username: process.env.DB_USERNAME,

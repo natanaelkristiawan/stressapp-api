@@ -88,17 +88,17 @@ export class ExportPostService {
     }
 
     async exportNewPosts(start_date: Date, end_date: Date) {
-        // Build LOCAL (UTC+8) bounds
+        // Build UTC bounds
         this.dateStart = new Date(start_date);
-        this.dateStart.setHours(0, 0, 0, 0);
+        this.dateStart.setUTCHours(0, 0, 0, 0);
       
         this.dateEnd = new Date(end_date);
-        this.dateEnd.setHours(23, 59, 59, 999);
+        this.dateEnd.setUTCHours(23, 59, 59, 999);
       
-        // Convert those LOCAL bounds to UTC for querying
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-        const startUtc = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-        const endUtc   = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+        // Convert those UTC bounds to UTC for querying
+
+        const startUtc = new Date(this.dateStart.getTime());
+        const endUtc   = new Date(this.dateEnd.getTime());
       
         const detail = await this.postRepository.find({
           where: {
@@ -124,10 +124,10 @@ export class ExportPostService {
           order: { published_at: 'ASC' },
         });
       
-        // Map to export shape. If you want the export in LOCAL time, convert below.
+        // Map to export shape. If you want the export in UTC time, convert below.
         const mapData: DataPost[] = detail.map((post) => {
-          // Optional: convert to UTC+8 for export display
-          const localPublishedAt = new Date(post.published_at.getTime() + TZ_OFFSET_MS);
+          // Optional: convert to UTC for export display
+          const publishedAtUtc = new Date(post.published_at.getTime());
       
           return {
             id: post.id,
@@ -140,7 +140,7 @@ export class ExportPostService {
             totalRepliesCount: post.totalRepliesCount,
             reactionsCount: post.reactionsCount,
             sharesCount: post.sharesCount,
-            published_at: localPublishedAt, // <- uncomment to export LOCAL (UTC+8)
+            published_at: publishedAtUtc, // <- uncomment to export UTC
             // published_at: post.published_at,  // <- keep UTC as-is if you prefer
           };
         });
@@ -188,17 +188,17 @@ export class ExportPostService {
 
     // new replies
     async exportNewReplies(start_date: Date, end_date: Date) {
-        // Build LOCAL (UTC+8) bounds
+        // Build UTC bounds
         this.dateStart = new Date(start_date);
-        this.dateStart.setHours(0, 0, 0, 0);
+        this.dateStart.setUTCHours(0, 0, 0, 0);
       
         this.dateEnd = new Date(end_date);
-        this.dateEnd.setHours(23, 59, 59, 999);
+        this.dateEnd.setUTCHours(23, 59, 59, 999);
       
-        // Convert LOCAL bounds → UTC for querying
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-        const startUtc = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-        const endUtc   = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+        // Convert UTC bounds → UTC for querying
+
+        const startUtc = new Date(this.dateStart.getTime());
+        const endUtc   = new Date(this.dateEnd.getTime());
       
         const detail = await this.commentRepository.find({
           where: {
@@ -225,10 +225,10 @@ export class ExportPostService {
           order: { created_at: 'ASC' },
         });
       
-        // Map to export shape. If you want LOCAL time in the spreadsheet, convert below.
+        // Map to export shape. If you want UTC time in the spreadsheet, convert below.
         const mapData: DataReply[] = detail.map((reply) => {
-          // Optional: convert to UTC+8 for export display
-          const createdAtLocal = new Date(reply.created_at.getTime() + TZ_OFFSET_MS);
+          // Optional: convert to UTC for export display
+          const createdAtUtc = new Date(reply.created_at.getTime());
       
           return {
             id: reply.id,
@@ -240,7 +240,7 @@ export class ExportPostService {
             mmid_fullname: reply.member?.mmid_fullname,
             postId: reply.post?.id,
             postTitle: reply.post?.title,
-            created_at: createdAtLocal, // <- uncomment to export LOCAL (UTC+8)
+            created_at: createdAtUtc, // <- uncomment to export UTC
             // created_at: reply.created_at,  // <- keep UTC as-is if you prefer
           };
         });
@@ -286,17 +286,17 @@ export class ExportPostService {
 
     // new reactions
     async exportNewReactions(start_date: Date, end_date: Date) {
-        // Build LOCAL (UTC+8) bounds
+        // Build UTC bounds
         this.dateStart = new Date(start_date);
-        this.dateStart.setHours(0, 0, 0, 0);
+        this.dateStart.setUTCHours(0, 0, 0, 0);
     
         this.dateEnd = new Date(end_date);
-        this.dateEnd.setHours(23, 59, 59, 999);
+        this.dateEnd.setUTCHours(23, 59, 59, 999);
     
-        // Convert LOCAL bounds → UTC for querying
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-        const startUtc = new Date(this.dateStart.getTime() - TZ_OFFSET_MS);
-        const endUtc   = new Date(this.dateEnd.getTime()   - TZ_OFFSET_MS);
+        // Convert UTC bounds → UTC for querying
+
+        const startUtc = new Date(this.dateStart.getTime());
+        const endUtc   = new Date(this.dateEnd.getTime());
     
         const detail = await this.reactionRepository.find({
         where: {
@@ -323,10 +323,10 @@ export class ExportPostService {
         order: { created_at: 'ASC' },
         });
     
-        // Map to export shape. If you want LOCAL time in the spreadsheet, convert below.
+        // Map to export shape. If you want UTC time in the spreadsheet, convert below.
         const mapData: DataReaction[] = detail.map((reaction) => {
-        // Optional: convert to UTC+8 for export display
-        const createdAtLocal = new Date(reaction.created_at.getTime() + TZ_OFFSET_MS);
+        // Optional: convert to UTC for export display
+        const createdAtUtc = new Date(reaction.created_at.getTime());
     
         return {
             id: reaction.id,
@@ -338,7 +338,7 @@ export class ExportPostService {
             mmid_fullname: reaction.member?.mmid_fullname,
             postId: reaction.post?.id,
             postTitle: reaction.post?.title,
-            created_at: createdAtLocal, // ← show LOCAL (UTC+8) in export
+            created_at: createdAtUtc, // ← show UTC in export
             // created_at: reaction.created_at,  // ← keep UTC as-is if preferred
         };
         });

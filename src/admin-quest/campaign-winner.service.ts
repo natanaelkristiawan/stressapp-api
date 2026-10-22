@@ -96,14 +96,14 @@ export class CampaignWinnerService {
                     month = m;
                 } else if (!isNaN(Date.parse(trimmed))) {
                     const d = new Date(trimmed);
-                    year = d.getFullYear();
-                    month = d.getMonth() + 1;
+                    year = d.getUTCFullYear();
+                    month = d.getUTCMonth() + 1;
                 }
             }
 
             const now = new Date();
-            year = year && year > 0 ? Number(year) : now.getFullYear();
-            month = month && month >= 1 && month <= 12 ? Number(month) : now.getMonth() + 1;
+            year = year && year > 0 ? Number(year) : now.getUTCFullYear();
+            month = month && month >= 1 && month <= 12 ? Number(month) : now.getUTCMonth() + 1;
 
             // 1. Cek apakah user exist di UserMimateEntity
             const user = await this.userMimateRepo.findOne({
@@ -257,8 +257,8 @@ export class CampaignWinnerService {
     async getWinnerList(dto: GetWinnerDto): Promise<WinnerListItemInterface[]> {
         try {
             const now = new Date();
-            const year = dto.year && Number(dto.year) > 0 ? Number(dto.year) : now.getFullYear();
-            const month = dto.month && Number(dto.month) >= 1 && Number(dto.month) <= 12 ? Number(dto.month) : now.getMonth() + 1;
+            const year = dto.year && Number(dto.year) > 0 ? Number(dto.year) : now.getUTCFullYear();
+            const month = dto.month && Number(dto.month) >= 1 && Number(dto.month) <= 12 ? Number(dto.month) : now.getUTCMonth() + 1;
 
             const qb = this.campaignWinnerRepo
                 .createQueryBuilder('winner')

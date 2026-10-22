@@ -1,7 +1,8 @@
+import { formatUtc as format } from '../common/helpers/date.helper';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { format } from 'date-fns';
+
 import { QuestPointDetail } from 'src/entity/quest-point-detail.entity';
 import { QuestPoint } from 'src/entity/quest-point.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
@@ -47,7 +48,7 @@ export class WinnerSetService {
         dto: GetMostExistUserDto,
     ): Promise<boolean> {
         try {
-            const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000);
+            const now = new Date();
             const targetYear =
                 dto.year && dto.year > 0 ? Number(dto.year) : now.getUTCFullYear();
             const targetMonth =
@@ -55,21 +56,20 @@ export class WinnerSetService {
                     ? Number(dto.month)
                     : now.getUTCMonth() + 1;
 
-            const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-            // Awal tanggal bulan (GMT+8) -> convert to UTC
-            const startOfMonthLocal = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0, 0));
-            // Akhir tanggal bulan (GMT+8) -> convert to UTC
-            const endOfMonthLocal = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
+            // Awal tanggal bulan (UTC) -> convert to UTC
+            const startOfMonthUtc = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0, 0));
+            // Akhir tanggal bulan (UTC) -> convert to UTC
+            const endOfMonthUtc = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
 
-            const startUtc = new Date(startOfMonthLocal.getTime() - TZ_OFFSET_MS);
-            const endUtc = new Date(endOfMonthLocal.getTime() - TZ_OFFSET_MS);
+            const startUtc = new Date(startOfMonthUtc.getTime());
+            const endUtc = new Date(endOfMonthUtc.getTime());
 
-            const startDateStr = format(startOfMonthLocal, 'yyyy-MM-dd 00:00:00');
-            const endDateStr = format(endOfMonthLocal, 'yyyy-MM-dd 23:59:59');
+            const startDateStr = format(startOfMonthUtc, 'yyyy-MM-dd 00:00:00');
+            const endDateStr = format(endOfMonthUtc, 'yyyy-MM-dd 23:59:59');
 
             this.logger.log(
-                `Generating & saving 'Paling Eksis' winners for period GMT+8: ${startDateStr} to ${endDateStr}`,
+                `Generating & saving 'Paling Eksis' winners for period UTC: ${startDateStr} to ${endDateStr}`,
             );
 
             // Query akumulasi point dari quest_point_detail dengan filter Post, Comment, Like/Reaction, & Share
@@ -122,13 +122,13 @@ export class WinnerSetService {
      *   dihitung mundur dari bulan saat ini (target month).
      * - Points dihitung berdasarkan MiMate Quest Points (akumulasi aktivitas Post, Comment, Likes, & Share)
      * - Total 5 pemenang untuk kategori ini.
-     * - Filter tanggal bergabung member (member.created_at) dan quest points menggunakan aturan GMT+8.
+     * - Filter tanggal bergabung member (member.created_at) dan quest points menggunakan aturan UTC.
      */
     async getBestNewcomerUsers(
         dto: GetBestNewcomerDto,
     ): Promise<boolean> {
         try {
-            const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000);
+            const now = new Date();
             const targetYear =
                 dto.year && dto.year > 0 ? Number(dto.year) : now.getUTCFullYear();
             const targetMonth =
@@ -136,30 +136,29 @@ export class WinnerSetService {
                     ? Number(dto.month)
                     : now.getUTCMonth() + 1;
 
-            const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-            // Periode bulan untuk evaluasi poin (GMT+8) -> convert to UTC
-            const startOfMonthLocal = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0, 0));
-            const endOfMonthLocal = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
+            // Periode bulan untuk evaluasi poin (UTC) -> convert to UTC
+            const startOfMonthUtc = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0, 0));
+            const endOfMonthUtc = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
 
-            const startUtc = new Date(startOfMonthLocal.getTime() - TZ_OFFSET_MS);
-            const endUtc = new Date(endOfMonthLocal.getTime() - TZ_OFFSET_MS);
+            const startUtc = new Date(startOfMonthUtc.getTime());
+            const endUtc = new Date(endOfMonthUtc.getTime());
 
-            // Window join 3 bulan terakhir dihitung mundur dari bulan target (GMT+8):
+            // Window join 3 bulan terakhir dihitung mundur dari bulan target (UTC):
             // Contoh: Target bulan 9 (September) -> window join: 1 Juli s/d 30 September (Bulan 7, 8, 9)
-            const joinStartLocal = new Date(Date.UTC(targetYear, targetMonth - 3, 1, 0, 0, 0, 0));
-            const joinEndLocal = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
+            const joinStartUtcDay = new Date(Date.UTC(targetYear, targetMonth - 3, 1, 0, 0, 0, 0));
+            const joinEndUtcDay = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
 
-            const joinStartUtc = new Date(joinStartLocal.getTime() - TZ_OFFSET_MS);
-            const joinEndUtc = new Date(joinEndLocal.getTime() - TZ_OFFSET_MS);
+            const joinStartUtc = new Date(joinStartUtcDay.getTime());
+            const joinEndUtc = new Date(joinEndUtcDay.getTime());
 
-            const startDateStr = format(startOfMonthLocal, 'yyyy-MM-dd 00:00:00');
-            const endDateStr = format(endOfMonthLocal, 'yyyy-MM-dd 23:59:59');
-            const joinStartStr = format(joinStartLocal, 'yyyy-MM-dd 00:00:00');
-            const joinEndStr = format(joinEndLocal, 'yyyy-MM-dd 23:59:59');
+            const startDateStr = format(startOfMonthUtc, 'yyyy-MM-dd 00:00:00');
+            const endDateStr = format(endOfMonthUtc, 'yyyy-MM-dd 23:59:59');
+            const joinStartStr = format(joinStartUtcDay, 'yyyy-MM-dd 00:00:00');
+            const joinEndStr = format(joinEndUtcDay, 'yyyy-MM-dd 23:59:59');
 
             this.logger.log(
-                `Generating & saving 'Pendatang Terbaik' winners: Join window GMT+8: ${joinStartStr} to ${joinEndStr}, Point period GMT+8: ${startDateStr} to ${endDateStr}`,
+                `Generating & saving 'Pendatang Terbaik' winners: Join window UTC: ${joinStartStr} to ${joinEndStr}, Point period UTC: ${startDateStr} to ${endDateStr}`,
             );
 
             // Query akumulasi point dari quest_point_detail dengan filter Post, Comment, Like/Reaction, & Share
@@ -169,7 +168,7 @@ export class WinnerSetService {
                 .innerJoin(UserMimateEntity, 'member', 'member.id = qpd.member_id')
                 .select('qpd.member_id', 'memberId')
                 .addSelect('COALESCE(SUM(qpd.points), 0)', 'monthlyPoints')
-                // Filter member join date dalam rentang 3 bulan terakhir (aturan GMT+8 di-convert ke UTC)
+                // Filter member join date dalam rentang 3 bulan terakhir (aturan UTC di-convert ke UTC)
                 .where('member.created_at >= :joinStartDate', { joinStartDate: joinStartUtc })
                 .andWhere('member.created_at <= :joinEndDate', { joinEndDate: joinEndUtc })
                 // Filter akumulasi poin pada periode bulan target
@@ -217,13 +216,13 @@ export class WinnerSetService {
      *   dihitung mundur dari bulan saat ini (target month), dan menjadi aktif kembali di bulan saat ini.
      * - Points dihitung berdasarkan MiMate Quest Points (akumulasi aktivitas Post, Comment, Likes, & Share)
      * - Total 5 pemenang untuk kategori ini.
-     * - Mengambil data log_last_active_manual difilter berdasarkan last_active dengan aturan GMT+8.
+     * - Mengambil data log_last_active_manual difilter berdasarkan last_active dengan aturan UTC.
      */
     async getTampilKembaliUsers(
         dto: GetTampilKembaliDto,
     ): Promise<boolean> {
         try {
-            const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000);
+            const now = new Date();
             const targetYear =
                 dto.year && dto.year > 0 ? Number(dto.year) : now.getUTCFullYear();
             const targetMonth =
@@ -231,38 +230,37 @@ export class WinnerSetService {
                     ? Number(dto.month)
                     : now.getUTCMonth() + 1;
 
-            const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-            // Periode bulan untuk evaluasi poin (GMT+8) -> convert to UTC
-            const startOfMonthLocal = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0, 0));
-            const endOfMonthLocal = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
+            // Periode bulan untuk evaluasi poin (UTC) -> convert to UTC
+            const startOfMonthUtc = new Date(Date.UTC(targetYear, targetMonth - 1, 1, 0, 0, 0, 0));
+            const endOfMonthUtc = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
 
-            const startUtc = new Date(startOfMonthLocal.getTime() - TZ_OFFSET_MS);
-            const endUtc = new Date(endOfMonthLocal.getTime() - TZ_OFFSET_MS);
+            const startUtc = new Date(startOfMonthUtc.getTime());
+            const endUtc = new Date(endOfMonthUtc.getTime());
 
-            // Batas tanggal 3 bulan tidak aktif dihitung mundur dari awal bulan target (GMT+8):
+            // Batas tanggal 3 bulan tidak aktif dihitung mundur dari awal bulan target (UTC):
             // Contoh: Target bulan 9 (September 2026) -> 3 bulan sebelumnya adalah Juni, Juli, Agustus.
-            // Cutoff tanggal awal 3 bulan tidak aktif = 1 Juni 2026 00:00:00 GMT+8.
-            const inactiveCutoffLocal = new Date(Date.UTC(targetYear, targetMonth - 1 - 3, 1, 0, 0, 0, 0));
-            const inactiveCutoffUtc = new Date(inactiveCutoffLocal.getTime() - TZ_OFFSET_MS);
+            // Cutoff tanggal awal 3 bulan tidak aktif = 1 Juni 2026 00:00:00 UTC.
+            const inactiveCutoffUtcDay = new Date(Date.UTC(targetYear, targetMonth - 1 - 3, 1, 0, 0, 0, 0));
+            const inactiveCutoffUtc = new Date(inactiveCutoffUtcDay.getTime());
 
-            const startDateStr = format(startOfMonthLocal, 'yyyy-MM-dd 00:00:00');
-            const endDateStr = format(endOfMonthLocal, 'yyyy-MM-dd 23:59:59');
-            const inactiveCutoffStr = format(inactiveCutoffLocal, 'yyyy-MM-dd 00:00:00');
+            const startDateStr = format(startOfMonthUtc, 'yyyy-MM-dd 00:00:00');
+            const endDateStr = format(endOfMonthUtc, 'yyyy-MM-dd 23:59:59');
+            const inactiveCutoffStr = format(inactiveCutoffUtcDay, 'yyyy-MM-dd 00:00:00');
 
             this.logger.log(
-                `Generating & saving 'Tampil Kembali' winners: Inactive cutoff GMT+8: < ${inactiveCutoffStr}, Point period GMT+8: ${startDateStr} to ${endDateStr}`,
+                `Generating & saving 'Tampil Kembali' winners: Inactive cutoff UTC: < ${inactiveCutoffStr}, Point period UTC: ${startDateStr} to ${endDateStr}`,
             );
 
             // Query akumulasi point dari quest_point_detail dengan filter Post, Comment, Like/Reaction, & Share
-            // serta filter user yang inactive selama 3 bulan terakhir dari log_last_active_manual (GMT+8)
+            // serta filter user yang inactive selama 3 bulan terakhir dari log_last_active_manual (UTC)
             const qb = this.questPointDetailRepo
                 .createQueryBuilder('qpd')
                 .innerJoin(UserMimateEntity, 'member', 'member.id = qpd.member_id')
                 .innerJoin(LogLastActiveManual, 'log', 'log.member_id = qpd.member_id')
                 .select('qpd.member_id', 'memberId')
                 .addSelect('COALESCE(SUM(qpd.points), 0)', 'monthlyPoints')
-                // Filter inactive dalam 3 bulan terakhir dari log_last_active_manual (GMT+8 dievaluasi via UTC timestamp):
+                // Filter inactive dalam 3 bulan terakhir dari log_last_active_manual (UTC dievaluasi via UTC timestamp):
                 // - Jika memiliki record last_active: last_active < batas 3 bulan yang lalu
                 // - Jika belum pernah aktif (last_active IS NULL): tanggal bergabung member harus sebelum batas 3 bulan yang lalu
                 .where(
@@ -406,14 +404,14 @@ export class WinnerSetService {
                     month = m;
                 } else if (!isNaN(Date.parse(trimmed))) {
                     const d = new Date(trimmed);
-                    year = d.getFullYear();
-                    month = d.getMonth() + 1;
+                    year = d.getUTCFullYear();
+                    month = d.getUTCMonth() + 1;
                 }
             }
 
             const now = new Date();
-            year = year && year > 0 ? Number(year) : now.getFullYear();
-            month = month && month >= 1 && month <= 12 ? Number(month) : now.getMonth() + 1;
+            year = year && year > 0 ? Number(year) : now.getUTCFullYear();
+            month = month && month >= 1 && month <= 12 ? Number(month) : now.getUTCMonth() + 1;
 
             // 1. Cek apakah user exist di UserMimateEntity
             const user = await this.userMimateRepo.findOne({

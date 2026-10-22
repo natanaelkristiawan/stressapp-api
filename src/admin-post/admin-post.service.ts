@@ -131,18 +131,18 @@ export class AdminPostService {
             break;
         }
       }
-      const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+
     
-      // Date filter: interpret start/end as local UTC+8 days → convert to UTC
+      // Date filter: interpret start/end as UTC days → convert to UTC
       if (start_date && end_date) {
-        const startLocal = new Date(start_date as any);
-        startLocal.setHours(0, 0, 0, 0);
-        const endLocal = new Date(end_date as any);
-        endLocal.setHours(23, 59, 59, 999);
+        const startDay = new Date(start_date as any);
+        startDay.setUTCHours(0, 0, 0, 0);
+        const endDay = new Date(end_date as any);
+        endDay.setUTCHours(23, 59, 59, 999);
     
         
-        const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+        const startUtc = new Date(startDay.getTime());
+        const endUtc = new Date(endDay.getTime());
     
         whereParts.push('post.created_at BETWEEN :start_date AND :end_date');
         params.start_date = startUtc;
@@ -196,9 +196,9 @@ export class AdminPostService {
           type: post.type,
           reactionsCount: post.reactionsCount,
           totalRepliesCount: post.totalRepliesCount,
-          created_at:  new Date(post.created_at.getTime() + TZ_OFFSET_MS),
-          updated_at: new Date(post.updated_at.getTime() + TZ_OFFSET_MS),
-          published_at: new Date(post.published_at.getTime() + TZ_OFFSET_MS),
+          created_at:  new Date(post.created_at.getTime()),
+          updated_at: new Date(post.updated_at.getTime()),
+          published_at: new Date(post.published_at.getTime()),
           deleted_at: post.deleted_at,
           isHidden: post.isHidden,
           post_type:post.post_type ? post.post_type: 'post',
@@ -414,16 +414,15 @@ export class AdminPostService {
         }
       }
     
-      // Date range (interpret as UTC+8 day, convert to UTC for DB)
+      // Date range (interpret as UTC day, convert to UTC for DB)
       if (start_date && end_date) {
-        const startLocal = new Date(start_date as any);
-        startLocal.setHours(0, 0, 0, 0);
-        const endLocal = new Date(end_date as any);
-        endLocal.setHours(23, 59, 59, 999);
-    
-        const TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
-        const startUtc = new Date(startLocal.getTime() - TZ_OFFSET_MS);
-        const endUtc = new Date(endLocal.getTime() - TZ_OFFSET_MS);
+        const startDay = new Date(start_date as any);
+        startDay.setUTCHours(0, 0, 0, 0);
+        const endDay = new Date(end_date as any);
+        endDay.setUTCHours(23, 59, 59, 999);
+
+        const startUtc = new Date(startDay.getTime());
+        const endUtc = new Date(endDay.getTime());
     
         // Use created_at (or swap to published_at if desired)
         qb.andWhere('post.created_at BETWEEN :start_date AND :end_date', {

@@ -3,17 +3,18 @@ export const CATEGORIES = [
   'Pendatang Terbaik',
   'Tampil kembali',
 ];
-export const OFFSET = 8 * 60 * 60 * 1000;
+/** Returns the UTC month containing the instant. */
 export function periodOf(date = new Date()) {
-  return new Date(date.getTime() + OFFSET).toISOString().slice(0, 7);
+  return date.toISOString().slice(0, 7);
 }
+/** Returns UTC month/cohort boundaries without local timezone shifts. */
 export function bounds(period: string) {
   const [year, month] = period.split('-').map(Number);
   return {
-    start: new Date(Date.UTC(year, month - 1, 1) - OFFSET),
-    end: new Date(Date.UTC(year, month, 1) - OFFSET),
-    joinStart: new Date(Date.UTC(year, month - 3, 1) - OFFSET),
-    cutoff: new Date(Date.UTC(year, month - 4, 1) - OFFSET),
+    start: new Date(Date.UTC(year, month - 1, 1)),
+    end: new Date(Date.UTC(year, month, 1)),
+    joinStart: new Date(Date.UTC(year, month - 3, 1)),
+    cutoff: new Date(Date.UTC(year, month - 4, 1)),
   };
 }
 // Match WinnerSetService, including SQL's exclusion of NULL notes.

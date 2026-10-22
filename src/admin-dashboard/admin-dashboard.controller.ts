@@ -591,7 +591,7 @@ export class AdminDashboardController {
 
       // Distinct users grouped by weekday (Mon..Sun)
       @Get('distinct-users/weekday')
-      @ApiOperation({ summary: 'Distinct users grouped by weekday (local +08:00)' })
+      @ApiOperation({ summary: 'Distinct users grouped by weekday (local Z)' })
       @ApiResponse({ status: 200, description: 'Success', example: {
         "success": true,
         "alert": {
@@ -637,7 +637,7 @@ export class AdminDashboardController {
 
       // Distinct users grouped by hour-of-day (00..23)
       @Get('distinct-users/hourly')
-      @ApiOperation({ summary: 'Distinct users grouped by hour-of-day 00–23 (local +08:00)' })
+      @ApiOperation({ summary: 'Distinct users grouped by hour-of-day 00–23 (local Z)' })
       @ApiResponse({ status: 200, description: 'Success', example: {
         "success": true,
         "alert": {

@@ -133,7 +133,7 @@ export class HofController {
   @Get('realtime')
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Current GMT+8 month: top 5 and logged-in member position',
+    summary: 'Current UTC month: top 5 and logged-in member position',
   })
   async getRealtime(@Req() request: any, @Query() dto: GetRealtimeHofDto) {
     const userId = request.userData?.id;

@@ -117,19 +117,20 @@ export class DirectMessageService {
         let response = await this.messageRepository.save(message);
 
         
-        // Convert to GMT+7 timezone
-        let gmt7Time = new Date(response.createdAt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        // Keep the original UTC instant.
+        let messageTime = new Date(response.createdAt);
         
         return {
           id: response.id,
           content: response.content,
           createdAt: response.createdAt,
-          time: gmt7Time.toLocaleTimeString('en-US', {
+          time: messageTime.toLocaleTimeString('en-US', {
+          timeZone: 'UTC',
             hour: '2-digit',
             minute: '2-digit',
             hour12: false,
           }),
-          date: this.formatDate(gmt7Time.toISOString().split('T')[0]),
+          date: this.formatDate(messageTime.toISOString().split('T')[0]),
           sender: {
             id: sender.id,
             name: this.getMemberName(sender.name, sender.mmid_fullname, sender.id),
@@ -174,19 +175,20 @@ export class DirectMessageService {
     results = messages.map((msg) => {
       const recipient = msg.conversation.participants.find(p => p.id !== msg.sender.id);
 
-      let utc7 = new Date(msg.createdAt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+      let messageTime = new Date(msg.createdAt);
   
       return {
         id: msg.id,
         content: msg.content,
-        createdAt: utc7,
+        createdAt: messageTime,
         // time change into am or pm  
-        time: utc7.toLocaleTimeString('en-US', {
+        time: messageTime.toLocaleTimeString('en-US', {
+          timeZone: 'UTC',
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,
         }),
-        date: this.formatDate(utc7.toISOString().split('T')[0]),
+        date: this.formatDate(messageTime.toISOString().split('T')[0]),
         sender: {
           isOwner: msg.sender.id === userId,
           id: msg.sender.id,
@@ -236,8 +238,9 @@ export class DirectMessageService {
         isOwner: sender.id === userId,
         lastSeenAt: sender.last_seen_at ? sender.last_seen_at : "",
         lastSeenAtTitle: senderSeenAtFormatted,
-        date: sender.last_seen_at ? this.formatDate(new Date(sender.last_seen_at.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })).toISOString().split('T')[0]) : "",
-        time: sender.last_seen_at ? new Date(sender.last_seen_at.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })).toLocaleTimeString('en-US', {
+        date: sender.last_seen_at ? this.formatDate(new Date(sender.last_seen_at).toISOString().split('T')[0]) : "",
+        time: sender.last_seen_at ? new Date(sender.last_seen_at).toLocaleTimeString('en-US', {
+          timeZone: 'UTC',
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,
@@ -251,8 +254,9 @@ export class DirectMessageService {
         isOwner: recipient.id === userId ,
         lastSeenAt: recipient.last_seen_at ? recipient.last_seen_at : "",
         lastSeenAtTitle: recipientSeenAtFormatted,
-        date: recipient.last_seen_at ? this.formatDate(new Date(recipient.last_seen_at.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })).toISOString().split('T')[0]) : "",
-        time: recipient.last_seen_at ? new Date(recipient.last_seen_at.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' })).toLocaleTimeString('en-US', {
+        date: recipient.last_seen_at ? this.formatDate(new Date(recipient.last_seen_at).toISOString().split('T')[0]) : "",
+        time: recipient.last_seen_at ? new Date(recipient.last_seen_at).toLocaleTimeString('en-US', {
+          timeZone: 'UTC',
           hour: '2-digit',
           minute: '2-digit',
           hour12: false,
@@ -356,8 +360,8 @@ export class DirectMessageService {
           lastMessageAtFormatted = this.dateHelper.getDateRange(lastMessage.createdAt, new Date())
         }
 
-        // Convert to UTC+7 timezone
-        let utc7LastMessage = new Date(lastMessage.createdAt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }));
+        // Keep the original UTC instant.
+        let lastMessageTime = new Date(lastMessage.createdAt);
         
         results.push({
           id: convo.id,
@@ -366,12 +370,13 @@ export class DirectMessageService {
           lastMessageAt: lastMessage.createdAt,
           lastMessageAtTitle: lastMessageAtFormatted,
           // time in am pm with same timezone as the user
-          time: utc7LastMessage.toLocaleTimeString('en-US', {
+          time: lastMessageTime.toLocaleTimeString('en-US', {
+          timeZone: 'UTC',
             hour: '2-digit',
             minute: '2-digit',
             hour12: false,
           }),
-          date: this.formatDate(utc7LastMessage.toISOString().split('T')[0]),
+          date: this.formatDate(lastMessageTime.toISOString().split('T')[0]),
           unreadCount,
         });
       }

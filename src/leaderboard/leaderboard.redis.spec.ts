@@ -11,7 +11,7 @@ describe('Redis leaderboard projection', () => {
     redis: Redis,
     directory: string,
     service: LeaderboardService;
-  const key = 'hof:2026-10:test:Paling Eksis';
+  const key = 'hof:utc:2026-10:test:Paling Eksis';
   beforeAll(async () => {
     directory = mkdtempSync('/private/tmp/hof-redis-');
     const socket = join(directory, 'redis.sock');
@@ -67,10 +67,10 @@ describe('Redis leaderboard projection', () => {
   });
   beforeEach(async () => {
     await redis.flushdb();
-    await redis.set('hof:2026-10:active', 'test');
+    await redis.set('hof:utc:2026-10:active', 'test');
     for (const category of CATEGORIES)
       await redis.hset(
-        `hof:2026-10:test:${category}:state`,
+        `hof:utc:2026-10:test:${category}:state`,
         'count',
         '0',
         'members',
@@ -130,14 +130,14 @@ describe('Redis leaderboard projection', () => {
   });
   it('switches complete generations without leaking another period', async () => {
     await update(1, 10, 1);
-    await redis.zadd('hof:2026-10:new:Paling Eksis', 99, memberKey(2));
+    await redis.zadd('hof:utc:2026-10:new:Paling Eksis', 99, memberKey(2));
     await redis.hset(
-      'hof:2026-10:new:Paling Eksis:versions',
+      'hof:utc:2026-10:new:Paling Eksis:versions',
       memberKey(2),
       '2',
     );
     await redis.hset(
-      'hof:2026-10:new:Paling Eksis:state',
+      'hof:utc:2026-10:new:Paling Eksis:state',
       'count',
       '1',
       'members',
@@ -146,7 +146,7 @@ describe('Redis leaderboard projection', () => {
     expect(
       (await service.read('2026-10', CATEGORIES[0], 1)).top[0].memberId,
     ).toBe(1);
-    await redis.set('hof:2026-10:active', 'new');
+    await redis.set('hof:utc:2026-10:active', 'new');
     expect(
       (await service.read('2026-10', CATEGORIES[0], 2)).top[0].memberId,
     ).toBe(2);
@@ -184,7 +184,7 @@ describe('Redis leaderboard projection', () => {
       ) => {
         await work(manager);
         // Prepared Redis data must not be visible before the DB commit.
-        expect(await redis.get('hof:2026-10:active')).toBe('test');
+        expect(await redis.get('hof:utc:2026-10:active')).toBe('test');
         if (failCommit) throw new Error('Commit failed');
       },
     };
@@ -205,13 +205,13 @@ describe('Redis leaderboard projection', () => {
     process.env.LEADERBOARD_ENABLED = 'true';
     try {
       await rebuildService().sync('2026-10');
-      const generation = await redis.get('hof:2026-10:active');
+      const generation = await redis.get('hof:utc:2026-10:active');
       expect(generation).not.toBe('test');
       expect((await service.read('2026-10', CATEGORIES[0], 2)).me.point).toBe(
         99,
       );
       expect(
-        await redis.ttl(`hof:2026-10:${generation}:${CATEGORIES[0]}:state`),
+        await redis.ttl(`hof:utc:2026-10:${generation}:${CATEGORIES[0]}:state`),
       ).toBe(-1);
     } finally {
       if (oldFlag === undefined) delete process.env.LEADERBOARD_ENABLED;
@@ -226,7 +226,7 @@ describe('Redis leaderboard projection', () => {
       await expect(rebuildService(true).sync('2026-10')).rejects.toThrow(
         'Commit failed',
       );
-      expect(await redis.get('hof:2026-10:active')).toBe('test');
+      expect(await redis.get('hof:utc:2026-10:active')).toBe('test');
       expect((await service.read('2026-10', CATEGORIES[0], 1)).me.point).toBe(
         50,
       );

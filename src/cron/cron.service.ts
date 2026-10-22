@@ -151,13 +151,10 @@ export class CronService {
 
     // Step 2: Backup and Reset Member Points for the concluded previous month
     try {
-      // Calculate concluded month and year in Asia/Singapore (GMT+8) timezone
-      const gmt8DateStr = new Date().toLocaleString('en-US', {
-        timeZone: 'Asia/Singapore',
-      });
-      const gmt8Now = new Date(gmt8DateStr);
-      let targetYear = gmt8Now.getFullYear();
-      let targetMonth = gmt8Now.getMonth(); // 0 for Jan, 9 for Oct (represents previous month since today is 1st)
+      // Calculate the concluded month using the same UTC calendar as the API.
+      const now = new Date();
+      let targetYear = now.getUTCFullYear();
+      let targetMonth = now.getUTCMonth(); // 0 for Jan, 9 for Oct (represents previous month since today is 1st)
 
       if (targetMonth === 0) {
         targetMonth = 12; // December of previous year

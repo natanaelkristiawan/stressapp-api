@@ -27,22 +27,22 @@ export class ReportPostService {
     async postActivity(start_date: Date, end_date: Date) {
         // Set start and end date with correct times
         this.dateStart = new Date(start_date);
-        this.dateStart.setHours(0, 0, 0, 0); // 00:00:00
+        this.dateStart.setUTCHours(0, 0, 0, 0); // 00:00:00
 
         this.dateEnd = new Date(end_date);
-        this.dateEnd.setHours(23, 59, 59, 999); // 23:59:59.999
+        this.dateEnd.setUTCHours(23, 59, 59, 999); // 23:59:59.999
 
         // Calculate number of full days in the range
         const days = Math.ceil((this.dateEnd.getTime() - this.dateStart.getTime()) / (1000 * 60 * 60 * 24));
 
         // Create the previous date range
         const new_date_start = new Date(this.dateStart);
-        new_date_start.setDate(new_date_start.getDate() - days);
-        new_date_start.setHours(0, 0, 0, 0); // Ensure start of day
+        new_date_start.setUTCDate(new_date_start.getUTCDate() - days);
+        new_date_start.setUTCHours(0, 0, 0, 0); // Ensure start of day
 
         const new_date_end = new Date(this.dateStart);
-        new_date_end.setDate(new_date_end.getDate() - 1);
-        new_date_end.setHours(23, 59, 59, 999); // End of previous day
+        new_date_end.setUTCDate(new_date_end.getUTCDate() - 1);
+        new_date_end.setUTCHours(23, 59, 59, 999); // End of previous day
 
         // Optionally assign
         this.dateStartBefore = new_date_start;
@@ -98,8 +98,8 @@ export class ReportPostService {
             const date = dates[index];
 
             // add time in date, if date start add 00:00:00 and if date end add 23:59:59
-            const date_start = new Date(date.setHours(0, 0, 0, 0))
-            const date_end = new Date(date.setHours(23, 59, 59, 999))
+            const date_start = new Date(date.setUTCHours(0, 0, 0, 0))
+            const date_end = new Date(date.setUTCHours(23, 59, 59, 999))
 
             // get activity by days
             const count = await this.activityRepository

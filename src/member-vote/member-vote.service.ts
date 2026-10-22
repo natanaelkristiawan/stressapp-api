@@ -41,15 +41,9 @@ export class MemberVoteService {
     return `${y}-${m}-${day}`;
   }
 
-  private getJakartaNow(): Date {
-    const now = new Date();
-    const utcMillis = now.getTime() + now.getTimezoneOffset() * 60_000;
-    const jakartaOffsetMillis = 7 * 60 * 60_000;
-    return new Date(utcMillis + jakartaOffsetMillis);
-  }
 
   private assertVoteWindow(post: PostEntity): void {
-    const now = this.getJakartaNow();
+    const now = new Date();
     if (post.vote_start != null && now < new Date(post.vote_start)) {
       throw new BadRequestException(`You can vote when the poll is open. This poll has not started yet.`);
     }

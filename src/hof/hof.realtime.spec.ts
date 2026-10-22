@@ -18,7 +18,7 @@ describe('Realtime HOF contract', () => {
     );
     return repo;
   };
-  it('falls back only to the current GMT+8 period and marks missing data unavailable', async () => {
+  it('falls back only to the current UTC period and marks missing data unavailable', async () => {
     const repo = repository();
     const service = new HofService(
       repo as any,

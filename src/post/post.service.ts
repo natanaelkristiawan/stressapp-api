@@ -855,7 +855,7 @@ export class PostService {
         }
 
         const { title, content, spaceId, tags, mediaIds, type, post_type: postType, vote_start: voteStart, vote_end: voteEnd } = params;
-        const utc7 = new Date()
+        const timestamp = new Date()
 
         if (title !== undefined) existingPost.title = title;
         if (content !== undefined) {
@@ -922,8 +922,8 @@ export class PostService {
                     tag: element,
                     slug: element.slug,
                     title: element.title,
-                    created_at: utc7,
-                    updated_at: utc7
+                    created_at: timestamp,
+                    updated_at: timestamp
                 }
                 await this.postTagRepository.save(postTag)
             }
@@ -949,7 +949,7 @@ export class PostService {
             }
         }
 
-        existingPost.updated_at = utc7;
+        existingPost.updated_at = timestamp;
         existingPost.isHidden = false;
         existingPost.type = type
         if (postType !== undefined) existingPost.post_type = postType
