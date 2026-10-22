@@ -1,3 +1,4 @@
+import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
 import { PostService } from './post.service';
 import { VoteService } from './vote.service';
@@ -21,16 +22,33 @@ import { UserAdmin } from 'src/entity/user-admin.entity';
 import { MoengageModule } from 'src/moengage/moengage.module';
 import { MemberVoteModule } from 'src/member-vote/member-vote.module';
 @Module({
-  imports:[
-    TypeOrmModule.forFeature([UserMimateEntity, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity, SpaceEntity, ReactionEntity, UserFollowEntity, Activity, MemberSpaceEntity, VoteEntity, UserAdmin], 'mimate'),
+  imports: [
+    ContentModerationModule,
+    TypeOrmModule.forFeature(
+      [
+        UserMimateEntity,
+        PostEntity,
+        TagsEntity,
+        PostTagsEntity,
+        AssetsEntity,
+        SpaceEntity,
+        ReactionEntity,
+        UserFollowEntity,
+        Activity,
+        MemberSpaceEntity,
+        VoteEntity,
+        UserAdmin,
+      ],
+      'mimate',
+    ),
     ProfileModule,
     ActivityModule,
     QueueModule,
     MoengageModule,
-    MemberVoteModule
+    MemberVoteModule,
   ],
   exports: [PostService, VoteService],
   providers: [PostService, VoteService],
-  controllers: [PostController]
+  controllers: [PostController],
 })
 export class PostModule {}

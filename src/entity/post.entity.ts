@@ -1,3 +1,4 @@
+import type { ModerationResult } from '../content-moderation/content-moderation.service';
 import { Column, CreateDateColumn, DeleteDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { UserMimateEntity } from "./user-mimate.entity";
 import { SpaceEntity } from "./space.entity";
@@ -28,6 +29,9 @@ export class PostEntity {
 
     @Column({ type: 'int', unsigned: true, default: 1 })
     contentRevision?: number;
+
+    @Column({ type: 'json', nullable: true, select: false })
+    moderation?: ModerationResult;
 
     @PrimaryGeneratedColumn()
     id?: number;

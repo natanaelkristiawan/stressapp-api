@@ -1,3 +1,4 @@
+import type { ModerationResult } from '../content-moderation/content-moderation.service';
 import {
     Column,
     CreateDateColumn,
@@ -19,6 +20,9 @@ import {
     name: 'backup_comments',
   })
   export class CommentEntity {
+    @Column({ type: 'json', nullable: true, select: false })
+    moderation?: ModerationResult;
+
     @PrimaryGeneratedColumn()
     id?: number;
 

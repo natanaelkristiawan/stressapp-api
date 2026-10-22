@@ -302,7 +302,7 @@ export class AdminPostController {
       }})
     async hidePost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
       const { id:userId } = request.userData; // admin
-      const data = await this.adminPostService.hideShowPost(id, true);
+      const data = await this.adminPostService.hideShowPost(id, true, request.userData.id);
 
       await this.adminPostActivityService.createActivity({
         userId,
@@ -338,7 +338,7 @@ export class AdminPostController {
       }})
     async showPost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
       const { id:userId } = request.userData; // admin
-      const data = await this.adminPostService.hideShowPost(id, false);
+      const data = await this.adminPostService.hideShowPost(id, false, request.userData.id);
 
       await this.adminPostActivityService.createActivity({
         userId,

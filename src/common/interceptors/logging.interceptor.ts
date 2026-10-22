@@ -17,6 +17,9 @@ export class LoggingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     if (
       [
+        'PostController',
+        'AdminPostController',
+        'CommentController',
         'MemberAuthController',
         'MemberWebAuthController',
         'PushDevicesController',

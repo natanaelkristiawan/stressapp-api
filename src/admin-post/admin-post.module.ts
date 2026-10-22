@@ -1,3 +1,4 @@
+import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { PsychoeducationController } from './psychoeducation.controller';
 import { AdminPostContentService } from './admin-post-content.service';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
@@ -19,6 +20,7 @@ import { AdminPostActivityService } from './admin-post-activity.service';
 
 @Module({
   imports: [
+    ContentModerationModule,
     AdminAuthModule,
     TypeOrmModule.forFeature(
       [PostEntity, SpaceEntity, UserMimateEntity, TagsEntity, Activity],

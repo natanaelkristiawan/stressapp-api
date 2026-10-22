@@ -1,3 +1,4 @@
+import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import { assertPostInteractionsVisible } from '../post/post-visibility';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm'; 
@@ -35,6 +36,7 @@ export class CommentService {
         private readonly dateHelper: DateHelper,
         private readonly redisService: RedisService,
         private readonly activityService: ActivityService,
+        private readonly moderation: ContentModerationService,
     ) {
         this.redis = this.redisService.getOrNil('default')
         if (!this.redis) {
@@ -301,6 +303,7 @@ export class CommentService {
         })
 
         assertPostInteractionsVisible(post);
+        const moderation = await this.moderation.assertPublishable([content], memberId);
         let parent:CommentEntity|null = null
 
 
@@ -338,6 +341,7 @@ export class CommentService {
         let name = this.getMemberName(member.name, member.mmid_fullname, member.id)
 
         let insert:CommentEntity = {
+            moderation,
             title: this.shortenText(content),
             description: content,
             post: post,
@@ -465,6 +469,7 @@ export class CommentService {
     
 
 
+        comment.moderation = await this.moderation.assertPublishable([content], memberId);
         comment.title = this.shortenText(content)
         comment.description = content
         comment.updated_at = new Date()

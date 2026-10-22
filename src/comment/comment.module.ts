@@ -1,3 +1,4 @@
+import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
 import { CommentController } from './comment.controller';
 import { CommentService } from './comment.service';
@@ -10,12 +11,22 @@ import { QueueModule } from 'src/queue/queue.module';
 import { ActivityModule } from 'src/activity/activity.module';
 import { CommentReactionEntity } from 'src/entity/comment-reaction.entity';
 @Module({
-  imports:[
-    TypeOrmModule.forFeature([UserMimateEntity, PostEntity, CommentEntity, Activity, CommentReactionEntity], 'mimate'),
+  imports: [
+    ContentModerationModule,
+    TypeOrmModule.forFeature(
+      [
+        UserMimateEntity,
+        PostEntity,
+        CommentEntity,
+        Activity,
+        CommentReactionEntity,
+      ],
+      'mimate',
+    ),
     QueueModule,
-    ActivityModule
+    ActivityModule,
   ],
   controllers: [CommentController],
-  providers: [CommentService]
+  providers: [CommentService],
 })
 export class CommentModule {}

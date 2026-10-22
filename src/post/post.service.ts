@@ -1,3 +1,4 @@
+import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import { ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
@@ -57,7 +58,8 @@ export class PostService {
         private activityService: ActivityService,
         private readonly dateHelper: DateHelper,
         private readonly redisService: RedisService,
-        private readonly memberVoteService: MemberVoteService
+        private readonly memberVoteService: MemberVoteService,
+        private readonly moderation: ContentModerationService
     ) {
         this.deeplink = process.env.DEEPLINK_URL
         this.redis = this.redisService.getOrNil('default')
@@ -675,6 +677,10 @@ export class PostService {
         const { title, content, spaceId, tags, mediaIds, type, post_type: postType = PostType.Post, vote_start: voteStart, vote_end: voteEnd } = params;
 
 
+        const moderation = await this.moderation.assertPublishable(
+            [title, content, ...(params.tags ?? []), ...(params.votes ?? []).map((option) => option.vote)], memberId,
+        );
+
         let shortenText = this.shortenText(content)
 
         // get spaceID 
@@ -754,6 +760,7 @@ export class PostService {
             subscribersCount: 0,
             reactionsCount: 0,
             status: "PUBLISHED",
+            moderation,
             spaceId: space.spaceId,
             space: space,
             repliesCount: 0,
@@ -855,6 +862,10 @@ export class PostService {
         }
 
         const { title, content, spaceId, tags, mediaIds, type, post_type: postType, vote_start: voteStart, vote_end: voteEnd } = params;
+        existingPost.moderation = await this.moderation.assertPublishable(
+            [title ?? existingPost.title, content ?? existingPost.textContent,
+                ...(params.tags ?? []), ...(params.votes ?? []).map((option) => option.vote)], memberId,
+        );
         const timestamp = new Date()
 
         if (title !== undefined) existingPost.title = title;

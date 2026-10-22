@@ -1,3 +1,4 @@
+import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AdminPostAnalyticsDto, AdminPostExportDto, AdminPostListDto, CreatePostHighlightDto } from './dtos/admin-post.dto';
 import { DataPost, Datatable } from './interfaces/datatable.interface';
@@ -18,6 +19,7 @@ export class AdminPostService {
         @InjectRepository(SpaceEntity, 'mimate') private spaceRepository: Repository<SpaceEntity>,
         @InjectRepository(UserMimateEntity, 'mimate') private userRepository: Repository<UserMimateEntity>,
         @InjectRepository(TagsEntity, 'mimate') private tagRepository: Repository<TagsEntity>,
+        private readonly moderation: ContentModerationService,
 
     ) {
         this.deeplink = process.env.DEEPLINK_URL
@@ -540,12 +542,17 @@ export class AdminPostService {
     }
 
     // hide post
-    async hideShowPost(post_id: number, hide: boolean): Promise<boolean> {
-        const post = await this.postRepository.findOne({ where: { id: post_id, isPsychoeducation: false } });
+    async hideShowPost(post_id: number, hide: boolean, actorId: number): Promise<boolean> {
+        const post = await this.postRepository.findOne({ where: { id: post_id, isPsychoeducation: false }, relations: ['votes'] });
         if (!post) {
             throw new NotFoundException('Post not found');
         }
 
+        if (!hide) {
+            post.moderation = await this.moderation.assertPublishable(
+                [post.title, post.textContent, ...(post.votes ?? []).map((option) => option.vote)], actorId,
+            );
+        }
         post.isHidden = hide;
         await this.postRepository.save(post);
         return true;

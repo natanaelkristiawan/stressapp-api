@@ -22,3 +22,4 @@ Run setup and test commands from the project root unless stated otherwise.
 - [CMS psychoeducation API](PSYCHOEDUCATION.md)
 
 - [API UTC date/time policy](UTC.md)
+- [OpenCode content moderation](CONTENT_MODERATION.md)
