@@ -9,7 +9,11 @@ import {
 const completionCreate = jest.fn();
 jest.mock('axios', () => ({
   __esModule: true,
-  default: { post: (...args: unknown[]) => completionCreate(...args) },
+  default: {
+    post: (...args: unknown[]) => completionCreate(...args),
+    isAxiosError: (error: { isAxiosError?: boolean }) =>
+      error?.isAxiosError === true,
+  },
 }));
 
 function completion(categories: string[] = [], uncertain = false) {
@@ -285,5 +289,82 @@ describe('ContentModerationService', () => {
     expect(JSON.stringify(service.status())).not.toContain(
       'synthetic-test-key',
     );
+  });
+  it('uses DeepSeek JSON mode with reasoning disabled while retaining strict local validation', async () => {
+    const deepseek = new ContentModerationService(
+      new ConfigService({
+        OPENCODE_API_KEY: 'synthetic',
+        OPENCODE_MODERATION_MODEL: 'deepseek-v4-flash',
+      }),
+      { getOrNil: () => redis } as unknown as RedisService,
+      queue as unknown as Queue<ModerationJob>,
+    );
+    expect((await deepseek.moderateContent(['safe'], 1)).action).toBe(
+      'publish',
+    );
+    const body = completionCreate.mock.calls[0][1];
+    expect(body.response_format).toEqual({ type: 'json_object' });
+    expect(body.thinking).toEqual({ type: 'disabled' });
+    expect(body.max_tokens).toBe(120);
+    expect(body.store).toBeUndefined();
+    expect(body.messages[0].content).toContain(
+      '"categories":[],"uncertain":false',
+    );
+    completionCreate.mockResolvedValue({
+      data: {
+        model: 'deepseek-v4-flash',
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: { content: '{"categories":["other"],"uncertain":false}' },
+          },
+        ],
+      },
+    });
+    expect(await deepseek.moderateContent(['edited'], 1)).toMatchObject({
+      action: 'pending',
+      diagnostic: 'invalid_response',
+    });
+  });
+
+  it.each([
+    [401, 'authentication_failed'],
+    [403, 'access_denied'],
+    [429, 'rate_limited'],
+    [400, 'request_rejected'],
+    [404, 'request_rejected'],
+    [503, 'provider_unavailable'],
+  ])(
+    'reports safe provider HTTP %s diagnostics',
+    async (status, diagnostic) => {
+      completionCreate.mockRejectedValue({
+        isAxiosError: true,
+        response: { status, data: 'private provider text' },
+      });
+      const result = await service.moderateContent(['text'], 1);
+      expect(result).toMatchObject({
+        action: 'pending',
+        error: 'unavailable',
+        diagnostic,
+      });
+      expect(JSON.stringify(result)).not.toContain('private provider text');
+    },
+  );
+
+  it('distinguishes timeout from output truncation', async () => {
+    completionCreate.mockRejectedValueOnce({
+      isAxiosError: true,
+      code: 'ECONNABORTED',
+    });
+    expect(await service.moderateContent(['one'], 1)).toMatchObject({
+      diagnostic: 'timeout',
+    });
+    const response = completion();
+    response.data.choices[0].finish_reason = 'length';
+    completionCreate.mockResolvedValueOnce(response);
+    expect(await service.moderateContent(['two'], 1)).toMatchObject({
+      diagnostic: 'output_truncated',
+      action: 'pending',
+    });
   });
 });

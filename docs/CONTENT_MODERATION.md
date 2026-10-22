@@ -63,7 +63,7 @@ Set API-only environment variables (never in app/CMS builds):
 | Variable | Value |
 | --- | --- |
 | `OPENCODE_API_KEY` | OpenCode Console inference key, preferably scoped to model requests |
-| `OPENCODE_MODERATION_MODEL` | A Chat Completions model ID available to the key, with strict JSON-schema support |
+| `OPENCODE_MODERATION_MODEL` | A Chat Completions model ID available to the key (DeepSeek uses JSON mode) |
 | `OPENCODE_MODERATION_TIMEOUT_MS` | Default 10000; integer 1000–30000 |
 | `OPENCODE_MODERATION_RETRY_ATTEMPTS` | Default 3 background attempts; integer 1–3 |
 
@@ -93,7 +93,10 @@ quality require live verification with the selected model before deployment.
    limited to 10/member/minute and provider calls to 200/API installation/minute,
    shared across API instances using the same Redis. Cached results cost no AI call.
 4. Send one system instruction and untrusted content, no history/tools, with a
-   strict schema containing only `categories` and `uncertain`. Output is capped
+   schema containing only `categories` and `uncertain`. DeepSeek Chat Completions
+   uses documented `json_object` mode with an explicit shape example and
+   `thinking: { type: disabled }`; other models retain `json_schema` mode. The
+   backend strictly validates the same fields/categories for either format. Output is capped
    at 120 tokens; no generated explanations or model chain. HTTP timeout is bounded,
    redirects disabled, response limited to 16 KiB. Parse and validate JSON locally.
 5. For member/default calls, empty categories + certain = publish. Any agreed violation = HTTP 422. Uncertain
@@ -160,3 +163,27 @@ AI call, deployed change, private credential setup or production DB change occur
 Prompt injection is constrained by instruction/data separation, strict parsing,
 fixed categories, no tools and no user-facing generated answer; model mistakes
 remain possible and need real Indonesian evaluation before launch.
+
+## DeepSeek compatibility and safe diagnostics (22 October 2026)
+
+A successful plain greeting curl verifies key/endpoint/model access, but not the
+classification request's JSON mode, timeout or output budget. DeepSeek documents
+JSON mode as `response_format: {type: json_object}` with a JSON example in the
+system prompt. For `deepseek-*` models the service now sends that format and
+requests reasoning disabled; it omits the unsupported optional storage flag.
+The 120-token output limit remains. Parsed classification fields still undergo
+the same strict local validation; malformed output cannot publish. See
+[JSON output](https://api-docs.deepseek.com/guides/json_mode/) and
+[thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/).
+OpenCode forwarding/actual model behavior needs live server verification.
+
+Pending/unavailable results now include an optional fixed `diagnostic` code:
+not_configured, cache_unavailable, busy, timeout, authentication_failed,
+access_denied, rate_limited, request_rejected, provider_unavailable,
+output_truncated, provider_refusal, or invalid_response. CMS maps these to fixed
+setup guidance. No raw provider errors, submitted text, keys or reasoning are
+returned/logged. Member publication errors remain the existing safe 422/503.
+`opencode-sara-abuse-sexual-v2` uses a new cache fingerprint so earlier generic
+pending decisions do not mask the fix; existing cache keys/jobs expire naturally.
+If the diagnostic is timeout, the existing OPENCODE_MODERATION_TIMEOUT_MS can be
+set up to 30000; it remains 10000 by default. No automatic budget increase.
