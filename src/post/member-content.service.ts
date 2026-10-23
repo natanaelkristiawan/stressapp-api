@@ -1,3 +1,5 @@
+import { TagsEntity } from '../entity/tags.entity';
+import { contentCategories, filterContentCategory } from './content-categories';
 import { ModerationMessagesService } from '../content-moderation/moderation-messages.service';
 import { violationType } from '../content-moderation/moderation-policy';
 import { Interval } from '@nestjs/schedule';
@@ -135,6 +137,7 @@ export class MemberContentService {
     });
     return {
       id: post.id,
+      categories: await contentCategories(manager, post.id),
       contentType: post.contentType,
       title: post.title,
       description: post.description ?? '',
@@ -153,14 +156,61 @@ export class MemberContentService {
     };
   }
 
+  /** Returns active categories shared by both content types, in bounded cursor pages. */
+  async categories(input: ContentPageDto) {
+    const scope = 'content-categories';
+    const query = this.posts.manager
+      .getRepository(TagsEntity)
+      .createQueryBuilder('category')
+      .where('category.isContentCategory = true')
+      .andWhere('category.categoryArchived = false');
+    // Category IDs are immutable, so catalog pagination does not depend on editable names.
+    if (input.after) {
+      try {
+        const cursor = JSON.parse(
+          Buffer.from(input.after, 'base64url').toString('utf8'),
+        );
+        if (
+          cursor.scope !== scope ||
+          !Number.isSafeInteger(cursor.id) ||
+          cursor.id < 1
+        ) {
+          throw new Error('Invalid');
+        }
+        query.andWhere('category.id > :afterId', { afterId: cursor.id });
+      } catch {
+        throw new BadRequestException('Cursor tidak valid.');
+      }
+    }
+    const rows = await query
+      .orderBy('category.id', 'ASC')
+      .take(input.limit + 1)
+      .getMany();
+    const hasNextPage = rows.length > input.limit;
+    const items = rows
+      .slice(0, input.limit)
+      .map((row) => ({ id: row.id, name: row.title, active: true }));
+    return {
+      items,
+      hasNextPage,
+      nextAfter: hasNextPage
+        ? Buffer.from(
+            JSON.stringify({ scope, id: items[items.length - 1].id }),
+          ).toString('base64url')
+        : null,
+    };
+  }
+
   /** Lists published articles/videos using true after cursors and server-side search. */
   async list(input: ContentPageDto, memberId: number) {
     const scope = JSON.stringify([
       'content',
       input.type ?? '',
       input.search ?? '',
+      input.categoryId ?? null,
     ]);
     const query = this.visible();
+    filterContentCategory(query, input.categoryId);
     if (input.type) {
       query.andWhere('post.contentType = :type', { type: input.type });
     }

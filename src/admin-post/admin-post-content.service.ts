@@ -1,3 +1,9 @@
+import { TagsEntity } from '../entity/tags.entity';
+import {
+  assignCategories,
+  contentCategories,
+  filterContentCategory,
+} from '../post/content-categories';
 import { youtubeIdFromUrl } from './youtube';
 import { createHash } from 'crypto';
 import { Activity } from '../entity/activity.entity';
@@ -17,6 +23,8 @@ import { CommentEntity } from '../entity/comment.entity';
 import { UserAdmin } from '../entity/user-admin.entity';
 import { ReactionEntity } from '../entity/reaction.entity';
 import {
+  ContentCategoryNameDto,
+  UpdateContentCategoryDto,
   PsychoeducationListDto,
   PsychoeducationCommentsDto,
   ModeratePsychoeducationCommentDto,
@@ -32,6 +40,83 @@ export class AdminPostContentService {
     private readonly posts: Repository<PostEntity>,
   ) {}
 
+  /** Returns a bounded paginated catalog for CMS management or selection. */
+  async categories(input: PsychoeducationCommentsDto) {
+    const [rows, total] = await this.posts.manager
+      .getRepository(TagsEntity)
+      .findAndCount({
+        where: { isContentCategory: true },
+        order: { title: 'ASC', id: 'ASC' },
+        skip: (input.page - 1) * input.pageSize,
+        take: input.pageSize,
+      });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        name: row.title,
+        active: !row.categoryArchived,
+        revision: row.categoryRevision,
+      })),
+      total,
+      page: input.page,
+      pageSize: input.pageSize,
+    };
+  }
+
+  /** Creates/renames/archives one shared category; a unique normalized key handles concurrent duplicate names. */
+  async saveCategory(
+    input: ContentCategoryNameDto | UpdateContentCategoryDto,
+    id?: number,
+  ) {
+    try {
+      return await this.posts.manager.transaction(async (manager) => {
+        const repo = manager.getRepository(TagsEntity);
+        const row = id
+          ? await repo.findOne({
+              where: { id, isContentCategory: true },
+              lock: { mode: 'pessimistic_write' },
+            })
+          : repo.create({
+              isContentCategory: true,
+              categoryArchived: false,
+              categoryRevision: 1,
+            });
+        if (!row) {
+          throw new NotFoundException('Category not found.');
+        }
+        if (id && 'revision' in input) {
+          if (input.revision !== row.categoryRevision) {
+            throw new ConflictException(
+              'Category changed. Reload before saving.',
+            );
+          }
+          row.categoryArchived = !input.active;
+          row.categoryRevision++;
+        }
+        const name = input.name.normalize('NFKC').trim().replace(/\s+/g, ' ');
+        row.title = name;
+        row.categoryKey = createHash('sha256')
+          .update(name.toLowerCase())
+          .digest('hex');
+        row.slug = `content-category-${row.categoryKey}`;
+        await repo.save(row);
+        return {
+          id: row.id,
+          name: row.title,
+          active: !row.categoryArchived,
+          revision: row.categoryRevision,
+        };
+      });
+    } catch (error) {
+      if (error?.code === 'ER_DUP_ENTRY') {
+        throw new ConflictException(
+          'A category with this name already exists, including archived categories.',
+        );
+      }
+      throw error;
+    }
+  }
+
   /** Maps explicit public CMS fields and server-owned counts without exposing author credentials. */
   private async response(post: PostEntity, manager = this.posts.manager) {
     const commentCount = await manager.getRepository(CommentEntity).count({
@@ -42,6 +127,7 @@ export class AdminPostContentService {
       .count({ where: { post: { id: post.id }, reaction: '+1' } });
     return {
       id: post.id,
+      categories: await contentCategories(manager, post.id, true),
       isPsychoeducation: true,
       contentType: post.contentType,
       title: post.title,
@@ -74,6 +160,7 @@ export class AdminPostContentService {
   /** Lists content with stable ordering and all filters applied before pagination. */
   async list(input: PsychoeducationListDto) {
     const query = this.query();
+    filterContentCategory(query, input.categoryId);
     if (input.contentType) {
       query.andWhere('post.contentType = :contentType', {
         contentType: input.contentType,
@@ -261,6 +348,7 @@ export class AdminPostContentService {
         published_at: input.status === 'published' ? new Date() : null,
       });
       await manager.save(post);
+      await assignCategories(manager, post.id, input.categoryIds);
       return this.response(post, manager);
     });
   }
@@ -292,6 +380,7 @@ export class AdminPostContentService {
       post.type = input.contentType === 'video' ? 'video' : 'image';
       post.contentRevision += 1;
       await manager.save(post);
+      await assignCategories(manager, post.id, input.categoryIds);
       return this.response(post, manager);
     });
   }

@@ -12,6 +12,13 @@ import {
 } from 'class-validator';
 
 export class ContentPageDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  categoryId?: number;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)

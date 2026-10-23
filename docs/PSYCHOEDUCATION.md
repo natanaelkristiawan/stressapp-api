@@ -288,3 +288,33 @@ CMS boundary tests, mobile adapter/provider tests, API/CMS builds, mobile web ex
 TypeScript and scoped lint pass. AI responses are synthetic in tests; live OpenCode
 quality, real browser interaction and physical-device popup behavior need acceptance
 checks after deployment. Deploy API/worker before CMS/mobile.
+
+## Shared content categories (2026-10-23)
+
+Categories reuse backup_tags and backup_post_tags with a separate isContentCategory
+scope; no new table/module. Tags gain an optional unique normalized-name hash,
+archive flag and revision. Forum hashtag lookup/discovery excludes this scope.
+
+CMS GET/POST /admin-post/psychoeducation/categories lists paginated catalog rows
+(page/pageSize, max100) or creates {name}. PATCH /categories/:id requires
+{name,active,revision}; duplicate normalized names return409, stale edits409.
+Names normalize NFKC/whitespace, require1–80 characters. Archive replaces deletion
+and preserves assignments; renaming immediately updates canonical names everywhere.
+
+Content writes accept categoryIds: up to20 unique positive integer IDs. Unknown
+IDs/forum tags/new archived assignments return400. Omitted categoryIds preserves
+assignments during updates; [] clears them. Existing archived assignments can be
+retained or removed. Assignments commit atomically with content under post/category
+locks. Content responses include categories [{id,name,active}]; CMS includes
+assigned archives, member responses show active categories only.
+
+Member GET /me/psychoeducation/categories returns the active catalog with limit/after
+cursors (immutable ID ascending). Both CMS/member content lists accept categoryId;
+EXISTS filtering avoids duplicate content rows. Member after cursors include the
+category filter scope. Catalog names do not expose unpublished content.
+
+Verified: API build/scoped lint, metadata and disposable MySQL repeat-sync/HTTP
+suite, including multiple assignments for both types, duplicates/invalid IDs/limits,
+renaming, stale category edits, archives/retained links/removal, catalog pagination
+and category-scoped content cursors. Real mobile adapter checks also pass. No live
+database/deployment changes; synchronize:true adds metadata to existing tag tables.

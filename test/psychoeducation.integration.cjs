@@ -197,6 +197,63 @@ async function main() {
     assert.equal((await mobile('GET', '', undefined, token)).status, 401);
     assert.equal((await mobile('GET', `/${content.id}`)).status, 404); // Draft.
     const videoId = video.body.data.id;
+    // Shared taxonomy uses existing tags/link tables, isolated from forum hashtags.
+    assert.equal((await call('POST', '/categories', { name: '  ' })).status, 400);
+    const categoryOne = await call('POST', '/categories', { name: 'Stress management' });
+    const categoryTwo = await call('POST', '/categories', { name: 'Connections' });
+    assert.equal(categoryOne.status, 201, JSON.stringify(categoryOne));
+    assert.equal(categoryTwo.status, 201);
+    const catOne = categoryOne.body.data.id;
+    const catTwo = categoryTwo.body.data.id;
+    assert.equal((await call('POST', '/categories', { name: ' STRESS   MANAGEMENT ' })).status, 409);
+    assert.equal((await call('POST', '/categories', { name: 'Forbidden' }, forgedRoleToken)).status, 401);
+    assert.equal((await call('GET', '/categories?pageSize=101')).status, 400);
+    const categoryPage = await call('GET', '/categories?page=1&pageSize=1');
+    assert.equal(categoryPage.body.data.items.length, 1);
+    assert.equal(categoryPage.body.data.total, 2);
+    const activeCatalog = await mobile('GET', '/categories?limit=1');
+    assert.equal(activeCatalog.status, 200);
+    assert.equal(activeCatalog.body.data.items.length, 1);
+    assert.equal(activeCatalog.body.data.hasNextPage, true);
+    const nextCatalog = await mobile('GET', `/categories?limit=1&after=${encodeURIComponent(activeCatalog.body.data.nextAfter)}`);
+    assert.notEqual(nextCatalog.body.data.items[0].id, activeCatalog.body.data.items[0].id);
+    const taggedArticle = await call('POST', '', { ...article, title: 'Categorized article', status: 'published', categoryIds: [catOne, catTwo] });
+    const taggedVideo = await call('POST', '', { contentType: 'video', title: 'Categorized video', status: 'published', videoUrl, categoryIds: [catOne] });
+    assert.equal(taggedArticle.status, 201, JSON.stringify(taggedArticle));
+    assert.equal(taggedVideo.status, 201);
+    assert.equal(taggedArticle.body.data.categories.length, 2);
+    const articleId = taggedArticle.body.data.id;
+    const categorizedVideoId = taggedVideo.body.data.id;
+    assert.equal((await call('GET', `?categoryId=${catOne}`)).body.data.total, 2);
+    assert.equal((await mobile('GET', `?categoryId=${catOne}`)).body.data.items.length, 2);
+    assert.equal((await mobile('GET', `?type=article&categoryId=${catTwo}`)).body.data.items[0].id, articleId);
+    const categoryFiltered = (await mobile('GET', `?categoryId=${catOne}&limit=1`)).body.data;
+    const categoryAfter = encodeURIComponent(categoryFiltered.nextAfter);
+    assert.equal((await mobile('GET', `?categoryId=${catTwo}&limit=1&after=${categoryAfter}`)).status, 400);
+    assert.notEqual((await mobile('GET', `?categoryId=${catOne}&limit=1&after=${categoryAfter}`)).body.data.items[0].id, categoryFiltered.items[0].id);
+    for (const categoryIds of [[catOne, catOne], [99999999], ['1'], null, Array.from({ length: 21 }, (_, index) => index + 1)]) {
+      assert.equal((await call('POST', '', { ...article, categoryIds })).status, 400);
+    }
+    const ordinaryTag = await db.getRepository(require('../src/entity/tags.entity').TagsEntity).save({ title: 'Forum tag', slug: 'forum-tag' });
+    assert.equal((await call('POST', '', { ...article, categoryIds: [ordinaryTag.id] })).status, 400);
+    assert.equal((await call('PATCH', `/categories/${catOne}`, { name: 'Stress', active: true, revision: 999 })).status, 409);
+    const renamed = await call('PATCH', `/categories/${catOne}`, { name: 'Stress', active: true, revision: 1 });
+    assert.equal(renamed.status, 200);
+    assert((await mobile('GET', `/${articleId}`)).body.data.categories.some(category => category.name === 'Stress'));
+    assert((await mobile('GET', `/${categorizedVideoId}`)).body.data.categories.some(category => category.name === 'Stress'));
+    assert.equal((await call('PATCH', `/categories/${catOne}`, { name: 'Stress', active: false, revision: 2 })).status, 200);
+    assert(!(await mobile('GET', '/categories')).body.data.items.some(category => category.id === catOne));
+    assert.equal((await mobile('GET', `?categoryId=${catOne}`)).body.data.items.length, 0);
+    assert.equal((await call('POST', '', { ...article, categoryIds: [catOne] })).status, 400);
+    assert((await call('GET', `/${articleId}`)).body.data.categories.some(category => category.id === catOne && !category.active));
+    assert(!(await mobile('GET', `/${articleId}`)).body.data.categories.some(category => category.id === catOne));
+    assert.equal((await call('PATCH', `/${articleId}`, { ...article, status: 'published', categoryIds: [catOne, catTwo], revision: 1 })).status, 200, 'Retaining an already assigned archived category is allowed');
+    assert.equal((await call('PATCH', `/${articleId}`, { ...article, status: 'published', categoryIds: [], revision: 2 })).status, 200);
+    assert.equal((await call('GET', `/${articleId}`)).body.data.categories.length, 0);
+    await call('DELETE', `/${articleId}`, { revision: 3 });
+    await call('DELETE', `/${categorizedVideoId}`, { revision: 1 });
+    await call('PATCH', `/categories/${catOne}`, { name: 'Stress', active: true, revision: 3 });
+
     assert.equal((await mobile('GET', '?limit=51')).status, 400);
     assert.equal((await mobile('GET', '?after=invalid')).status, 400);
     const cursorRows = [];

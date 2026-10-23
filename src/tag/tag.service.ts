@@ -16,9 +16,9 @@ export class TagService {
     const { limit, title } = tagsDto;
 
     // create with query builder
-    const query = this.postTagsRepository.createQueryBuilder('post_tags');
+    const query = this.postTagsRepository.createQueryBuilder('post_tags').leftJoin('post_tags.tag', 'tag').where('(tag.isContentCategory = false OR tag.id IS NULL)');
     if(title) {
-        query.where('post_tags.title LIKE :title', { title: `%${title}%` });
+        query.andWhere('post_tags.title LIKE :title', { title: `%${title}%` });
     }
     query.take(limit);
 

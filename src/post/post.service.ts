@@ -730,7 +730,7 @@ export class PostService {
                 // Step 3: Process each tag
                 for (const tag of uniqueTags) {
                     const slugTag = this.slugify(tag);
-                    let findTag = await this.tagRepository.findOneBy({ slug: slugTag });
+                    let findTag = await this.tagRepository.findOneBy({ slug: slugTag, isContentCategory: false });
 
                     if (findTag) {
                         tempTags.push(findTag);
@@ -901,7 +901,7 @@ export class PostService {
                     // Step 3: Process each tag
                     for (const tag of uniqueTags) {
                         const slugTag = this.slugify(tag);
-                        let findTag = await this.tagRepository.findOneBy({ slug: slugTag });
+                        let findTag = await this.tagRepository.findOneBy({ slug: slugTag, isContentCategory: false });
 
                         if (findTag) {
                             tempTags.push(findTag);

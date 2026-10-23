@@ -192,7 +192,8 @@ export class SearchService {
             take: limit,
             skip: offset,
             where: {
-                title: Raw((alias) => `LOWER(${alias}) LIKE LOWER(:title)`, { title: `%${keyword}%` })
+                title: Raw((alias) => `LOWER(${alias}) LIKE LOWER(:title)`, { title: `%${keyword}%` }),
+                isContentCategory: false
             }
         }
 

@@ -1,5 +1,10 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
+  ArrayMaxSize,
+  ArrayUnique,
+  IsBoolean,
+  ValidateIf,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -20,6 +25,13 @@ export class PsychoeducationIdDto {
 }
 
 export class PsychoeducationListDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  categoryId?: number;
+
   @Type(() => Number)
   @IsInt()
   @Min(1)
@@ -53,6 +65,15 @@ export class PsychoeducationListDto {
 }
 
 export class SavePsychoeducationDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(2147483647, { each: true })
+  categoryIds?: number[];
+
   @IsIn(['article', 'video'])
   contentType: 'article' | 'video';
 
@@ -143,4 +164,24 @@ export class ModeratePsychoeducationCommentDto {
   @IsString()
   @Matches(/^[a-f0-9]{64}$/)
   version: string;
+}
+
+export class ContentCategoryNameDto {
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.normalize('NFKC').trim().replace(/\s+/g, ' ')
+      : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  name: string;
+}
+export class UpdateContentCategoryDto extends ContentCategoryNameDto {
+  @IsBoolean()
+  active: boolean;
+
+  @IsInt()
+  @Min(1)
+  revision: number;
 }

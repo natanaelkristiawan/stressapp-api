@@ -76,7 +76,7 @@ export class AdminPostService {
     
       // tag search
       if (search_by === 'tag' && search) {
-        const tag = await this.tagRepository.findOne({ where: { title: search } });
+        const tag = await this.tagRepository.findOne({ where: { title: search, isContentCategory: false } });
         if (!tag) {
           return { items: [], recordsTotal: 0, recordsFiltered: 0 };
         }

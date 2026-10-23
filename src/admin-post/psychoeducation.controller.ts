@@ -15,6 +15,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { AdminPostContentService } from './admin-post-content.service';
 import {
+  ContentCategoryNameDto,
+  UpdateContentCategoryDto,
   PsychoeducationIdDto,
   PsychoeducationCommentsDto,
   PsychoeducationCommentIdDto,
@@ -38,6 +40,30 @@ export class PsychoeducationController {
   @Header('Cache-Control', 'private, no-store')
   async list(@Query() query: PsychoeducationListDto) {
     return { data: await this.content.list(query) };
+  }
+
+  /** Lists shared article/video categories for CMS selection and management. */
+  @Get('categories')
+  @Header('Cache-Control', 'private, no-store')
+  async categories(@Query() query: PsychoeducationCommentsDto) {
+    return { data: await this.content.categories(query) };
+  }
+
+  /** Adds a named category without creating another content module/table. */
+  @Post('categories')
+  @Header('Cache-Control', 'private, no-store')
+  async createCategory(@Body() input: ContentCategoryNameDto) {
+    return { data: await this.content.saveCategory(input) };
+  }
+
+  /** Renames/archives using the reviewed category revision; assigned history is retained. */
+  @Patch('categories/:id')
+  @Header('Cache-Control', 'private, no-store')
+  async updateCategory(
+    @Param() params: PsychoeducationIdDto,
+    @Body() input: UpdateContentCategoryDto,
+  ) {
+    return { data: await this.content.saveCategory(input, params.id) };
   }
 
   /** Returns the selected article/video, including drafts, to an active CMS admin. */

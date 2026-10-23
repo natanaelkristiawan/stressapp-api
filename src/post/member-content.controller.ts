@@ -37,6 +37,11 @@ export class MemberContentController {
   list(@Query() query: ContentPageDto, @Req() request: MemberRequest) {
     return this.content.list(query, request.member.id);
   }
+  /** Lists the shared active category catalog without exposing archived staff taxonomy. */
+  @Get('categories')
+  categories(@Query() query: ContentPageDto) {
+    return this.content.categories(query);
+  }
   /** Revalidates eligibility for a single content item. */
   @Get(':id')
   detail(@Param() path: ContentIdDto, @Req() request: MemberRequest) {
