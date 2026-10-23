@@ -23,6 +23,12 @@ import {
     @Column({ type: 'json', nullable: true, select: false })
     moderation?: ModerationResult;
 
+    @Column({ type: 'varchar', length: 16, default: 'approved' })
+    moderationStatus?: 'pending' | 'approved' | 'rejected';
+
+    @Column({ type: 'int', unsigned: true, default: 0 })
+    moderationRevision?: number;
+
     @PrimaryGeneratedColumn()
     id?: number;
 

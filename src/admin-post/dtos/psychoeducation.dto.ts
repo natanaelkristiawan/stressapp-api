@@ -90,6 +90,15 @@ export class SavePsychoeducationDto {
   @MaxLength(2048)
   videoUrl?: string;
 
+  @IsOptional()
+  @IsIn(['self', 'youtube'])
+  videoSource?: 'self' | 'youtube';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  youtubeUrl?: string;
+
   @IsIn(['draft', 'published'])
   status: 'draft' | 'published';
 }

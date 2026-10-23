@@ -39,6 +39,18 @@ const { CommentService } = require('../src/comment/comment.service');
 const { ReactionService } = require('../src/reaction/reaction.service');
 const { assertPostInteractionsVisible } = require('../src/post/post-visibility');
 const { seedAdmin } = require('../src/database/seeds/admin.seed');
+const { MemberContentController } = require('../src/post/member-content.controller');
+const { MemberContentService, COMMENT_QUEUE } = require('../src/post/member-content.service');
+const { MemberAuthGuard } = require('../src/member-auth/member-auth.guard');
+const { ContentModerationService } = require('../src/content-moderation/content-moderation.service');
+const { getQueueToken } = require('@nestjs/bullmq');
+const memberTokens = new Map();
+const queuedComments = [];
+const queueConnection = process.env.PSYCHOEDUCATION_TEST_REDIS_PORT ? { host: '127.0.0.1', port: Number(process.env.PSYCHOEDUCATION_TEST_REDIS_PORT) } : null;
+const realQueue = queueConnection ? new (require('bullmq').Queue)(COMMENT_QUEUE, { connection: queueConnection }) : null;
+let moderationResult = 'publish';
+let moderationScript = [];
+let classifyCalls = 0;
 const secret = 'synthetic-psychoeducation-test-secret';
 const password = 'Synthetic123!';
 
@@ -59,15 +71,24 @@ async function main() {
         }),
         TypeOrmModule.forFeature([PostEntity, AssetsEntity, Member], 'mimate'), AdminAuthModule,
       ],
-      controllers: [PsychoeducationController, UploadController],
-      providers: [AdminPostContentService, CmsMembersGuard, UploadService, { provide: MemberAuthService, useValue: { limit: async () => undefined } }],
+      controllers: [PsychoeducationController, UploadController, MemberContentController],
+      providers: [MemberContentService, MemberAuthGuard,
+        { provide: getQueueToken(COMMENT_QUEUE), useValue: { add: async (_name, data, options) => { queuedComments.push(data); if (realQueue) { await realQueue.add('moderate-comment', data, options); } } } },
+        { provide: ContentModerationService, useValue: { classify: async () => { classifyCalls++; const action = moderationScript.shift() ?? moderationResult; return { action, categories: action === 'reject' ? ['profanity'] : [], model: 'synthetic', policy: 'synthetic', checkedAt: new Date().toISOString() }; } } },
+        AdminPostContentService, CmsMembersGuard, UploadService, { provide: MemberAuthService, useValue: { limit: async () => undefined, authenticateSession: async (token) => {
+          const id = memberTokens.get(token);
+          if (!id) { throw new (require('@nestjs/common').UnauthorizedException)(); }
+          const member = await module.get(getDataSourceToken('mimate')).getRepository(Member).findOneBy({ id });
+          if (!member || member.is_suspended) { throw new (require('@nestjs/common').UnauthorizedException)(); }
+          return { member, sessionId: 'synthetic-member-session' };
+        } } }],
     }).compile();
     app = module.createNestApplication();
     const db = module.get(getDataSourceToken('mimate'));
     await db.synchronize();
     const jwt = new JwtService({ secret });
     const middleware = new RedisTokenMiddleware(jwt, new AuthService(db.getRepository(Member)), { getOrNil: () => ({ set: async () => undefined }) });
-    app.use((req, res, next) => middleware.use(req, res, next).catch(error => res.status(error.getStatus?.() || 500).json({ message: error.message })));
+    app.use((req, res, next) => { if (req.path.startsWith('/me/psychoeducation')) { return next(); } return middleware.use(req, res, next).catch(error => res.status(error.getStatus?.() || 500).json({ message: error.message })); });
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     app.useGlobalInterceptors(new SuccessInterceptor(), new NullToEmptyInterceptor());
     app.useGlobalFilters(new AllExceptionsFilter());
@@ -147,6 +168,191 @@ async function main() {
     assert.equal(video.body.data.videoUrl, videoUrl);
     assert(video.body.data.publishedAt);
     assert.equal((await call('GET', '?contentType=video&status=published&search=breathing')).body.data.total, 1);
+    const memberContent = module.get(MemberContentService);
+    const secondMember = await db.getRepository(Member).save({ name: 'Second member', email: 'second-member@example.test', memberAuthEnabled: true });
+    memberTokens.set('member-one', ordinary.id);
+    memberTokens.set('member-two', secondMember.id);
+    async function mobile(method, path, body, credential = 'member-one') {
+      const response = await fetch(`${base}/me/psychoeducation${path}`, { method, headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: response.status, body: await response.json() };
+    }
+    assert.equal((await mobile('GET', '', undefined, token)).status, 401);
+    assert.equal((await mobile('GET', `/${content.id}`)).status, 404); // Draft.
+    const videoId = video.body.data.id;
+    assert.equal((await mobile('GET', '?limit=51')).status, 400);
+    assert.equal((await mobile('GET', '?after=invalid')).status, 400);
+    const cursorRows = [];
+    for (let index = 0; index < 3; index++) {
+      const created = await call('POST', '', { contentType: 'video', title: `Cursor fixture ${index}`, status: 'published', videoUrl });
+      assert.equal(created.status, 201);
+      cursorRows.push(created.body.data.id);
+    }
+    const firstPage = await mobile('GET', '?type=video&limit=1');
+    assert.equal(firstPage.status, 200);
+    assert.equal(firstPage.body.data.items.length, 1);
+    assert.equal(firstPage.body.data.hasNextPage, true);
+    const cursor = encodeURIComponent(firstPage.body.data.nextAfter);
+    assert.equal((await mobile('GET', `?type=article&limit=1&after=${cursor}`)).status, 400);
+    const secondPage = await mobile('GET', `?type=video&limit=1&after=${cursor}`);
+    assert.equal(secondPage.status, 200);
+    assert.notEqual(secondPage.body.data.items[0].id, firstPage.body.data.items[0].id);
+    for (const id of cursorRows) { await call('DELETE', `/${id}`, { revision: 1 }); }
+    assert.equal((await mobile('GET', `/${cursorRows[0]}`)).status, 404);
+    await db.getRepository(PostEntity).update(videoId, { isHidden: true });
+    assert.equal((await mobile('GET', `/${videoId}`)).status, 404);
+    await db.getRepository(PostEntity).update(videoId, { isHidden: false });
+    if (process.env.PSYCHOEDUCATION_TEST_MOBILE_ADAPTER === '1') {
+      // Exercise real mobile schemas + shared transport against this real HTTP server, not a transport stub.
+      const vm = require('node:vm');
+      const fs = require('node:fs');
+      const ts = require('typescript');
+      const mobileRoot = resolve(__dirname, '../../stressapp');
+      const mobileRequire = require('node:module').createRequire(resolve(mobileRoot, 'package.json'));
+      const transportExports = {};
+      const compile = file => ts.transpileModule(fs.readFileSync(resolve(mobileRoot, file), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+      vm.runInNewContext(compile('lib/member-auth-api.ts'), { exports: transportExports, process: { env: { EXPO_PUBLIC_API_URL: base } }, fetch, AbortController, FormData, setTimeout, clearTimeout,
+        require: name => name === 'react-native' ? { Platform: { OS: 'android' } } : mobileRequire(name) });
+      transportExports.configureMemberSession({ version: () => 99, refresh: async () => 'member-one' });
+      const mobileExports = {};
+      vm.runInNewContext(compile('lib/psychoeducation-api.ts'), { exports: mobileExports, URLSearchParams, Date, Math, Error,
+        require: name => name === './member-auth-api' ? transportExports : name === '@/stores/auth-store' ? { useAuthStore: { getState: () => ({ token: 'member-one' }) } } : mobileRequire(name) });
+      const mobileApi = mobileExports.psychoeducationApi;
+      assert.equal((await mobileApi.detail(videoId)).id, videoId);
+      assert.equal((await mobileApi.list('video')).items.length, 1);
+      const adapterComment = await mobileApi.saveComment(videoId, 'Real adapter HTTP test', 'synthetic_real_adapter_request');
+      assert.equal(adapterComment.status, 'pending');
+      assert((await mobileApi.comments(videoId)).items.some(item => item.id === adapterComment.id));
+      await mobileApi.deleteComment(videoId, adapterComment.id);
+      assert.equal((await mobileApi.like(videoId, true)).liked, true);
+      assert.equal((await mobileApi.like(videoId, false)).liked, false);
+      const before = (await mobileApi.detail(videoId)).viewCount;
+      await mobileApi.view(videoId, 'synthetic_real_adapter_view');
+      await mobileApi.view(videoId, 'synthetic_real_adapter_view');
+      assert.equal((await mobileApi.detail(videoId)).viewCount, before + 1);
+    }
+    const event = { requestId: 'synthetic_view_request_0001' };
+    const viewBefore = (await mobile('GET', `/${videoId}`)).body.data.viewCount;
+    await Promise.all([mobile('POST', `/${videoId}/views`, event), mobile('POST', `/${videoId}/views`, event)]);
+    assert.equal((await mobile('GET', `/${videoId}`)).body.data.viewCount, viewBefore + 1);
+    await mobile('POST', `/${videoId}/views`, { requestId: 'synthetic_view_request_0002' });
+    assert.equal((await mobile('GET', `/${videoId}`)).body.data.viewCount, viewBefore + 2);
+    await Promise.all([mobile('PUT', `/${videoId}/like`), mobile('PUT', `/${videoId}/like`)]);
+    assert.equal((await mobile('GET', `/${videoId}`)).body.data.likeCount, 1);
+    await mobile('DELETE', `/${videoId}/like`);
+    assert.equal((await mobile('GET', `/${videoId}`)).body.data.likeCount, 0);
+    for (const text of [' ', 'x'.repeat(261)]) {
+      assert.equal((await mobile('POST', `/${videoId}/comments`, { content: text, requestId: 'synthetic_invalid_comment' })).status, 400);
+    }
+    assert.equal((await mobile('POST', `/${videoId}/comments`, { content: 'Hello', requestId: 'synthetic_invalid_comment', memberId: secondMember.id })).status, 400);
+    const beforeCalls = classifyCalls;
+    const submission = { content: '  Safe comment  ', requestId: 'synthetic_comment_request_0001' };
+    const submitted = await mobile('POST', `/${videoId}/comments`, submission);
+    assert.equal(submitted.status, 201, JSON.stringify(submitted));
+    assert.equal(submitted.body.data.status, 'pending');
+    assert.equal(submitted.body.data.content, 'Safe comment');
+    assert.equal(classifyCalls, beforeCalls, 'Submit must never wait for AI');
+    const commentId = submitted.body.data.id;
+    assert.equal((await mobile('POST', `/${videoId}/comments`, submission)).body.data.id, commentId);
+    assert.equal((await mobile('GET', `/${videoId}/comments`)).body.data.items.length, 1);
+    assert.equal((await mobile('GET', `/${videoId}/comments`, undefined, 'member-two')).body.data.items.length, 0);
+    assert.equal((await mobile('DELETE', `/${videoId}/comments/${commentId}`, undefined, 'member-two')).status, 404);
+    moderationResult = 'pending';
+    await assert.rejects(memberContent.moderateComment({ id: commentId, revision: 1 }));
+    moderationResult = 'publish';
+    await memberContent.moderateComment({ id: commentId, revision: 1 });
+    assert.equal((await mobile('GET', `/${videoId}/comments`, undefined, 'member-two')).body.data.items[0].status, 'approved');
+    assert.equal((await mobile('GET', `/${videoId}`)).body.data.commentCount, 1);
+    const edit = await mobile('PATCH', `/${videoId}/comments/${commentId}`, { content: 'Updated text', requestId: 'synthetic_comment_request_0002' });
+    assert.equal(edit.status, 200, JSON.stringify(edit));
+    await memberContent.moderateComment({ id: commentId, revision: 1 }); // Stale job must do nothing.
+    assert.equal((await mobile('GET', `/${videoId}/comments`, undefined, 'member-two')).body.data.items.length, 0);
+    moderationResult = 'reject';
+    await memberContent.moderateComment({ id: commentId, revision: 2 });
+    assert.equal((await mobile('GET', `/${videoId}/comments`)).body.data.items[0].status, 'rejected');
+    assert.equal((await mobile('GET', `/${videoId}`)).body.data.commentCount, 0);
+    assert.equal((await mobile('GET', `/${videoId}/comments`, undefined, 'member-two')).body.data.items.length, 0);
+    assert.equal((await call('GET', `/${videoId}/comments`)).body.data.items[0].moderationStatus, 'rejected');
+    await mobile('DELETE', `/${videoId}/comments/${commentId}`);
+    await memberContent.moderateComment({ id: commentId, revision: 2 });
+    assert.equal((await mobile('GET', `/${videoId}/comments`)).body.data.items.length, 0);
+    const boundary = await mobile('POST', `/${videoId}/comments`, { content: 'x'.repeat(260), requestId: 'synthetic_comment_request_0003' });
+    assert.equal(boundary.status, 201);
+    await memberContent.recoverPending();
+    assert(queuedComments.some((job) => job.id === boundary.body.data.id));
+    if (realQueue) {
+      moderationResult = 'publish';
+      moderationScript = ['pending', 'publish'];
+      const { MemberContentProcessor } = require('../src/post/member-content.processor');
+      const processor = new MemberContentProcessor(memberContent);
+      const worker = new (require('bullmq').Worker)(COMMENT_QUEUE, job => processor.process(job), { connection: queueConnection });
+      try {
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline) {
+          const row = await db.getRepository(CommentEntity).findOneBy({ id: boundary.body.data.id });
+          if (row.moderationStatus === 'approved') { break; }
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        assert.equal((await db.getRepository(CommentEntity).findOneBy({ id: boundary.body.data.id })).moderationStatus, 'approved', 'Real BullMQ worker must publish the queued revision');
+      } finally { await worker.close(); }
+    }
+    await mobile('DELETE', `/${videoId}/comments/${boundary.body.data.id}`);
+    const privateForAdmin = await mobile('POST', `/${videoId}/comments`, { content: 'Admin moderation fixture', requestId: 'synthetic_comment_request_0004' });
+    const privateId = privateForAdmin.body.data.id;
+    const authorBefore = (await db.getRepository(Member).findOneBy({ id: ordinary.id })).total_comments;
+    const reviewedPending = (await call('GET', `/${videoId}/comments`)).body.data.items.find(item => item.id === privateId);
+    assert.equal(reviewedPending.moderationStatus, 'pending');
+    assert.equal((await call('DELETE', `/${videoId}/comments/${privateId}`, { reason: 'sara', version: reviewedPending.version })).status, 200);
+    await memberContent.moderateComment({ id: privateId, revision: 1 });
+    assert.equal((await db.getRepository(CommentEntity).findOneBy({ id: privateId })), null);
+    assert.equal((await db.getRepository(Member).findOneBy({ id: ordinary.id })).total_comments, authorBefore, 'Educational comments must not decrement forum reward counters');
+    const pagingCommentIds = [];
+    for (let index = 0; index < 2; index++) {
+      const submittedPageComment = await mobile('POST', `/${videoId}/comments`, { content: `Cursor comment ${index}`, requestId: `synthetic_paging_request_000${index}` });
+      pagingCommentIds.push(submittedPageComment.body.data.id);
+      moderationResult = 'publish';
+      await memberContent.moderateComment({ id: submittedPageComment.body.data.id, revision: 1 });
+    }
+    const commentsFirst = (await mobile('GET', `/${videoId}/comments?limit=1`)).body.data;
+    assert.equal(commentsFirst.items.length, 1);
+    assert.equal(commentsFirst.hasNextPage, true);
+    const commentCursor = encodeURIComponent(commentsFirst.nextAfter);
+    const commentsSecond = (await mobile('GET', `/${videoId}/comments?limit=1&after=${commentCursor}`)).body.data;
+    assert.notEqual(commentsFirst.items[0].id, commentsSecond.items[0].id);
+    assert.equal((await mobile('GET', `/${videoId}/comments?limit=1&after=${commentCursor}`, undefined, 'member-two')).status, 400);
+    for (const id of pagingCommentIds) { await mobile('DELETE', `/${videoId}/comments/${id}`); }
+
+    await db.getRepository(Member).update(ordinary.id, { is_suspended: true });
+    assert.equal((await mobile('GET', '')).status, 401);
+    await db.getRepository(Member).update(ordinary.id, { is_suspended: false });
+    assert.equal(video.body.data.videoSource, 'self');
+    assert.equal(video.body.data.youtubeId, null);
+    const youtubeInput = { contentType: 'video', title: 'YouTube exercise', status: 'published', videoSource: 'youtube', youtubeUrl: 'https://youtu.be/M7lc1UVf-VE' };
+    for (const youtubeUrl of ['https://evil.test/watch?v=M7lc1UVf-VE', 'https://youtube.com.evil.test/watch?v=M7lc1UVf-VE', 'http://youtu.be/M7lc1UVf-VE', 'https://www.youtube.com/watch?v=bad']) {
+      assert.equal((await call('POST', '', { ...youtubeInput, youtubeUrl })).status, 400);
+    }
+    assert.equal((await call('POST', '', { ...youtubeInput, videoUrl })).status, 400);
+    assert.equal((await call('POST', '', { ...youtubeInput, videoSource: 'other' })).status, 400);
+    assert.equal((await call('POST', '', { ...youtubeInput, videoSource: 'self' })).status, 400);
+    assert.equal((await call('POST', '', { ...article, youtubeUrl: youtubeInput.youtubeUrl })).status, 400);
+    const youtube = await call('POST', '', youtubeInput);
+    assert.equal(youtube.status, 201, JSON.stringify(youtube));
+    assert.equal(youtube.body.data.videoSource, 'youtube');
+    assert.equal(youtube.body.data.youtubeId, 'M7lc1UVf-VE');
+    assert.equal(youtube.body.data.videoUrl, null);
+    assert.equal((await call('GET', `/${youtube.body.data.id}`)).body.data.youtubeId, 'M7lc1UVf-VE');
+    const sourceSwitch = await call('PATCH', `/${youtube.body.data.id}`, { contentType: 'video', title: 'Switched source', status: 'draft', videoSource: 'self', videoUrl, revision: 1 });
+    assert.equal(sourceSwitch.status, 200);
+    assert.equal(sourceSwitch.body.data.youtubeId, null);
+    assert.equal(sourceSwitch.body.data.videoUrl, videoUrl);
+    const asArticle = await call('PATCH', `/${youtube.body.data.id}`, { ...article, revision: 2 });
+    assert.equal(asArticle.status, 200);
+    assert.equal(asArticle.body.data.videoSource, null);
+    assert.equal(asArticle.body.data.videoUrl, null);
+    await call('DELETE', `/${youtube.body.data.id}`, { revision: 3 });
+    // Simulates existing rows whose new nullable source column has not been set.
+    await db.getRepository(PostEntity).update(video.body.data.id, { videoSource: null });
+    assert.equal((await call('GET', `/${video.body.data.id}`)).body.data.videoSource, 'self');
+
     const forumSpace = await db.getRepository(SpaceEntity).save({ name: 'Forum', description: 'Forum' });
     const forum = await db.getRepository(PostEntity).save({ title: 'Ordinary forum post', status: 'PUBLISHED', member: { id: ordinary.id }, space: forumSpace, type: 'image', published_at: new Date() });
     assert.equal(forum.isPsychoeducation, false);
@@ -265,8 +471,9 @@ async function main() {
     } finally {
       if (previousTimezone === undefined) { delete process.env.TZ; } else { process.env.TZ = previousTimezone; }
     }
-    console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility, soft deletion and UTC filters/report buckets across three host timezones.');
+    console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, YouTube links/source switching/legacy fallback, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility, mobile cursor/member privacy/queued moderation/likes/views, soft deletion and UTC filters/report buckets across three host timezones.');
   } finally {
+    if (realQueue) { await realQueue.obliterate({ force: true }); await realQueue.close(); }
     if (app) await app.close();
     await connection.query(`DROP DATABASE IF EXISTS \`${schema}\``);
     await connection.end();

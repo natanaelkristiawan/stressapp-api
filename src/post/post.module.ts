@@ -1,3 +1,8 @@
+import { MemberContentController } from './member-content.controller';
+import { MemberContentService, COMMENT_QUEUE } from './member-content.service';
+import { MemberContentProcessor } from './member-content.processor';
+import { MemberAuthModule } from '../member-auth/member-auth.module';
+import { BullModule } from '@nestjs/bullmq';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { ContentModerationModule } from '../content-moderation/content-moderation.module';
@@ -25,6 +30,8 @@ import { MoengageModule } from 'src/moengage/moengage.module';
 import { MemberVoteModule } from 'src/member-vote/member-vote.module';
 @Module({
   imports: [
+    MemberAuthModule,
+    BullModule.registerQueue({ name: COMMENT_QUEUE }),
     AdminAuthModule,
     ContentModerationModule,
     TypeOrmModule.forFeature(
@@ -51,7 +58,13 @@ import { MemberVoteModule } from 'src/member-vote/member-vote.module';
     MemberVoteModule,
   ],
   exports: [PostService, VoteService],
-  providers: [CmsMembersGuard, PostService, VoteService],
-  controllers: [PostController],
+  providers: [
+    MemberContentService,
+    MemberContentProcessor,
+    CmsMembersGuard,
+    PostService,
+    VoteService,
+  ],
+  controllers: [PostController, MemberContentController],
 })
 export class PostModule {}

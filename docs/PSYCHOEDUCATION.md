@@ -170,3 +170,85 @@ Expanded integration checks passed authorization, bad reason/version/page size,
 cross-post access, changed review, concurrent removal, reply retention, counts
 and audit-event metadata in disposable MySQL. CMS build/boundary/browser checks
 use synthetic data; no live moderation or deployed storage changes were performed.
+
+## Video sources (2026-10-23)
+
+Video writes accept `videoSource: "self" | "youtube"`. Omitting it preserves the
+legacy self-hosted contract. Self-hosted videos require an existing CMS-uploaded
+`videoUrl` and reject `youtubeUrl`. YouTube videos require an HTTPS `youtubeUrl`
+and reject `videoUrl`; accepted hosts are youtube.com, www.youtube.com,
+m.youtube.com and youtu.be, with watch, embed, shorts or short-link paths.
+The API extracts an 11-character ID without fetching any supplied URL. Host
+lookalikes, credentials, nonstandard ports, malformed/ambiguous IDs are rejected.
+Articles reject nonempty video fields. Thumbnail validation is unchanged.
+
+Responses add nullable `videoSource` and `youtubeId`; YouTube rows have null
+`videoUrl`, articles have null source/ID/URL. Existing video rows with a null
+source are returned as `self`. Source/type updates clear inactive stored fields.
+Two nullable columns are added through the existing synchronize:true development
+policy; no migration/history rewrite. Deploy API before the updated CMS. Link
+syntax validation does not guarantee existence, availability or embeddability.
+
+Verification: API build/scoped lint, 15 URL-parser cases, disposable MySQL HTTP
+suite including repeat schema sync, YouTube create/read, invalid/mixed-source
+inputs, source/type switching and old-row fallback. Live YouTube playback is
+separate device acceptance; no storage/provider calls or deployment performed.
+
+## Member API and asynchronous comments (2026-10-23)
+
+All routes below use the existing MemberAuthGuard (live member session/account),
+private/no-store responses and body-log exclusion. CMS tokens cannot grant member
+access. Only published, nonhidden, nondeleted educational posts are eligible.
+
+| Method | `/me/psychoeducation` suffix | Behavior |
+| --- | --- | --- |
+| GET | empty | `type=article|video`, optional search (100 chars), limit 1–50 and after |
+| GET | `/:id` | Detail, source/ID/URL, approved-comment count, likes/is-liked, views |
+| GET | `/:id/comments` | Approved comments plus caller-owned pending/rejected rows |
+| POST | `/:id/comments` | `{content,requestId}` saves pending immediately |
+| PATCH | `/:id/comments/:commentId` | Same body; own comment only, new moderation revision |
+| DELETE | `/:id/comments/:commentId` | Own comment soft deletion |
+| PUT / DELETE | `/:id/like` | Idempotent like/unlike in existing reactions table |
+| POST | `/:id/views` | `{requestId}` counts one detail opening; replay does not increment |
+
+Lists return `{items,nextAfter,hasNextPage}` within `data`; cursors encode stable
+created_at/ID descending bounds, scoped to list filters or post/calling member.
+No Redis pagination sessions or offsets. Malformed/cross-scope cursors return 400.
+Content GETs do not increment views. Existing Activity rows store scoped operation
+IDs for comment/view retries, without comment text. Post-row locks serialize writes
+and deduplicate concurrent identical operations. Member comment writes are limited
+to 30/hour; view events to 600/hour. These operations do not grant forum points.
+
+Comment DTOs trim and enforce 1–260 Unicode characters. Existing Comment rows gain
+moderationStatus (approved default for legacy rows) and moderationRevision. New
+member comments start pending. The existing PostModule registers the
+psychoeducation-comments BullMQ queue/worker and reuses ContentModerationService's
+classifier. Jobs contain comment ID/revision, never submitted text. The worker
+loads current text, rejects stale revisions/deleted rows and atomically records
+approval/rejection plus approved-only post counts. Provider uncertainty/errors
+stay pending and retry eight times with exponential backoff. A bounded 60-second
+recovery sweep repairs queue outages/exhausted transient jobs; author list reads
+also requeue pending rows. This publication worker does not change the existing
+legacy moderation-cache queue or CMS-authorized bypass.
+
+Member responses expose status but no provider payload/diagnostics/categories.
+CMS lists all statuses for manual review/deletion; its counts include approved
+comments only. CMS deletion and member/worker writes lock post then comment, so
+an in-flight job cannot resurrect deleted text. Legacy comment list/reply queries
+exclude nonapproved rows. Existing forum comments keep their current length rules.
+
+Tested: API build/scoped lint; 67 focused moderation/parser/DI tests; metadata
+check; HTTP + disposable repeat-sync MySQL covering auth/privacy/visibility,
+260-character validation, real keyset pages/scope checks, stale revisions,
+approval/rejection/pending, ownership, replay-safe comments, likes/views and CMS
+deletion of pending comments without forum-counter changes. Actual BullMQ/Redis
+delivery and a transient pending → retry → approval were exercised. AI/storage
+were synthetic; real provider quality, live storage/playback and production
+worker deployment remain acceptance checks. No production data was modified.
+
+The final HTTP run also loaded the real mobile adapter and shared member
+transport against the disposable API (including JSON content headers), covering
+list/detail, pending comments, deletion, likes and retry-safe view events. Run
+from stressapp-api with PSYCHOEDUCATION_TEST_PORT, optional
+PSYCHOEDUCATION_TEST_REDIS_PORT and PSYCHOEDUCATION_TEST_MOBILE_ADAPTER=1; the last
+flag requires the sibling stressapp checkout. All test services are disposable.

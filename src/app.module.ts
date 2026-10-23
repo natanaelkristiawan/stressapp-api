@@ -247,6 +247,8 @@ export class AppModule {
       .apply(RedisTokenMiddleware)
       .exclude(
         { path: 'member-auth/(.*)', method: RequestMethod.ALL },
+        { path: 'me/psychoeducation', method: RequestMethod.ALL },
+        { path: 'me/psychoeducation/(.*)', method: RequestMethod.ALL },
         { path: 'me/moods', method: RequestMethod.ALL },
         { path: 'me/moods/(.*)', method: RequestMethod.ALL },
         { path: 'me/mood-summary', method: RequestMethod.ALL },
@@ -277,6 +279,8 @@ export class AppModule {
     // add activity middleware  
     consumer.apply(ActivityMiddleware).exclude(
       { path: 'member-auth/(.*)', method: RequestMethod.ALL },
+      { path: 'me/psychoeducation', method: RequestMethod.ALL },
+      { path: 'me/psychoeducation/(.*)', method: RequestMethod.ALL },
       { path: 'me/moods', method: RequestMethod.ALL },
       { path: 'me/moods/(.*)', method: RequestMethod.ALL },
       { path: 'me/mood-summary', method: RequestMethod.ALL },

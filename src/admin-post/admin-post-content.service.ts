@@ -1,3 +1,4 @@
+import { youtubeIdFromUrl } from './youtube';
 import { createHash } from 'crypto';
 import { Activity } from '../entity/activity.entity';
 import { Member } from '../entity/user-mimate.entity';
@@ -33,9 +34,9 @@ export class AdminPostContentService {
 
   /** Maps explicit public CMS fields and server-owned counts without exposing author credentials. */
   private async response(post: PostEntity, manager = this.posts.manager) {
-    const commentCount = await manager
-      .getRepository(CommentEntity)
-      .count({ where: { post: { id: post.id } } });
+    const commentCount = await manager.getRepository(CommentEntity).count({
+      where: { post: { id: post.id }, moderationStatus: 'approved' },
+    });
     const likeCount = await manager
       .getRepository(ReactionEntity)
       .count({ where: { post: { id: post.id }, reaction: '+1' } });
@@ -48,6 +49,9 @@ export class AdminPostContentService {
       body: post.contentType === 'article' ? post.textContent : null,
       thumbnailUrl: post.image ?? null,
       videoUrl: post.videoUrl ?? null,
+      videoSource:
+        post.contentType === 'video' ? post.videoSource ?? 'self' : null,
+      youtubeId: post.youtubeId ?? null,
       status: post.status === 'PUBLISHED' ? 'published' : 'draft',
       revision: post.contentRevision,
       commentCount,
@@ -142,9 +146,13 @@ export class AdminPostContentService {
     }
     let body: string | null = null;
     let videoUrl: string | null = null;
+    let videoSource: 'self' | 'youtube' | null = null;
+    let youtubeId: string | null = null;
     if (input.contentType === 'article') {
-      if (input.videoUrl) {
-        throw new BadRequestException('Articles cannot contain a videoUrl.');
+      if (input.videoUrl || input.youtubeUrl || input.videoSource) {
+        throw new BadRequestException(
+          'Articles cannot contain video source fields.',
+        );
       }
       const imageUrls = new Set<string>();
       body = sanitizeHtml(input.body ?? '', {
@@ -195,11 +203,31 @@ export class AdminPostContentService {
       if (input.body) {
         throw new BadRequestException('Videos cannot contain an article body.');
       }
-      if (!input.videoUrl) {
-        throw new BadRequestException('Video URL is required.');
+      videoSource = input.videoSource ?? 'self';
+      if (videoSource === 'youtube') {
+        if (input.videoUrl) {
+          throw new BadRequestException(
+            'YouTube videos cannot contain an uploaded video URL.',
+          );
+        }
+        youtubeId = youtubeIdFromUrl(input.youtubeUrl ?? '');
+        if (!youtubeId) {
+          throw new BadRequestException(
+            'Enter a valid HTTPS YouTube video link.',
+          );
+        }
+      } else {
+        if (input.youtubeUrl) {
+          throw new BadRequestException(
+            'Self-hosted videos cannot contain a YouTube link.',
+          );
+        }
+        if (!input.videoUrl) {
+          throw new BadRequestException('Video URL is required.');
+        }
+        await this.validateAsset(manager, input.videoUrl, 'Video');
+        videoUrl = input.videoUrl;
       }
-      await this.validateAsset(manager, input.videoUrl, 'Video');
-      videoUrl = input.videoUrl;
     }
     return {
       title: input.title,
@@ -207,6 +235,8 @@ export class AdminPostContentService {
       contentType: input.contentType,
       textContent: body,
       videoUrl,
+      videoSource,
+      youtubeId,
       image: input.thumbnailUrl ?? null,
       status: input.status.toUpperCase(),
     };
@@ -302,6 +332,7 @@ export class AdminPostContentService {
         id: comment.id,
         content: comment.description ?? '',
         authorName: comment.member?.name || 'Unavailable member',
+        moderationStatus: comment.moderationStatus,
         parentId: comment.backup_comment_id ?? null,
         createdAt: comment.created_at,
         updatedAt: comment.updated_at,
@@ -354,12 +385,12 @@ export class AdminPostContentService {
         await repository.update(comment.backup_comment_id, { repliesCount });
       }
       post.totalRepliesCount = await repository.count({
-        where: { post: { id } },
+        where: { post: { id }, moderationStatus: 'approved' },
       });
       post.repliesCount = await repository
         .createQueryBuilder('comment')
         .where(
-          'comment.backup_post_with_attribute_id = :id AND comment.backup_comment_id IS NULL',
+          "comment.backup_post_with_attribute_id = :id AND comment.backup_comment_id IS NULL AND comment.moderationStatus = 'approved'",
           { id },
         )
         .getCount();
@@ -371,7 +402,7 @@ export class AdminPostContentService {
         .withDeleted()
         .where('comment.id = :commentId', { commentId })
         .getRawOne<{ id: number | null }>();
-      if (author?.id) {
+      if (author?.id && !comment.commentId?.startsWith('member-content:')) {
         await manager
           .getRepository(Member)
           .createQueryBuilder()

@@ -27,6 +27,12 @@ export class PostEntity {
     @Column({ type: 'varchar', length: 2048, nullable: true })
     videoUrl?: string | null;
 
+    @Column({ type: 'varchar', length: 20, nullable: true })
+    videoSource?: 'self' | 'youtube' | null;
+
+    @Column({ type: 'varchar', length: 11, nullable: true })
+    youtubeId?: string | null;
+
     @Column({ type: 'int', unsigned: true, default: 1 })
     contentRevision?: number;
 

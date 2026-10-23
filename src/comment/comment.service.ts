@@ -108,6 +108,7 @@ export class CommentService {
         const where: any = {
           post: { id: post_id },
           parent: IsNull(),
+          moderationStatus: 'approved',
         };
     
         const query = await this.commentRepository.find({
@@ -180,6 +181,7 @@ export class CommentService {
         const replies = await this.commentRepository.find({
           where: {
             parent: { id: commentId },
+            moderationStatus: 'approved',
           },
           relations: ['member', 'post'],
           order: { created_at: 'DESC' },
