@@ -187,3 +187,21 @@ returned/logged. Member publication errors remain the existing safe 422/503.
 pending decisions do not mask the fix; existing cache keys/jobs expire naturally.
 If the diagnostic is timeout, the existing OPENCODE_MODERATION_TIMEOUT_MS can be
 set up to 30000; it remains 10000 by default. No automatic budget increase.
+
+## Admin-only provider response preview (22 October 2026)
+
+The CMS test endpoint now calls `testContent`, which wraps the normal classifier
+with a request-local response observer. The returned test result has
+`providerResponse` containing only bounded HTTP status, response ID/model, finish
+reason, content (2048 characters), token counts (including reasoning-token count
+when supplied), and provider error type/code/message (1024 characters).
+Headers, request config, credentials and reasoning text are never copied. Exact
+submitted fields/known key values and recognizable bearer/key strings are redacted.
+UI renders the snapshot as escaped plain JSON, with a strict allowlist schema.
+
+The response snapshot is never cached, stored on Post/Comment, put in a retry job,
+or logged. Member methods return normal moderation results without the snapshot.
+The existing live-admin guard/no-store headers/body-log exclusion protect this
+preview. Cached decisions and failures before receiving a provider response return
+null; the UI explains that different test text requests a fresh check. Background
+retries do not capture previews. No extra provider request or automatic cache bypass.

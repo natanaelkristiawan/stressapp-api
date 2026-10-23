@@ -16,7 +16,7 @@ import { RequestLogService } from '../request-log/request-log.service';
 describe('CMS moderation test endpoint', () => {
   let app: INestApplication;
   const admin = { currentAdmin: jest.fn() };
-  const moderation = { status: jest.fn(), moderateContent: jest.fn() };
+  const moderation = { status: jest.fn(), testContent: jest.fn() };
   const logger = { create: jest.fn() };
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -58,7 +58,7 @@ describe('CMS moderation test endpoint', () => {
       configured: true,
       model: 'test-model',
     });
-    moderation.moderateContent.mockResolvedValue({
+    moderation.testContent.mockResolvedValue({
       action: 'publish',
       categories: [],
       model: 'test-model',
@@ -79,7 +79,7 @@ describe('CMS moderation test endpoint', () => {
   it.each(['publish', 'reject', 'pending'])(
     'returns %s using the real member classifier interface without CMS bypass',
     async (action) => {
-      moderation.moderateContent.mockResolvedValue({
+      moderation.testContent.mockResolvedValue({
         action,
         categories: [],
         model: 'test-model',
@@ -92,7 +92,7 @@ describe('CMS moderation test endpoint', () => {
         .send({ content: 'synthetic test text' })
         .expect(200);
       expect(result.body.data.action).toBe(action);
-      expect(moderation.moderateContent).toHaveBeenCalledWith(
+      expect(moderation.testContent).toHaveBeenCalledWith(
         ['synthetic test text'],
         7,
       );
@@ -112,7 +112,7 @@ describe('CMS moderation test endpoint', () => {
       .set('Authorization', 'Bearer synthetic-admin')
       .send(body)
       .expect(400);
-    expect(moderation.moderateContent).not.toHaveBeenCalled();
+    expect(moderation.testContent).not.toHaveBeenCalled();
   });
   it('rejects anonymous/forged-source and inactive admin requests before classification', async () => {
     await request(app.getHttpServer())
@@ -126,6 +126,6 @@ describe('CMS moderation test endpoint', () => {
       .set('Authorization', 'Bearer synthetic-admin')
       .send({ content: 'text' })
       .expect(401);
-    expect(moderation.moderateContent).not.toHaveBeenCalled();
+    expect(moderation.testContent).not.toHaveBeenCalled();
   });
 });

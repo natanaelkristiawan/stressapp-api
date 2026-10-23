@@ -44,7 +44,7 @@ export class CmsModerationSettingsController {
     @Req() request: { userData: { id: number } },
   ) {
     return {
-      data: await this.moderation.moderateContent(
+      data: await this.moderation.testContent(
         [input.content],
         request.userData.id,
       ),

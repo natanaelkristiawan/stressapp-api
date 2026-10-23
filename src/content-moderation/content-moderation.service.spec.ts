@@ -367,4 +367,88 @@ describe('ContentModerationService', () => {
       action: 'pending',
     });
   });
+  it('captures provider output only in CMS tests and excludes reasoning/credentials/text', async () => {
+    const response = completion();
+    completionCreate.mockResolvedValue({
+      ...response,
+      status: 200,
+      data: {
+        ...response.data,
+        id: 'chat-123',
+        usage: { prompt_tokens: 20, completion_tokens: 12, total_tokens: 32 },
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: {
+              content: JSON.stringify({ categories: [], uncertain: false }),
+              reasoning_content: 'private reasoning',
+            },
+          },
+        ],
+        headers: { authorization: 'secret' },
+      },
+    });
+    const result = await service.testContent(['original test'], 1);
+    expect(result.providerResponse).toMatchObject({
+      httpStatus: 200,
+      id: 'chat-123',
+      finishReason: 'stop',
+      usage: { total_tokens: 32 },
+    });
+    expect(result.providerResponse.content).toBe(
+      '{"categories":[],"uncertain":false}',
+    );
+    expect(JSON.stringify(result)).not.toMatch(
+      /private reasoning|original test|authorization/,
+    );
+    expect(JSON.stringify([...values])).not.toContain('providerResponse');
+    const repeated = await service.testContent(['original test'], 1);
+    expect(repeated.providerResponse).toBeNull();
+    expect(completionCreate).toHaveBeenCalledTimes(1);
+    expect(
+      await service.moderateContent(['original test'], 1),
+    ).not.toHaveProperty('providerResponse');
+  });
+
+  it('shows bounded sanitized provider error messages and malformed response content', async () => {
+    completionCreate.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          error: {
+            type: 'invalid_request',
+            message:
+              'Unsupported response_format. synthetic-test-key Bearer hidden original test',
+          },
+        },
+      },
+    });
+    const result = await service.testContent(['original test'], 1);
+    expect(result.providerResponse).toMatchObject({
+      httpStatus: 400,
+      error: { type: 'invalid_request' },
+    });
+    expect(result.providerResponse.error.message).toContain(
+      'Unsupported response_format',
+    );
+    expect(JSON.stringify(result)).not.toMatch(
+      /synthetic-test-key|Bearer hidden|original test/,
+    );
+    completionCreate.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        model: 'test',
+        choices: [
+          {
+            finish_reason: 'length',
+            message: { content: 'x'.repeat(3000), reasoning_content: 'hidden' },
+          },
+        ],
+      },
+    });
+    const truncated = await service.testContent(['another text'], 1);
+    expect(truncated.providerResponse.content).toHaveLength(2048);
+    expect(truncated.action).toBe('pending');
+  });
 });
