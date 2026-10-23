@@ -1,6 +1,10 @@
-// Uses a new schema on an explicitly supplied disposable local MySQL server; storage is mocked.
 require('ts-node/register');
 require('tsconfig-paths/register');
+const { ModerationMessagesService } = require('../src/content-moderation/moderation-messages.service');
+const { SettingEntity } = require('../src/entity/setting.entity');
+const { CmsModerationSettingsController } = require('../src/content-moderation/cms-moderation-settings.controller');
+// Uses a new schema on an explicitly supplied disposable local MySQL server; storage is mocked.
+
 const assert = require('node:assert/strict');
 const { readdirSync } = require('node:fs');
 const { resolve } = require('node:path');
@@ -51,6 +55,7 @@ const realQueue = queueConnection ? new (require('bullmq').Queue)(COMMENT_QUEUE,
 let moderationResult = 'publish';
 let moderationScript = [];
 let classifyCalls = 0;
+let rejectionType = null;
 const secret = 'synthetic-psychoeducation-test-secret';
 const password = 'Synthetic123!';
 
@@ -69,12 +74,12 @@ async function main() {
         TypeOrmModule.forRoot({ name: 'mimate', type: 'mysql', host: '127.0.0.1', port, username: 'root', password: '', database: schema, timezone: 'Z', synchronize: true,
           entities: readdirSync(folder).filter(file => /\.entity\.ts$/.test(file) && !/^(user|car|vehicle)\.entity\./.test(file)).map(file => resolve(folder, file)),
         }),
-        TypeOrmModule.forFeature([PostEntity, AssetsEntity, Member], 'mimate'), AdminAuthModule,
+        TypeOrmModule.forFeature([PostEntity, AssetsEntity, Member, SettingEntity], 'mimate'), AdminAuthModule,
       ],
-      controllers: [PsychoeducationController, UploadController, MemberContentController],
-      providers: [MemberContentService, MemberAuthGuard,
+      controllers: [PsychoeducationController, UploadController, MemberContentController, CmsModerationSettingsController],
+      providers: [ModerationMessagesService, MemberContentService, MemberAuthGuard,
         { provide: getQueueToken(COMMENT_QUEUE), useValue: { add: async (_name, data, options) => { queuedComments.push(data); if (realQueue) { await realQueue.add('moderate-comment', data, options); } } } },
-        { provide: ContentModerationService, useValue: { classify: async () => { classifyCalls++; const action = moderationScript.shift() ?? moderationResult; return { action, categories: action === 'reject' ? ['profanity'] : [], model: 'synthetic', policy: 'synthetic', checkedAt: new Date().toISOString() }; } } },
+        { provide: ContentModerationService, useValue: { classify: async () => { classifyCalls++; const action = moderationScript.shift() ?? moderationResult; return { action, type: action === 'reject' ? rejectionType : undefined, categories: action === 'reject' ? [rejectionType ?? 'profanity'] : [], model: 'synthetic', policy: 'synthetic', checkedAt: new Date().toISOString() }; } } },
         AdminPostContentService, CmsMembersGuard, UploadService, { provide: MemberAuthService, useValue: { limit: async () => undefined, authenticateSession: async (token) => {
           const id = memberTokens.get(token);
           if (!id) { throw new (require('@nestjs/common').UnauthorizedException)(); }
@@ -100,6 +105,19 @@ async function main() {
     const cmsAuth = module.get(AdminAuthService);
     const token = await cmsAuth.login(admins[0]);
     const otherToken = await cmsAuth.login(admins[1]);
+    const settingsCall = async (method, body, authToken = token) => {
+      const response = await fetch(base + '/cms-settings/moderation/messages', { method, headers: { Authorization: 'Bearer ' + authToken, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+      return { status: response.status, body: await response.json() };
+    };
+    const initialMessages = (await settingsCall('GET')).body.data;
+    assert.equal(Object.keys(initialMessages.messages).length, 4);
+    const changes = await Promise.all([
+      settingsCall('PUT', { ...initialMessages, messages: { ...initialMessages.messages, bullying: 'Updated bullying notification A' } }),
+      settingsCall('PUT', { ...initialMessages, messages: { ...initialMessages.messages, bullying: 'Updated bullying notification B' } }, otherToken),
+    ]);
+    assert.deepEqual(changes.map(result => result.status).sort(), [200, 409]);
+    const currentMessages = (await settingsCall('GET')).body.data;
+    assert.equal((await settingsCall('PUT', { ...currentMessages, messages: { ...currentMessages.messages, sara: '' } })).status, 400);
     const ordinary = await db.getRepository(Member).save({ name: 'Member', email: 'member@example.test', memberAuthEnabled: true });
     const forgedRoleToken = jwt.sign({ iss: 'https://mimate.otesuto.com/admin-auth/login', aud: 'cms', kind: 'admin-access', id: ordinary.id });
     const service = module.get(AdminPostContentService);
@@ -269,9 +287,23 @@ async function main() {
     moderationResult = 'reject';
     await memberContent.moderateComment({ id: commentId, revision: 2 });
     assert.equal((await mobile('GET', `/${videoId}/comments`)).body.data.items[0].status, 'rejected');
+    const rejectedMessage = (await mobile('GET', `/${videoId}/comments`)).body.data.items[0];
+    assert.equal(rejectedMessage.moderationType, 'bullying');
+    assert.equal(rejectedMessage.moderationMessage, currentMessages.messages.bullying);
     assert.equal((await mobile('GET', `/${videoId}`)).body.data.commentCount, 0);
     assert.equal((await mobile('GET', `/${videoId}/comments`, undefined, 'member-two')).body.data.items.length, 0);
     assert.equal((await call('GET', `/${videoId}/comments`)).body.data.items[0].moderationStatus, 'rejected');
+    rejectionType = 'self_harm';
+    const supportive = await mobile('POST', `/${videoId}/comments`, { content: 'Synthetic support classification', requestId: 'synthetic_support_request_0001' });
+    await memberContent.moderateComment({ id: supportive.body.data.id, revision: 1 });
+    const supportResult = (await mobile('GET', `/${videoId}/comments`)).body.data.items.find(item => item.id === supportive.body.data.id);
+    assert.equal(supportResult.moderationType, 'self_harm');
+    assert.equal(supportResult.moderationMessage, currentMessages.messages.self_harm);
+    assert.equal((await mobile('GET', `/${videoId}/comments`, undefined, 'member-two')).body.data.items.length, 0);
+    const replay = await mobile('POST', `/${videoId}/comments`, { content: 'Synthetic support classification', requestId: 'synthetic_support_request_0001' });
+    assert.equal(replay.body.data.moderationMessage, currentMessages.messages.self_harm);
+    await mobile('DELETE', `/${videoId}/comments/${supportive.body.data.id}`);
+    rejectionType = null;
     await mobile('DELETE', `/${videoId}/comments/${commentId}`);
     await memberContent.moderateComment({ id: commentId, revision: 2 });
     assert.equal((await mobile('GET', `/${videoId}/comments`)).body.data.items.length, 0);

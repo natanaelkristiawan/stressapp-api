@@ -252,3 +252,39 @@ list/detail, pending comments, deletion, likes and retry-safe view events. Run
 from stressapp-api with PSYCHOEDUCATION_TEST_PORT, optional
 PSYCHOEDUCATION_TEST_REDIS_PORT and PSYCHOEDUCATION_TEST_MOBILE_ADAPTER=1; the last
 flag requires the sibling stressapp checkout. All test services are disposable.
+
+## Four-type moderation (confirmed and implemented 2026-10-23)
+
+The current policy is `opencode-four-types-v3`. OpenCode returns exactly
+`{"type":"safe"}` with one of `self_harm`, `sexual`, `sara`, `bullying`, `safe`,
+`uncertain`. Priority is self_harm > sexual > sara > bullying. Profanity and threats
+map to bullying; sexual education and neutral/reporting context remain allowed.
+Safe publishes; uncertain/provider failure stays pending; the four violation types
+reject with the matching message. Self-harm gets supportive wording, no account
+penalty. The AI does not write notification text or perform unrelated tasks.
+
+CMS Settings → Content Moderation → Notification messages edits four fixed,
+nonblank plain-text messages (maximum 2000 characters each). Configuration reuses
+`setting_config` under `moderation.notification-messages.v1`; missing rows initialize
+once without overwriting existing edits. GET/PUT `/cms-settings/moderation/messages`
+requires a live authorized admin. PUT includes `{messages, version}`; stale edits
+return 409. No schema migration or dependency was added. Test results include
+`type` and `notificationMessage`; each test reads current configuration even when
+the classification is cached. Sanitized provider preview and admin write bypass
+remain. Missing/corrupt message configuration fails closed.
+
+Queued psychoeducation comments store the matching message with the exact rejected
+revision; only their author sees type/message. Replayed saves retain that snapshot.
+Later CMS changes apply to new decisions, not historical snapshots. Mobile shows
+inline feedback and one popup per rejected revision in the authenticated provider
+session, with a support title for self_harm. Logout/account changes reset that state.
+The defaults exclude unverified phone numbers from the source CSV. Push delivery,
+account penalties and human escalation are outside this step.
+
+Validation: 97 focused API tests, real disposable MySQL HTTP + BullMQ/Redis worker
+integration (including self_harm and bullying messages, private visibility, replay,
+concurrent CMS writes and revision retries), standalone Redis lock/cache/rate tests,
+CMS boundary tests, mobile adapter/provider tests, API/CMS builds, mobile web export,
+TypeScript and scoped lint pass. AI responses are synthetic in tests; live OpenCode
+quality, real browser interaction and physical-device popup behavior need acceptance
+checks after deployment. Deploy API/worker before CMS/mobile.

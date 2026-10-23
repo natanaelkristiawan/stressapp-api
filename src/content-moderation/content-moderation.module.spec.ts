@@ -1,3 +1,5 @@
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { SettingEntity } from '../entity/setting.entity';
 import { Test } from '@nestjs/testing';
 import { MODULE_METADATA } from '@nestjs/common/constants';
 import { getQueueToken } from '@nestjs/bullmq';
@@ -32,6 +34,8 @@ describe('Profile moderation dependency wiring', () => {
       ),
       providers: [PostService],
     })
+      .overrideProvider(getRepositoryToken(SettingEntity, 'mimate'))
+      .useValue({})
       .overrideProvider(getQueueToken(MODERATION_QUEUE))
       .useValue({})
       .useMocker((token) => {

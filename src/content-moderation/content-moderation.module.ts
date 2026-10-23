@@ -1,3 +1,6 @@
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { SettingEntity } from '../entity/setting.entity';
+import { ModerationMessagesService } from './moderation-messages.service';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import {
@@ -7,8 +10,15 @@ import {
 import { ContentModerationProcessor } from './content-moderation.processor';
 
 @Module({
-  imports: [BullModule.registerQueue({ name: MODERATION_QUEUE })],
-  providers: [ContentModerationService, ContentModerationProcessor],
-  exports: [ContentModerationService],
+  imports: [
+    TypeOrmModule.forFeature([SettingEntity], 'mimate'),
+    BullModule.registerQueue({ name: MODERATION_QUEUE }),
+  ],
+  providers: [
+    ContentModerationService,
+    ContentModerationProcessor,
+    ModerationMessagesService,
+  ],
+  exports: [ContentModerationService, ModerationMessagesService],
 })
 export class ContentModerationModule {}

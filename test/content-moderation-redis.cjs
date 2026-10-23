@@ -29,13 +29,13 @@ async function main() {
     queue = new Queue(MODERATION_QUEUE, { connection });
     events = new QueueEvents(MODERATION_QUEUE, { connection });
     await events.waitUntilReady();
-    const service = new ContentModerationService(new ConfigService({ OPENCODE_API_KEY: 'synthetic', OPENCODE_MODERATION_MODEL: 'test-model' }), { getOrNil: () => redis }, queue);
+    const service = new ContentModerationService(new ConfigService({ OPENCODE_API_KEY: 'synthetic', OPENCODE_MODERATION_MODEL: 'test-model' }), { getOrNil: () => redis }, queue, { forResult: async () => null });
     let calls = 0;
     axios.default.post = async (endpoint, payload) => {
       assert.equal(endpoint, 'https://opencode.ai/inference/openai/v1/chat/completions');
       assert.equal(payload.max_tokens, 120);
       calls++;
-      return { data: { model: 'test-model', choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ categories: [], uncertain: calls === 1 }) } }] } };
+      return { data: { model: 'test-model', choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ type: calls === 1 ? 'uncertain' : 'safe' }) } }] } };
     };
     worker = new Worker(MODERATION_QUEUE, job => service.retry(job.data), { connection });
     assert.equal((await service.moderateContent(['synthetic pending text'], 1)).action, 'pending');

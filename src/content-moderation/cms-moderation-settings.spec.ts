@@ -1,3 +1,5 @@
+import { DEFAULT_MESSAGES } from './moderation-policy';
+import { ModerationMessagesService } from './moderation-messages.service';
 import {
   INestApplication,
   UnauthorizedException,
@@ -17,12 +19,17 @@ describe('CMS moderation test endpoint', () => {
   let app: INestApplication;
   const admin = { currentAdmin: jest.fn() };
   const moderation = { status: jest.fn(), testContent: jest.fn() };
+  const messages = { read: jest.fn(), save: jest.fn() };
   const logger = { create: jest.fn() };
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [CmsModerationSettingsController],
       providers: [
         CmsMembersGuard,
+        {
+          provide: ModerationMessagesService,
+          useValue: messages,
+        },
         { provide: AdminAuthService, useValue: admin },
         { provide: ContentModerationService, useValue: moderation },
       ],
@@ -53,6 +60,14 @@ describe('CMS moderation test endpoint', () => {
   });
   beforeEach(() => {
     jest.clearAllMocks();
+    messages.read.mockResolvedValue({
+      messages: DEFAULT_MESSAGES,
+      version: 'a'.repeat(64),
+    });
+    messages.save.mockResolvedValue({
+      messages: DEFAULT_MESSAGES,
+      version: 'b'.repeat(64),
+    });
     admin.currentAdmin.mockResolvedValue({ id: '1' });
     moderation.status.mockReturnValue({
       configured: true,
@@ -127,5 +142,50 @@ describe('CMS moderation test endpoint', () => {
       .send({ content: 'text' })
       .expect(401);
     expect(moderation.testContent).not.toHaveBeenCalled();
+  });
+  it('reads and updates four fixed messages through the live admin guard', async () => {
+    const result = await request(app.getHttpServer())
+      .get('/cms-settings/moderation/messages')
+      .set('Authorization', 'Bearer synthetic-admin')
+      .expect(200);
+    expect(result.body.data.messages).toEqual(DEFAULT_MESSAGES);
+    await request(app.getHttpServer())
+      .put('/cms-settings/moderation/messages')
+      .set('Authorization', 'Bearer synthetic-admin')
+      .send({ messages: DEFAULT_MESSAGES, version: 'a'.repeat(64) })
+      .expect(200);
+    expect(messages.save).toHaveBeenCalledWith(
+      DEFAULT_MESSAGES,
+      'a'.repeat(64),
+    );
+    await request(app.getHttpServer())
+      .put('/cms-settings/moderation/messages')
+      .send({ messages: DEFAULT_MESSAGES, version: 'a'.repeat(64) })
+      .expect(401);
+  });
+  it.each([
+    {},
+    { messages: DEFAULT_MESSAGES },
+    { messages: { ...DEFAULT_MESSAGES, sexual: '' }, version: 'a'.repeat(64) },
+    {
+      messages: { ...DEFAULT_MESSAGES, sara: ' '.repeat(4) },
+      version: 'a'.repeat(64),
+    },
+    {
+      messages: { ...DEFAULT_MESSAGES, bullying: 'x'.repeat(2001) },
+      version: 'a'.repeat(64),
+    },
+    {
+      messages: { ...DEFAULT_MESSAGES, custom: 'extra' },
+      version: 'a'.repeat(64),
+    },
+    { messages: DEFAULT_MESSAGES, version: 'wrong' },
+  ])('rejects invalid message configuration %p', async (input) => {
+    await request(app.getHttpServer())
+      .put('/cms-settings/moderation/messages')
+      .set('Authorization', 'Bearer synthetic-admin')
+      .send(input)
+      .expect(400);
+    expect(messages.save).not.toHaveBeenCalled();
   });
 });

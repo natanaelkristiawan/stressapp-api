@@ -1,3 +1,5 @@
+import { ModerationMessagesService } from '../content-moderation/moderation-messages.service';
+import { violationType } from '../content-moderation/moderation-policy';
 import { Interval } from '@nestjs/schedule';
 import { Activity } from '../entity/activity.entity';
 import {
@@ -26,6 +28,7 @@ export class MemberContentService {
     private readonly posts: Repository<PostEntity>,
     @InjectQueue(COMMENT_QUEUE) private readonly queue: Queue<CommentJob>,
     private readonly moderation: ContentModerationService,
+    private readonly messages: ModerationMessagesService,
   ) {}
 
   /** Limits every operation to visible educational content, including direct-ID requests. */
@@ -194,6 +197,16 @@ export class MemberContentService {
       isSelf: comment.member?.id === memberId,
       status: comment.moderationStatus,
       revision: comment.moderationRevision,
+      moderationType:
+        comment.member?.id === memberId &&
+        comment.moderationStatus === 'rejected'
+          ? violationType(comment.moderation ?? {})
+          : null,
+      moderationMessage:
+        comment.member?.id === memberId &&
+        comment.moderationStatus === 'rejected'
+          ? comment.moderation?.notificationMessage ?? null
+          : null,
       createdAt: comment.created_at,
       updatedAt: comment.updated_at,
     };
@@ -207,6 +220,7 @@ export class MemberContentService {
       .getRepository(CommentEntity)
       .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.member', 'member')
+      .addSelect('comment.moderation')
       .where('comment.backup_post_with_attribute_id = :id', { id })
       .andWhere(
         '(comment.moderationStatus = :approved OR member.id = :memberId)',
@@ -288,10 +302,12 @@ export class MemberContentService {
         message: requestId,
       });
       if (replay) {
-        const previous = await repo.findOne({
-          where: { id: replay.commentId },
-          relations: ['member'],
-        });
+        const previous = await repo
+          .createQueryBuilder('comment')
+          .addSelect('comment.moderation')
+          .leftJoinAndSelect('comment.member', 'member')
+          .where('comment.id = :id', { id: replay.commentId })
+          .getOne();
         if (!previous) {
           throw new NotFoundException('Komentar tidak ditemukan.');
         }
@@ -356,6 +372,7 @@ export class MemberContentService {
     if (result.action === 'pending') {
       throw new Error('Comment moderation pending');
     }
+    const notificationMessage = await this.messages.forResult(result);
     await this.posts.manager.transaction(async (manager) => {
       // Lock the post before its comment, matching CMS moderation and member writes.
       const post = await manager.getRepository(PostEntity).findOne({
@@ -376,7 +393,10 @@ export class MemberContentService {
       ) {
         return;
       }
-      comment.moderation = result;
+      comment.moderation = {
+        ...result,
+        notificationMessage: notificationMessage ?? undefined,
+      };
       comment.moderationStatus =
         result.action === 'publish' ? 'approved' : 'rejected';
       await manager.getRepository(CommentEntity).save(comment);

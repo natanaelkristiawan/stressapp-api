@@ -1,3 +1,4 @@
+import { ModerationMessagesService } from './moderation-messages.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
 import { Queue } from 'bullmq';
@@ -23,7 +24,23 @@ function completion(categories: string[] = [], uncertain = false) {
       choices: [
         {
           finish_reason: 'stop',
-          message: { content: JSON.stringify({ categories, uncertain }) },
+          message: {
+            content: JSON.stringify({
+              type: uncertain
+                ? 'uncertain'
+                : categories.includes('self_harm')
+                ? 'self_harm'
+                : categories.some((type) =>
+                    ['sexual', 'pornography'].includes(type),
+                  )
+                ? 'sexual'
+                : categories.includes('sara')
+                ? 'sara'
+                : categories.length
+                ? 'bullying'
+                : 'safe',
+            }),
+          },
         },
       ],
     },
@@ -59,6 +76,9 @@ describe('ContentModerationService', () => {
       }),
       { getOrNil: () => redis } as unknown as RedisService,
       queue as unknown as Queue<ModerationJob>,
+      {
+        forResult: async () => 'Configured notification',
+      } as unknown as ModerationMessagesService,
     );
     completionCreate.mockResolvedValue(completion());
   });
@@ -82,7 +102,15 @@ describe('ContentModerationService', () => {
     completionCreate.mockResolvedValue(completion(categories));
     const result = await service.moderateContent([text], 1);
     expect(result.action).toBe(categories.length ? 'reject' : 'publish');
-    expect(result.categories).toEqual(categories);
+    expect(result.type).toBe(
+      categories.length
+        ? ['pornography', 'sexual'].some((type) => categories.includes(type))
+          ? 'sexual'
+          : categories.includes('sara')
+          ? 'sara'
+          : 'bullying'
+        : 'safe',
+    );
   });
 
   it('keeps prompt injection as user data and restricts output and tokens', async () => {
@@ -100,16 +128,17 @@ describe('ContentModerationService', () => {
     expect(request.response_format.json_schema.strict).toBe(true);
   });
 
-  it('uses only the five agreed categories', async () => {
+  it('uses only the six fixed result keys', async () => {
     await service.moderateContent(['text'], 1);
     const schema =
       completionCreate.mock.calls[0][1].response_format.json_schema.schema;
-    expect(schema.properties.categories.items.enum).toEqual([
+    expect(schema.properties.type.enum).toEqual([
+      'self_harm',
+      'sexual',
       'sara',
-      'harassment',
-      'profanity',
-      'threat',
-      'pornography',
+      'bullying',
+      'safe',
+      'uncertain',
     ]);
   });
 
@@ -244,6 +273,9 @@ describe('ContentModerationService', () => {
       new ConfigService(),
       { getOrNil: () => redis } as unknown as RedisService,
       queue as unknown as Queue<ModerationJob>,
+      {
+        forResult: async () => 'Configured notification',
+      } as unknown as ModerationMessagesService,
     );
     expect((await withoutKey.moderateContent(['text'], 1)).action).toBe(
       'pending',
@@ -256,6 +288,9 @@ describe('ContentModerationService', () => {
           new ConfigService({ OPENCODE_API_KEY: 'synthetic' }),
           { getOrNil: () => redis } as unknown as RedisService,
           queue as unknown as Queue<ModerationJob>,
+          {
+            forResult: async () => 'Configured notification',
+          } as unknown as ModerationMessagesService,
         ),
     ).toThrow('OPENCODE_MODERATION_MODEL');
   });
@@ -298,6 +333,9 @@ describe('ContentModerationService', () => {
       }),
       { getOrNil: () => redis } as unknown as RedisService,
       queue as unknown as Queue<ModerationJob>,
+      {
+        forResult: async () => 'Configured notification',
+      } as unknown as ModerationMessagesService,
     );
     expect((await deepseek.moderateContent(['safe'], 1)).action).toBe(
       'publish',
@@ -307,9 +345,7 @@ describe('ContentModerationService', () => {
     expect(body.thinking).toEqual({ type: 'disabled' });
     expect(body.max_tokens).toBe(120);
     expect(body.store).toBeUndefined();
-    expect(body.messages[0].content).toContain(
-      '"categories":[],"uncertain":false',
-    );
+    expect(body.messages[0].content).toContain('"type":"safe"');
     completionCreate.mockResolvedValue({
       data: {
         model: 'deepseek-v4-flash',
@@ -380,7 +416,7 @@ describe('ContentModerationService', () => {
           {
             finish_reason: 'stop',
             message: {
-              content: JSON.stringify({ categories: [], uncertain: false }),
+              content: JSON.stringify({ type: 'safe' }),
               reasoning_content: 'private reasoning',
             },
           },
@@ -395,9 +431,7 @@ describe('ContentModerationService', () => {
       finishReason: 'stop',
       usage: { total_tokens: 32 },
     });
-    expect(result.providerResponse.content).toBe(
-      '{"categories":[],"uncertain":false}',
-    );
+    expect(result.providerResponse.content).toBe('{"type":"safe"}');
     expect(JSON.stringify(result)).not.toMatch(
       /private reasoning|original test|authorization/,
     );
@@ -450,5 +484,51 @@ describe('ContentModerationService', () => {
     const truncated = await service.testContent(['another text'], 1);
     expect(truncated.providerResponse.content).toHaveLength(2048);
     expect(truncated.action).toBe('pending');
+  });
+  it.each(['self_harm', 'sexual', 'sara', 'bullying', 'safe', 'uncertain'])(
+    'accepts one exact key %s',
+    async (type) => {
+      completionCreate.mockResolvedValue({
+        data: {
+          model: 'test',
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: { content: JSON.stringify({ type }) },
+            },
+          ],
+        },
+      });
+      const result = await service.moderateContent(['text'], 1);
+      expect(result.type).toBe(type);
+      expect(result.action).toBe(
+        type === 'safe'
+          ? 'publish'
+          : type === 'uncertain'
+          ? 'pending'
+          : 'reject',
+      );
+      expect(completionCreate.mock.calls[0][1].messages[0].content).toContain(
+        'self_harm > sexual > sara > bullying',
+      );
+    },
+  );
+  it.each([
+    { type: ['sexual', 'sara'] },
+    { type: 'unknown' },
+    { type: 'safe', extra: true },
+  ])('rejects ambiguous or invalid keys %p', async (content) => {
+    completionCreate.mockResolvedValue({
+      data: {
+        model: 'test',
+        choices: [
+          {
+            finish_reason: 'stop',
+            message: { content: JSON.stringify(content) },
+          },
+        ],
+      },
+    });
+    expect((await service.moderateContent(['text'], 1)).action).toBe('pending');
   });
 });
