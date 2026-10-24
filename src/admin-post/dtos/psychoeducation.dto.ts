@@ -190,6 +190,13 @@ export class UpdateContentCategoryDto extends ContentCategoryNameDto {
 /** Validates the cross-content CMS comment table query. */
 export class PsychoeducationCommentListDto extends PsychoeducationCommentsDto {
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  postId?: number;
+
+  @IsOptional()
   @IsString()
   @MaxLength(100)
   user?: string;

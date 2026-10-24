@@ -333,3 +333,15 @@ article (source title), startDate/endDate (YYYY-MM-DD, UTC). Deleted comments an
 content are excluded; all AI statuses included. DELETE /:id/comments/:commentId
 also accepts reason admin_delete with the reviewed version; legacy sara retained.
 No approval/rejection action is exposed. No schema or dependency changes.
+
+## Searchable comment source filter (2026-10-24)
+
+Reused the existing demo/CMS StyledCombobox for the Comments article/video filter.
+Debounced API search returns up to 20 suggestions with title/type/ID, plus All
+articles and videos. Exact postId selection distinguishes duplicate titles; the
+selected label restores from URL, with loading/error/retry feedback. RHF owns the
+draft and URL owns the applied filter. Existing content endpoints reused; comment
+API validates and filters postId. Legacy API article title search remains supported.
+API/CMS builds, scoped lint (existing TanStack warnings), API boundary/query check
+and CMS boundary tests pass. Browser/live database acceptance not run. No deployment.
+Next: deploy API before CMS and verify search/select/reset/back navigation.

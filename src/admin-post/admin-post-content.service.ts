@@ -457,6 +457,9 @@ export class AdminPostContentService {
         text: input.comment,
       });
     }
+    if (input.postId) {
+      query.andWhere('post.id = :postId', { postId: input.postId });
+    }
     if (input.article) {
       query.andWhere('LOCATE(:article, post.title) > 0', {
         article: input.article,

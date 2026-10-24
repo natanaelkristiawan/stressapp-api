@@ -10,7 +10,7 @@ const { PsychoeducationController } = require('../src/admin-post/psychoeducation
 const { CmsMembersGuard } = require('../src/cms-members/cms-members.guard');
 
 async function main() {
-  const invalid = [{ page: 0 }, { pageSize: 101 }, { user: 'x'.repeat(101) }, { comment: 'x'.repeat(261) }, { article: 'x'.repeat(201) }, { startDate: '2026-02-30' }, { endDate: '2026-10-24T00:00:00Z' }];
+  const invalid = [{ postId: 0 }, { postId: 'invalid' }, { page: 0 }, { pageSize: 101 }, { user: 'x'.repeat(101) }, { comment: 'x'.repeat(261) }, { article: 'x'.repeat(201) }, { startDate: '2026-02-30' }, { endDate: '2026-10-24T00:00:00Z' }];
   for (const input of invalid) {
     assert((await validate(plainToInstance(PsychoeducationCommentListDto, input))).length > 0);
   }
@@ -24,8 +24,9 @@ async function main() {
   }
   query.getManyAndCount = async () => [[{ id: 7, description: '<script>text</script>', member: { name: 'Member', email: 'member@example.test' }, post: { id: 9, title: 'Article', contentType: 'article' }, moderationStatus: 'rejected', created_at: new Date(), updated_at: new Date() }], 1];
   const service = new AdminPostContentService({ manager: { getRepository: () => ({ createQueryBuilder: () => query }) } });
-  const result = await service.allComments({ page: 2, pageSize: 10, user: '%_', comment: 'text', article: 'Article', startDate: '2026-10-24', endDate: '2026-10-24' });
+  const result = await service.allComments({ page: 2, pageSize: 10, postId: 9, user: '%_', comment: 'text', article: 'Article', startDate: '2026-10-24', endDate: '2026-10-24' });
   assert.equal(result.items[0].postId, 9);
+  assert(calls.some(([, sql, params]) => sql === 'post.id = :postId' && params.postId === 9));
   assert.equal(result.items[0].moderationStatus, 'rejected');
   assert.equal(result.items[0].content, '<script>text</script>');
   assert(calls.some(([method, value]) => method === 'skip' && value === 10));
