@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsDateString,
   IsArray,
   ArrayMaxSize,
   ArrayUnique,
@@ -158,8 +159,8 @@ export class PsychoeducationCommentIdDto extends PsychoeducationIdDto {
 }
 
 export class ModeratePsychoeducationCommentDto {
-  @IsIn(['sara'])
-  reason: 'sara';
+  @IsIn(['sara', 'admin_delete'])
+  reason: 'sara' | 'admin_delete';
 
   @IsString()
   @Matches(/^[a-f0-9]{64}$/)
@@ -184,4 +185,32 @@ export class UpdateContentCategoryDto extends ContentCategoryNameDto {
   @IsInt()
   @Min(1)
   revision: number;
+}
+
+/** Validates the cross-content CMS comment table query. */
+export class PsychoeducationCommentListDto extends PsychoeducationCommentsDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  user?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(260)
+  comment?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  article?: string;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  startDate?: string;
+
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
+  endDate?: string;
 }

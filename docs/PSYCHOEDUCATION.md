@@ -318,3 +318,18 @@ suite, including multiple assignments for both types, duplicates/invalid IDs/lim
 renaming, stale category edits, archives/retained links/removal, catalog pagination
 and category-scoped content cursors. Real mobile adapter checks also pass. No live
 database/deployment changes; synchronize:true adds metadata to existing tag tables.
+
+## Standalone psychoeducation Comments table (2026-10-24)
+
+Confirmed: Psikoedukasi has a separate Comments page following All Members.
+Show full comments/replies from articles/videos with author name/email, source
+title/type, AI status and UTC creation time. Filters: user name/email, comment
+text, source title and inclusive UTC start/end creation days. Server pagination
+and newest-first order; no detail popup. Admins may confirm soft deletion only;
+AI retains approve/reject. Reuse existing Post/Comment/Activity and revision guards.
+
+API: GET /admin-post/psychoeducation/comments accepts page/pageSize, user, comment,
+article (source title), startDate/endDate (YYYY-MM-DD, UTC). Deleted comments and
+content are excluded; all AI statuses included. DELETE /:id/comments/:commentId
+also accepts reason admin_delete with the reviewed version; legacy sara retained.
+No approval/rejection action is exposed. No schema or dependency changes.

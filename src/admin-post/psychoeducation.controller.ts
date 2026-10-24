@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { AdminPostContentService } from './admin-post-content.service';
 import {
+  PsychoeducationCommentListDto,
   ContentCategoryNameDto,
   UpdateContentCategoryDto,
   PsychoeducationIdDto,
@@ -66,6 +67,13 @@ export class PsychoeducationController {
     return { data: await this.content.saveCategory(input, params.id) };
   }
 
+  /** Lists all educational comments for the separate CMS moderation table. */
+  @Get('comments')
+  @Header('Cache-Control', 'private, no-store')
+  async allComments(@Query() query: PsychoeducationCommentListDto) {
+    return { data: await this.content.allComments(query) };
+  }
+
   /** Returns the selected article/video, including drafts, to an active CMS admin. */
   @Get(':id')
   @Header('Cache-Control', 'private, no-store')
@@ -83,7 +91,7 @@ export class PsychoeducationController {
     return { data: await this.content.comments(params.id, query) };
   }
 
-  /** Records a human SARA moderation decision and soft-deletes exactly the selected comment. */
+  /** Records an admin deletion decision and soft-deletes exactly the reviewed comment. */
   @Delete(':id/comments/:commentId')
   @Header('Cache-Control', 'private, no-store')
   async moderateComment(

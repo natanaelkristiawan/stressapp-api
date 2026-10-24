@@ -23,6 +23,7 @@ import { CommentEntity } from '../entity/comment.entity';
 import { UserAdmin } from '../entity/user-admin.entity';
 import { ReactionEntity } from '../entity/reaction.entity';
 import {
+  PsychoeducationCommentListDto,
   ContentCategoryNameDto,
   UpdateContentCategoryDto,
   PsychoeducationListDto,
@@ -433,6 +434,71 @@ export class AdminPostContentService {
     };
   }
 
+  /** Returns all nondeleted educational comments; UTC end dates include the entire day. */
+  async allComments(input: PsychoeducationCommentListDto) {
+    if (input.startDate && input.endDate && input.startDate > input.endDate) {
+      throw new BadRequestException('End date must be on or after start date.');
+    }
+    const query = this.posts.manager
+      .getRepository(CommentEntity)
+      .createQueryBuilder('comment')
+      .innerJoinAndSelect('comment.post', 'post')
+      .leftJoinAndSelect('comment.member', 'member')
+      .where('post.isPsychoeducation = :educational', { educational: true });
+    // LOCATE treats wildcard characters literally and keeps all user values parameterized.
+    if (input.user) {
+      query.andWhere(
+        '(LOCATE(:user, member.name) > 0 OR LOCATE(:user, member.email) > 0)',
+        { user: input.user },
+      );
+    }
+    if (input.comment) {
+      query.andWhere('LOCATE(:text, comment.description) > 0', {
+        text: input.comment,
+      });
+    }
+    if (input.article) {
+      query.andWhere('LOCATE(:article, post.title) > 0', {
+        article: input.article,
+      });
+    }
+    if (input.startDate) {
+      query.andWhere('comment.created_at >= :start', {
+        start: new Date(`${input.startDate}T00:00:00.000Z`),
+      });
+    }
+    if (input.endDate) {
+      const end = new Date(`${input.endDate}T00:00:00.000Z`);
+      end.setUTCDate(end.getUTCDate() + 1);
+      query.andWhere('comment.created_at < :end', { end });
+    }
+    const [comments, total] = await query
+      .orderBy('comment.created_at', 'DESC')
+      .addOrderBy('comment.id', 'DESC')
+      .skip((input.page - 1) * input.pageSize)
+      .take(input.pageSize)
+      .getManyAndCount();
+    return {
+      items: comments.map((comment) => ({
+        id: comment.id,
+        content: comment.description ?? '',
+        authorName: comment.member?.name || 'Unavailable member',
+        authorEmail: comment.member?.email ?? null,
+        postId: comment.post.id,
+        postTitle: comment.post.title,
+        contentType: comment.post.contentType,
+        moderationStatus: comment.moderationStatus,
+        parentId: comment.backup_comment_id ?? null,
+        createdAt: comment.created_at,
+        updatedAt: comment.updated_at,
+        version: this.commentVersion(comment),
+      })),
+      total,
+      page: input.page,
+      pageSize: input.pageSize,
+    };
+  }
+
   /** Soft-deletes one unchanged comment and records actor/reason atomically without copying its text. */
   async moderateComment(
     id: number,
@@ -510,7 +576,10 @@ export class AdminPostContentService {
         commentId,
         targetType: 'comment',
         source: 'cms-psychoeducation',
-        message: 'SARA policy violation',
+        message:
+          input.reason === 'sara'
+            ? 'SARA policy violation'
+            : 'Admin comment deletion',
       });
     });
   }
