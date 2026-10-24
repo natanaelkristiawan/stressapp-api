@@ -1,5 +1,39 @@
 # OpenCode content moderation
 
+## CMS-managed OpenCode credentials (2026-10-24)
+
+Use the existing `/settings/moderation` page → OpenCode provider. Enter a key and
+model ID, then Save key and model. An empty key preserves the effective key;
+changing only the model is supported. The existing `.env` OPENCODE_API_KEY and
+OPENCODE_MODERATION_MODEL remain fallback values until the first CMS save. The
+page never displays a saved key; it clears successfully submitted keys. Nothing
+is stored in browser storage and no `.env` file is rewritten.
+
+Guarded GET/PUT `/cms-settings/moderation` returns only configured/model/version.
+PUT accepts `{apiKey, model, version}` with bounded printable key characters and
+model IDs restricted to letters, digits, dot, underscore and hyphen. The endpoint
+requires the existing live CMS admin guard, excludes request logging and uses
+private/no-store responses. Stale concurrent edits return 409. Model access and
+key validity must be checked using the existing Test moderation button; saving
+alone does not prove provider access.
+
+The API reuses setting_config under reserved key moderation.private-provider.v1,
+encrypting the key/model using AES-256-GCM and a purpose-derived JWT_SECRET key.
+JWT_SECRET must be present and consistent across API/worker processes. Keep this
+secret with database backups: changing it makes stored settings unreadable; plan
+the corresponding re-encryption/reset before server-secret rotation. Generic
+settings list/read/write/delete routes exclude this private entry. No schema or
+package changes were needed. Each check reads an immutable current snapshot;
+configuration versions invalidate old cache entries and obsolete retry jobs.
+In-flight checks finish using the snapshot with which they started.
+
+Verification: focused provider/security/HTTP tests, existing moderation boundaries,
+standalone real Redis retries and disposable MySQL HTTP integration pass (encrypted
+storage, blank-key retention, two-admin conflicts and existing content flows).
+API/CMS builds, CMS TypeScript and scoped lint pass. Real OpenCode credentials,
+browser interaction and deployment were not exercised.
+
+
 ## Four-type moderation (confirmed and implemented 2026-10-23)
 
 The current policy is `opencode-four-types-v3`. OpenCode returns exactly

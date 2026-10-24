@@ -18,7 +18,11 @@ import { RequestLogService } from '../request-log/request-log.service';
 describe('CMS moderation test endpoint', () => {
   let app: INestApplication;
   const admin = { currentAdmin: jest.fn() };
-  const moderation = { status: jest.fn(), testContent: jest.fn() };
+  const moderation = {
+    status: jest.fn(),
+    saveProvider: jest.fn(),
+    testContent: jest.fn(),
+  };
   const messages = { read: jest.fn(), save: jest.fn() };
   const logger = { create: jest.fn() };
   beforeAll(async () => {
@@ -80,6 +84,67 @@ describe('CMS moderation test endpoint', () => {
       policy: 'test-policy',
       checkedAt: new Date().toISOString(),
     });
+  });
+
+  it('saves provider settings without echoing or logging the key', async () => {
+    const safe = {
+      configured: true,
+      model: 'deepseek-v4-flash',
+      version: 'b'.repeat(64),
+    };
+    moderation.saveProvider.mockResolvedValue(safe);
+    const result = await request(app.getHttpServer())
+      .put('/cms-settings/moderation')
+      .set('Authorization', 'Bearer synthetic-admin')
+      .send({
+        apiKey: 'synthetic-private-key',
+        model: 'deepseek-v4-flash',
+        version: 'a'.repeat(64),
+      })
+      .expect(200);
+    expect(result.body.data).toEqual(safe);
+    expect(JSON.stringify(result.body)).not.toContain('synthetic-private-key');
+    expect(result.headers['cache-control']).toBe('private, no-store');
+    expect(logger.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {},
+    { apiKey: 'has space', model: 'test', version: 'a'.repeat(64) },
+    { apiKey: 'secret\nheader', model: 'test', version: 'a'.repeat(64) },
+    { apiKey: 'x'.repeat(4097), model: 'test', version: 'a'.repeat(64) },
+    { apiKey: '', model: '../invalid', version: 'a'.repeat(64) },
+    { apiKey: '', model: '', version: 'a'.repeat(64) },
+    { apiKey: '', model: 'test', version: 'bad' },
+    { apiKey: null, model: 'test', version: 'a'.repeat(64) },
+    {
+      apiKey: '',
+      model: 'test',
+      version: 'a'.repeat(64),
+      endpoint: 'https://elsewhere',
+    },
+  ])('rejects invalid provider input %p', async (input) => {
+    await request(app.getHttpServer())
+      .put('/cms-settings/moderation')
+      .set('Authorization', 'Bearer synthetic-admin')
+      .send(input)
+      .expect(400);
+    expect(moderation.saveProvider).not.toHaveBeenCalled();
+  });
+
+  it('requires an authorized live admin for provider changes', async () => {
+    const body = { apiKey: '', model: 'test', version: 'a'.repeat(64) };
+    await request(app.getHttpServer())
+      .put('/cms-settings/moderation')
+      .send(body)
+      .expect(401);
+    admin.currentAdmin.mockRejectedValue(new UnauthorizedException());
+    await request(app.getHttpServer())
+      .put('/cms-settings/moderation')
+      .set('Authorization', 'Bearer synthetic-admin')
+      .send(body)
+      .expect(401);
+    expect(moderation.saveProvider).not.toHaveBeenCalled();
   });
 
   it('returns safe setup state with no-store headers', async () => {

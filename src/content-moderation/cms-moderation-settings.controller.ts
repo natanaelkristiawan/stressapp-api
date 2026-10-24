@@ -61,6 +61,21 @@ export class SaveModerationMessagesDto {
   version: string;
 }
 
+export class SaveModerationProviderDto {
+  @IsString()
+  @Matches(/^[\x21-\x7e]*$/)
+  @MaxLength(4096)
+  apiKey: string;
+
+  @IsString()
+  @Matches(/^[A-Za-z0-9._-]{1,100}$/)
+  model: string;
+
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  version: string;
+}
+
 @ApiTags('CMS moderation settings')
 @ApiBearerAuth('access-token')
 @UseGuards(CmsMembersGuard)
@@ -74,8 +89,15 @@ export class CmsModerationSettingsController {
   /** Returns configuration presence/model only; never exposes the private provider key. */
   @Get()
   @Header('Cache-Control', 'private, no-store')
-  status() {
-    return { data: this.moderation.status() };
+  async status() {
+    return { data: await this.moderation.status() };
+  }
+
+  /** Updates the private key/model without returning or logging credentials. */
+  @Put()
+  @Header('Cache-Control', 'private, no-store')
+  async saveProvider(@Body() input: SaveModerationProviderDto) {
+    return { data: await this.moderation.saveProvider(input) };
   }
 
   /** Reads four fixed notification entries and their concurrency version. */

@@ -1,3 +1,4 @@
+import { ModerationProviderSettingsService } from './moderation-provider-settings.service';
 import { ModerationMessagesService } from './moderation-messages.service';
 import { ConfigService } from '@nestjs/config';
 import { RedisService } from '@liaoliaots/nestjs-redis';
@@ -79,6 +80,13 @@ describe('ContentModerationService', () => {
       {
         forResult: async () => 'Configured notification',
       } as unknown as ModerationMessagesService,
+      new ModerationProviderSettingsService(
+        { findOneBy: async () => null } as never,
+        new ConfigService({
+          OPENCODE_API_KEY: 'synthetic-test-key',
+          OPENCODE_MODERATION_MODEL: 'glm-5.3-flash',
+        }),
+      ),
     );
     completionCreate.mockResolvedValue(completion());
   });
@@ -268,7 +276,53 @@ describe('ContentModerationService', () => {
     },
   );
 
-  it('fails closed without a key and validates model configuration', async () => {
+  it('uses current CMS credentials, invalidates cached checks, and redacts the exact in-flight key', async () => {
+    let current = {
+      apiKey: 'first-private-key',
+      model: 'first-model',
+      version: 'a'.repeat(64),
+    };
+    const configured = new ContentModerationService(
+      new ConfigService(),
+      { getOrNil: () => redis } as unknown as RedisService,
+      queue as unknown as Queue<ModerationJob>,
+      { forResult: async () => null } as unknown as ModerationMessagesService,
+      {
+        read: async () => ({ ...current }),
+      } as ModerationProviderSettingsService,
+    );
+    await configured.testContent(['same text'], 9);
+    expect(completionCreate.mock.calls[0][1].model).toBe('first-model');
+    expect(completionCreate.mock.calls[0][2].headers.Authorization).toBe(
+      'Bearer first-private-key',
+    );
+    current = {
+      apiKey: 'second-private-key',
+      model: 'deepseek-v4-flash',
+      version: 'b'.repeat(64),
+    };
+    completionCreate.mockResolvedValue({
+      status: 403,
+      data: { error: { message: 'second-private-key' } },
+    });
+    const result = await configured.testContent(['same text'], 9);
+    expect(completionCreate).toHaveBeenCalledTimes(2);
+    expect(completionCreate.mock.calls[1][1].model).toBe('deepseek-v4-flash');
+    expect(completionCreate.mock.calls[1][2].headers.Authorization).toBe(
+      'Bearer second-private-key',
+    );
+    expect(JSON.stringify(result)).not.toContain('second-private-key');
+    expect(result.providerResponse.error.message).toBe('[redacted]');
+    await configured.retry({
+      key: 'old-key',
+      text: 'old text',
+      expiresAt: Date.now() + 60000,
+      configurationVersion: 'a'.repeat(64),
+    });
+    expect(completionCreate).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed without a configured key', async () => {
     const withoutKey = new ContentModerationService(
       new ConfigService(),
       { getOrNil: () => redis } as unknown as RedisService,
@@ -276,23 +330,16 @@ describe('ContentModerationService', () => {
       {
         forResult: async () => 'Configured notification',
       } as unknown as ModerationMessagesService,
+      new ModerationProviderSettingsService(
+        { findOneBy: async () => null } as never,
+        new ConfigService(),
+      ),
     );
     expect((await withoutKey.moderateContent(['text'], 1)).action).toBe(
       'pending',
     );
     expect(completionCreate).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
-    expect(
-      () =>
-        new ContentModerationService(
-          new ConfigService({ OPENCODE_API_KEY: 'synthetic' }),
-          { getOrNil: () => redis } as unknown as RedisService,
-          queue as unknown as Queue<ModerationJob>,
-          {
-            forResult: async () => 'Configured notification',
-          } as unknown as ModerationMessagesService,
-        ),
-    ).toThrow('OPENCODE_MODERATION_MODEL');
   });
   it('skips AI/cache/queue only for an internally authorized CMS admin', async () => {
     const result = await service.assertPublishable(['CMS text'], 7, true);
@@ -316,12 +363,13 @@ describe('ContentModerationService', () => {
     ).rejects.toMatchObject({ status: 422 });
     expect(completionCreate).toHaveBeenCalledTimes(1);
   });
-  it('reports setup presence without returning credentials', () => {
-    expect(service.status()).toEqual({
+  it('reports setup presence without returning credentials', async () => {
+    expect(await service.status()).toEqual({
       configured: true,
       model: 'glm-5.3-flash',
+      version: '0'.repeat(64),
     });
-    expect(JSON.stringify(service.status())).not.toContain(
+    expect(JSON.stringify(await service.status())).not.toContain(
       'synthetic-test-key',
     );
   });
@@ -336,6 +384,13 @@ describe('ContentModerationService', () => {
       {
         forResult: async () => 'Configured notification',
       } as unknown as ModerationMessagesService,
+      new ModerationProviderSettingsService(
+        { findOneBy: async () => null } as never,
+        new ConfigService({
+          OPENCODE_API_KEY: 'synthetic',
+          OPENCODE_MODERATION_MODEL: 'deepseek-v4-flash',
+        }),
+      ),
     );
     expect((await deepseek.moderateContent(['safe'], 1)).action).toBe(
       'publish',

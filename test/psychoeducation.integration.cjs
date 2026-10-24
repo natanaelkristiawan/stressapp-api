@@ -1,5 +1,6 @@
 require('ts-node/register');
 require('tsconfig-paths/register');
+const { ModerationProviderSettingsService } = require('../src/content-moderation/moderation-provider-settings.service');
 const { ModerationMessagesService } = require('../src/content-moderation/moderation-messages.service');
 const { SettingEntity } = require('../src/entity/setting.entity');
 const { CmsModerationSettingsController } = require('../src/content-moderation/cms-moderation-settings.controller');
@@ -77,9 +78,9 @@ async function main() {
         TypeOrmModule.forFeature([PostEntity, AssetsEntity, Member, SettingEntity], 'mimate'), AdminAuthModule,
       ],
       controllers: [PsychoeducationController, UploadController, MemberContentController, CmsModerationSettingsController],
-      providers: [ModerationMessagesService, MemberContentService, MemberAuthGuard,
+      providers: [ModerationProviderSettingsService, ModerationMessagesService, MemberContentService, MemberAuthGuard,
         { provide: getQueueToken(COMMENT_QUEUE), useValue: { add: async (_name, data, options) => { queuedComments.push(data); if (realQueue) { await realQueue.add('moderate-comment', data, options); } } } },
-        { provide: ContentModerationService, useValue: { classify: async () => { classifyCalls++; const action = moderationScript.shift() ?? moderationResult; return { action, type: action === 'reject' ? rejectionType : undefined, categories: action === 'reject' ? [rejectionType ?? 'profanity'] : [], model: 'synthetic', policy: 'synthetic', checkedAt: new Date().toISOString() }; } } },
+        { provide: ContentModerationService, inject: [ModerationProviderSettingsService], useFactory: provider => ({ status: () => provider.status(), saveProvider: input => provider.save(input), classify: async () => { classifyCalls++; const action = moderationScript.shift() ?? moderationResult; return { action, type: action === 'reject' ? rejectionType : undefined, categories: action === 'reject' ? [rejectionType ?? 'profanity'] : [], model: 'synthetic', policy: 'synthetic', checkedAt: new Date().toISOString() }; } }) },
         AdminPostContentService, CmsMembersGuard, UploadService, { provide: MemberAuthService, useValue: { limit: async () => undefined, authenticateSession: async (token) => {
           const id = memberTokens.get(token);
           if (!id) { throw new (require('@nestjs/common').UnauthorizedException)(); }
@@ -109,6 +110,25 @@ async function main() {
       const response = await fetch(base + '/cms-settings/moderation/messages', { method, headers: { Authorization: 'Bearer ' + authToken, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
       return { status: response.status, body: await response.json() };
     };
+    const providerCall = async (method, body, authToken = token) => {
+      const response = await fetch(base + '/cms-settings/moderation', { method, headers: { Authorization: 'Bearer ' + authToken, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+      return { status: response.status, body: await response.json() };
+    };
+    const providerInitial = (await providerCall('GET')).body.data;
+    const providerChanges = await Promise.all([
+      providerCall('PUT', { apiKey: 'synthetic-private-provider-A', model: 'model-a', version: providerInitial.version }),
+      providerCall('PUT', { apiKey: 'synthetic-private-provider-B', model: 'model-b', version: providerInitial.version }, otherToken),
+    ]);
+    assert.deepEqual(providerChanges.map(result => result.status).sort(), [200, 409]);
+    const providerCurrent = (await providerCall('GET')).body.data;
+    assert(!JSON.stringify(providerCurrent).includes('synthetic-private-provider'));
+    assert.equal((await providerCall('PUT', { apiKey: '', model: 'model-c', version: providerCurrent.version })).status, 200);
+    const runtimeSettings = await module.get(ModerationProviderSettingsService).read();
+    assert.equal(runtimeSettings.model, 'model-c');
+    assert(runtimeSettings.apiKey.startsWith('synthetic-private-provider-'));
+    const storedProvider = await db.getRepository(SettingEntity).findOneBy({ key: 'moderation.private-provider.v1' });
+    assert(!storedProvider.value.includes('synthetic-private-provider'));
+    assert.equal((await providerCall('PUT', { apiKey: '', model: '../invalid', version: runtimeSettings.version })).status, 400);
     const initialMessages = (await settingsCall('GET')).body.data;
     assert.equal(Object.keys(initialMessages.messages).length, 4);
     const changes = await Promise.all([

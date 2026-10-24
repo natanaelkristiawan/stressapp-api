@@ -9,6 +9,7 @@ const Redis = require('ioredis');
 const { Queue, Worker, QueueEvents } = require('bullmq');
 const { ConfigService } = require('@nestjs/config');
 const axios = require('axios');
+const { ModerationProviderSettingsService } = require('../src/content-moderation/moderation-provider-settings.service');
 const { ContentModerationService, MODERATION_QUEUE } = require('../src/content-moderation/content-moderation.service');
 
 async function main() {
@@ -29,7 +30,7 @@ async function main() {
     queue = new Queue(MODERATION_QUEUE, { connection });
     events = new QueueEvents(MODERATION_QUEUE, { connection });
     await events.waitUntilReady();
-    const service = new ContentModerationService(new ConfigService({ OPENCODE_API_KEY: 'synthetic', OPENCODE_MODERATION_MODEL: 'test-model' }), { getOrNil: () => redis }, queue, { forResult: async () => null });
+    const service = new ContentModerationService(new ConfigService({ OPENCODE_API_KEY: 'synthetic', OPENCODE_MODERATION_MODEL: 'test-model' }), { getOrNil: () => redis }, queue, { forResult: async () => null }, new ModerationProviderSettingsService({ findOneBy: async () => null }, new ConfigService({ OPENCODE_API_KEY: 'synthetic', OPENCODE_MODERATION_MODEL: 'test-model' })));
     let calls = 0;
     axios.default.post = async (endpoint, payload) => {
       assert.equal(endpoint, 'https://opencode.ai/inference/openai/v1/chat/completions');

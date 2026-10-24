@@ -1,6 +1,7 @@
+import { MODERATION_PROVIDER_KEY } from '../content-moderation/moderation-provider-settings.service';
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Brackets, Repository } from 'typeorm';
 import { SettingEntity } from 'src/entity/setting.entity';
 import { LogLastActiveManual } from 'src/entity/log-last-active-manual.entity';
 import { AdminSettingListDto, CreateSettingDto, UpdateSettingDto } from './dtos/admin-setting.dto';
@@ -23,14 +24,22 @@ export class AdminSettingService {
   async getAllSetting(dto: AdminSettingListDto): Promise<DatatableSetting> {
     const { page = 1, limit = 10, search } = dto;
 
-    const query = this.settingRepository.createQueryBuilder('setting');
+    const query = this.settingRepository
+      .createQueryBuilder('setting')
+      .where('setting.key <> :privateKey', {
+        privateKey: MODERATION_PROVIDER_KEY,
+      });
 
-    const recordsTotal = await this.settingRepository.count();
+    const recordsTotal = await query.getCount();
 
     if (search) {
-      query.where('setting.key LIKE :search OR setting.description LIKE :search', {
-        search: `%${search}%`,
-      });
+      query.andWhere(
+        new Brackets((filter) => {
+          filter.where('setting.key LIKE :search OR setting.description LIKE :search', {
+            search: `%${search}%`,
+          });
+        }),
+      );
     }
 
     const recordsFiltered = await query.getCount();
@@ -51,21 +60,23 @@ export class AdminSettingService {
 
   async getDetailSetting(id: number): Promise<SettingEntity> {
     const setting = await this.settingRepository.findOne({ where: { id } });
-    if (!setting) {
+    if (!setting || setting.key === MODERATION_PROVIDER_KEY) {
       throw new NotFoundException(`Setting with ID ${id} not found`);
     }
     return setting;
   }
 
   async getSettingByKey(key: string): Promise<SettingEntity> {
+    this.assertPublicKey(key);
     const setting = await this.settingRepository.findOne({ where: { key } });
-    if (!setting) {
+    if (!setting || setting.key === MODERATION_PROVIDER_KEY) {
       throw new NotFoundException(`Setting with key '${key}' not found`);
     }
     return setting;
   }
 
   async createSetting(dto: CreateSettingDto): Promise<SettingEntity> {
+    this.assertPublicKey(dto.key);
     const existing = await this.settingRepository.findOne({ where: { key: dto.key } });
     if (existing) {
       throw new BadRequestException(`Setting with key '${dto.key}' already exists`);
@@ -81,8 +92,10 @@ export class AdminSettingService {
   }
 
   async upsertSetting(dto: CreateSettingDto): Promise<SettingEntity> {
+    this.assertPublicKey(dto.key);
     let setting = await this.settingRepository.findOne({ where: { key: dto.key } });
     if (setting) {
+      this.assertPublicKey(setting.key);
       if (dto.value !== undefined) setting.value = dto.value;
       if (dto.description !== undefined) setting.description = dto.description;
     } else {
@@ -96,6 +109,7 @@ export class AdminSettingService {
   }
 
   async updateSetting(id: number, dto: UpdateSettingDto): Promise<SettingEntity> {
+    this.assertPublicKey(dto.key);
     const setting = await this.getDetailSetting(id);
 
     if (dto.key && dto.key !== setting.key) {
@@ -121,6 +135,14 @@ export class AdminSettingService {
     const setting = await this.getDetailSetting(id);
     await this.settingRepository.remove(setting);
     return { deleted: true };
+  }
+
+  /** Private provider credentials are accessible only through the live-admin moderation settings route. */
+  private assertPublicKey(key: string | undefined): void {
+    const normalizedKey = key?.normalize('NFKD').replace(/\p{M}/gu, '').trim().toLowerCase();
+    if (normalizedKey === MODERATION_PROVIDER_KEY) {
+      throw new NotFoundException('Setting not found');
+    }
   }
 
   /**
