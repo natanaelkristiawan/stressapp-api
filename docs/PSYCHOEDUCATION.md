@@ -385,3 +385,13 @@ Verification: `PSYCHOEDUCATION_TEST_PORT=<disposable-mysql-port>
 TS_NODE_TRANSPILE_ONLY=1 node test/psychoeducation.integration.cjs` includes the
 real multipart routes, template, no-write preview, category creation, drafts,
 duplicates/concurrent retry, error boundaries and forced transaction rollback.
+
+
+### Member YouTube thumbnails
+
+Member list/detail thumbnailUrl uses an uploaded image first. For YouTube video
+content with no upload and a valid stored YouTube ID, it returns
+`https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg`. This is derived at response
+time, without changing storage. Article/self-hosted behavior is unchanged. CMS
+responses retain the actual uploaded value for safe editor round trips.
+Focused regression: `TS_NODE_TRANSPILE_ONLY=1 node test/content-thumbnail.cjs`.

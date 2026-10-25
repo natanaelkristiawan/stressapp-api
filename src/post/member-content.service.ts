@@ -135,13 +135,22 @@ export class MemberContentService {
     const commentCount = await manager.getRepository(CommentEntity).count({
       where: { post: { id: post.id }, moderationStatus: 'approved' },
     });
+    let thumbnailUrl = post.image || null;
+    if (
+      !thumbnailUrl &&
+      post.contentType === 'video' &&
+      post.videoSource === 'youtube' &&
+      /^[A-Za-z0-9_-]{11}$/.test(post.youtubeId ?? '')
+    ) {
+      thumbnailUrl = `https://img.youtube.com/vi/${post.youtubeId}/maxresdefault.jpg`;
+    }
     return {
       id: post.id,
       categories: await contentCategories(manager, post.id),
       contentType: post.contentType,
       title: post.title,
       description: post.description ?? '',
-      thumbnailUrl: post.image ?? null,
+      thumbnailUrl,
       body: detail ? post.textContent ?? null : null,
       videoSource:
         post.contentType === 'video' ? post.videoSource ?? 'self' : null,
