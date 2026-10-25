@@ -98,3 +98,11 @@ revoked or suspended-admin access returns 401. Responses stay private/no-store
 and excluded from request logging. Current content only: updates replace the
 entry; no prior versions are recorded. Images are previews and audio has native
 browser controls. Empty notes/attachments and loading/error/retry are visible.
+
+## Dashboard (2026-10-25)
+
+GET /cms-mood-participation/dashboard accepts the same required from/to date
+range as summary. Returns unchanged summary fields plus daily [{date,count}]
+and recent (latest4 metadata-only rows ordered by local record date, then ID).
+Uses existing eligibility, active-admin authorization and no-store response policy.
+No mood scores, notes or media are included.

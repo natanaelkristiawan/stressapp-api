@@ -89,3 +89,13 @@ storage survives restart. No offline starts, no reconstruction after process dea
 Production module and standalone datasource both include the new entities. Keep
 confirmed development synchronize:true policy. Deploy API/schema before CMS/mobile.
 No production deployment or physical device/browser acceptance is claimed.
+
+## Dashboard cards (2026-10-25)
+
+GET /cms-breathing/dashboard accepts the existing validated report query and
+returns the summary fields plus daily completed counts grouped by UTC session
+start date, up to20 exercise ID/historical-title groups (started/completed counts),
+and latest4 safe history rows. Same active-admin guard and no-store policy as
+history. Unfinished rows have endedAt:null. Completion is completed/started,
+including in-progress sessions in the denominator. CMS shares one request across
+module-owned cards; the dashboard owns date range and refresh.
