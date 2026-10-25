@@ -67,6 +67,10 @@ export class PsychoeducationListDto {
 
 export class SavePsychoeducationDto {
   @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  isPinned?: boolean;
+
+  @ValidateIf((_object, value) => value !== undefined)
   @IsArray()
   @ArrayMaxSize(20)
   @ArrayUnique()
@@ -129,6 +133,11 @@ export class PsychoeducationVersionDto {
   @IsInt()
   @Min(1)
   revision: number;
+}
+
+export class PinPsychoeducationDto extends PsychoeducationVersionDto {
+  @IsBoolean()
+  isPinned: boolean;
 }
 
 export class UpdatePsychoeducationDto extends SavePsychoeducationDto {

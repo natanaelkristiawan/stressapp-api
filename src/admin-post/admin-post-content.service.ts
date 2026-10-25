@@ -134,6 +134,7 @@ export class AdminPostContentService {
       id: post.id,
       categories: await contentCategories(manager, post.id, true),
       isPsychoeducation: true,
+      isPinned: post.isPinned ?? false,
       contentType: post.contentType,
       title: post.title,
       description: post.description ?? '',
@@ -330,6 +331,7 @@ export class AdminPostContentService {
       videoSource,
       youtubeId,
       image: input.thumbnailUrl ?? null,
+      ...(input.isPinned !== undefined ? { isPinned: input.isPinned } : {}),
       status: input.status.toUpperCase(),
     };
   }
@@ -410,6 +412,17 @@ export class AdminPostContentService {
       post.contentRevision += 1;
       await manager.save(post);
       await assignCategories(manager, post.id, input.categoryIds);
+      return this.response(post, manager);
+    });
+  }
+
+  /** Changes only the featured selection, preserving content and rejecting stale table edits. */
+  async pin(id: number, isPinned: boolean, revision: number) {
+    return this.posts.manager.transaction(async (manager) => {
+      const post = await this.editable(manager, id, revision);
+      post.isPinned = isPinned;
+      post.contentRevision += 1;
+      await manager.save(post);
       return this.response(post, manager);
     });
   }

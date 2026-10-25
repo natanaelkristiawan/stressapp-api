@@ -36,6 +36,9 @@ export class PostEntity {
     @Column({ type: 'varchar', length: 64, nullable: true, unique: true })
     contentImportKey?: string | null;
 
+    @Column({ default: false })
+    isPinned?: boolean;
+
     @Column({ type: 'int', unsigned: true, default: 1 })
     contentRevision?: number;
 

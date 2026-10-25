@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -12,6 +13,19 @@ import {
 } from 'class-validator';
 
 export class ContentPageDto {
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') {
+      return true;
+    }
+    if (value === 'false') {
+      return false;
+    }
+    return value;
+  })
+  @IsBoolean()
+  isPinned?: boolean;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

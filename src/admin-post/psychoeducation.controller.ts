@@ -15,6 +15,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { AdminPostContentService } from './admin-post-content.service';
 import {
+  PinPsychoeducationDto,
   PsychoeducationCommentListDto,
   ContentCategoryNameDto,
   UpdateContentCategoryDto,
@@ -79,6 +80,18 @@ export class PsychoeducationController {
   @Header('Cache-Control', 'private, no-store')
   async detail(@Param() params: PsychoeducationIdDto) {
     return { data: await this.content.detail(params.id) };
+  }
+
+  /** Updates the featured checkbox without replacing the article/video fields. */
+  @Patch(':id/pin')
+  @Header('Cache-Control', 'private, no-store')
+  async pin(
+    @Param() params: PsychoeducationIdDto,
+    @Body() input: PinPsychoeducationDto,
+  ) {
+    return {
+      data: await this.content.pin(params.id, input.isPinned, input.revision),
+    };
   }
 
   /** Lists comments/replies only for an educational post, including drafts for moderation. */

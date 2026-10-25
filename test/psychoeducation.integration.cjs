@@ -583,6 +583,7 @@ async function main() {
       if (previousTimezone === undefined) { delete process.env.TZ; } else { process.env.TZ = previousTimezone; }
     }
     await require('./content-import.cjs')({ base, token, forgedRoleToken, db, module });
+    await require('./content-pins.cjs')({ call, mobile, forumId: forum.id, forgedRoleToken });
     console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, YouTube links/source switching/legacy fallback, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility, mobile cursor/member privacy/queued moderation/likes/views, soft deletion and UTC filters/report buckets across three host timezones.');
   } finally {
     if (realQueue) { await realQueue.obliterate({ force: true }); await realQueue.close(); }

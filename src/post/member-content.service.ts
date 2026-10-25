@@ -217,9 +217,13 @@ export class MemberContentService {
       input.type ?? '',
       input.search ?? '',
       input.categoryId ?? null,
+      input.isPinned ?? null,
     ]);
     const query = this.visible();
     filterContentCategory(query, input.categoryId);
+    if (input.isPinned !== undefined) {
+      query.andWhere('post.isPinned = :isPinned', { isPinned: input.isPinned });
+    }
     if (input.type) {
       query.andWhere('post.contentType = :type', { type: input.type });
     }

@@ -395,3 +395,19 @@ content with no upload and a valid stored YouTube ID, it returns
 time, without changing storage. Article/self-hosted behavior is unchanged. CMS
 responses retain the actual uploaded value for safe editor round trips.
 Focused regression: `TS_NODE_TRANSPILE_ONLY=1 node test/content-thumbnail.cjs`.
+
+## Manually pinned content (2026-10-25)
+
+Post.isPinned defaults to false. CMS create/update accepts optional strict boolean
+isPinned; omitted updates preserve the existing value. CMS responses always return
+it. `PATCH /admin-post/psychoeducation/:id/pin` accepts only `{isPinned:boolean,
+revision:positiveInteger}`, locks the educational row, rejects stale revisions409,
+and updates only that flag/revision. Existing admin guard and soft-delete scope
+apply. Multiple articles/videos may be pinned; pinning never publishes a draft.
+
+Member list supports `isPinned=true|false` with its existing type/search/category
+filters and after cursor. The pin filter is part of cursor scope; omitted means
+all published content. Draft/deleted/hidden/forum rows remain excluded. Pin order
+uses the existing creation-time/ID descending ordering; no manual rank field.
+CMS imports default to unpinned. Check: existing disposable MySQL HTTP suite now
+includes test/content-pins.cjs. Deploy API/schema before CMS/mobile.
