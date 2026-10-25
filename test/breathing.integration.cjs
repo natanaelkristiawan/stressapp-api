@@ -173,6 +173,36 @@ async function main() {
     assert.equal((await service.page()).title, title);
     assert.equal((await service.detail(exercise.id)).title, 'Renamed later');
     assert.equal(await db.getRepository(BreathingSession).count(), 3);
+    // A deleted exercise remains stored and does not erase session snapshots or block pending endings.
+    await db.getRepository(Member).update(member.id, { is_suspended: false });
+    let reviewed = (await call('GET', cms + '/exercises/' + exercise.id)).data;
+    reviewed = (await call('PATCH', cms + '/exercises/' + exercise.id, { ...input, revision: reviewed.revision, status: 'published' })).data;
+    const openSession = (await call('POST', mobile + '/sessions', { ...start, requestId: 'synthetic-before-delete' }, 'member')).data;
+    const deletePath = cms + '/exercises/' + reviewed.id;
+    for (const token of [null, 'member']) {
+      assert.equal((await call('DELETE', deletePath, { revision: reviewed.revision }, token)).status, 401);
+    }
+    for (const body of [{}, { revision: '1' }, { revision: 0 }, { revision: reviewed.revision, extra: true }]) {
+      assert.equal((await call('DELETE', deletePath, body)).status, 400);
+    }
+    assert.equal((await call('DELETE', deletePath, { revision: reviewed.revision - 1 })).status, 409);
+    await assert.rejects(() => service.remove(reviewed.id, reviewed.revision, 2147483647));
+    assert.equal((await service.detail(reviewed.id)).revision, reviewed.revision);
+    const results = await Promise.all([call('DELETE', deletePath, { revision: reviewed.revision }), call('DELETE', deletePath, { revision: reviewed.revision })]);
+    assert.deepEqual(results.map(result => result.status).sort(), [200, 404]);
+    assert.equal((await call('GET', deletePath)).status, 404);
+    assert.equal((await call('PATCH', deletePath, { ...input, revision: reviewed.revision, status: 'published' })).status, 404);
+    assert.equal((await call('GET', cms + '/exercises')).data.items.some(row => row.id === reviewed.id), false);
+    assert.equal((await call('GET', mobile, null, 'member')).data.exercises.some(row => row.id === reviewed.id), false);
+    assert.equal((await call('POST', mobile + '/sessions', { ...start, requestId: 'synthetic-after-delete' }, 'member')).status, 404);
+    assert.equal((await call('PUT', mobile + '/sessions/' + openSession.id + '/end', { status: 'stopped', elapsedSeconds: 0 }, 'member')).status, 200);
+    assert.equal((await call('GET', cms + '/history' + range)).data.total, 4);
+    const retained = await db.getRepository(BreathingExercise).findOne({ where: { id: reviewed.id }, withDeleted: true });
+    assert(retained.deletedAt); assert.equal(retained.revision, reviewed.revision + 1);
+    assert.equal(await db.getRepository(Activity).countBy({ action: 'breathing-exercise-delete' }), 1);
+    await service.onModuleInit(); await db.synchronize(); await db.synchronize();
+    assert.equal(await db.getRepository(BreathingSession).count(), 4);
+    assert.equal(await db.getRepository(BreathingExercise).findOneBy({ id: reviewed.id }), null);
     console.log('Breathing HTTP/MySQL checks passed: auth, validation, draft/published, revisions, session replay/concurrency, ownership, early finish, log deduplication, snapshots, UTC reports, late sync, summary and repeat schema sync.');
   } finally {
     if (app) { await app.close(); }

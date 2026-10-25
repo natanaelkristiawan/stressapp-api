@@ -99,3 +99,15 @@ and latest4 safe history rows. Same active-admin guard and no-store policy as
 history. Unfinished rows have endedAt:null. Completion is completed/started,
 including in-progress sessions in the denominator. CMS shares one request across
 module-owned cards; the dashboard owns date range and refresh.
+
+## CMS exercise deletion
+
+`DELETE /cms-breathing/exercises/:id` accepts `{revision:number}` under the
+existing live-admin guard. Invalid payloads return400; stale revisions409;
+missing/deleted exercises404. One locked transaction increments revision,
+unpublishes, soft deletes and records minimal audit metadata. Default reads/new
+starts exclude deleted exercises. Session FK rows, snapshots and later owned
+endings remain intact. `deletedAt` is synchronized under the existing approved
+development schema policy. Deploy API/schema before CMS delete controls.
+The existing breathing HTTP/MySQL suite covers concurrent deletes, rollback and
+history retention; no production records are used.

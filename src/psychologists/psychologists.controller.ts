@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  Delete,
   Controller,
   Get,
   Header,
@@ -24,6 +25,7 @@ import {
 import { MemberAuthService } from '../member-auth/member-auth.service';
 import {
   LocationIdDto,
+  DeleteLocationDto,
   LocationImportDto,
   LocationInputDto,
   LocationListDto,
@@ -70,6 +72,22 @@ export class CmsPsychologistsController {
   ) {
     return {
       data: await this.directory.save(input, request.userData.id),
+    };
+  }
+  /** Soft deletes the reviewed record while preserving related history. */
+  @Delete(':id')
+  @Header('Cache-Control', 'private, no-store')
+  async remove(
+    @Param() path: LocationIdDto,
+    @Body() input: DeleteLocationDto,
+    @Req() request: { userData: { id: number } },
+  ) {
+    return {
+      data: await this.directory.remove(
+        path.id,
+        input.revision,
+        request.userData.id,
+      ),
     };
   }
   /** Updates only the reviewed revision. */

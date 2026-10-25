@@ -160,6 +160,38 @@ export class PsychologistsService {
     }
     return { ...locationResponse(row), distanceKm: null };
   }
+  /** Soft deletes under a revision lock; related rows and history remain stored. */
+  async remove(id: number, revision: number, actorId: number) {
+    return this.db.transaction(async (manager) => {
+      const repository = manager.getRepository(PsychologistLocation);
+      const record = await repository.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!record) {
+        throw new NotFoundException('Location not found.');
+      }
+      if (record.revision !== revision) {
+        throw new ConflictException(
+          'This record changed. Reload before deleting.',
+        );
+      }
+      record.revision += 1;
+      record.status = 'draft';
+      await repository.save(record);
+      await repository.softDelete(id);
+      await manager.getRepository(Activity).save({
+        action: 'psychologist-delete',
+        source: 'cms-psychologists',
+        message: JSON.stringify({
+          actorId,
+          recordId: id,
+          revision: record.revision,
+        }),
+      });
+      return { id };
+    });
+  }
   /** Creates or revision-checks one branch; duplicate identities never overwrite another branch. */
   async save(
     input: LocationInputDto | UpdateLocationDto,

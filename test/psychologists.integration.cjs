@@ -97,6 +97,22 @@ async function main(){
   const adapter=loadMobile('lib/psychologists-api.ts',{'./member-auth-api':transport,'@/stores/auth-store':{useAuthStore:{getState:()=>({token:'member'})}}}).psychologistsApi;
   assert.equal((await adapter.list({pageSize:100})).total,40);assert.equal((await adapter.cities()).length,6);
   await db.synchronize();
+  // Soft deletion removes a branch from CMS/member catalogs but keeps its identity reserved for imports.
+  const deletionTarget = (await repository.find({ order: { id: 'ASC' }, take: 1 }))[0];
+  const deletePath = '/cms-psychologists/' + deletionTarget.id;
+  for (const token of [null, 'member']) { assert.equal((await call('DELETE', deletePath, {revision: deletionTarget.revision}, token)).status,401); }
+  for (const body of [{},{revision:'1'},{revision:0},{revision:deletionTarget.revision,extra:true}]) { assert.equal((await call('DELETE',deletePath,body)).status,400); }
+  assert.equal((await call('DELETE',deletePath,{revision:deletionTarget.revision+1})).status,409);
+  const deletes=await Promise.all([call('DELETE',deletePath,{revision:deletionTarget.revision}),call('DELETE',deletePath,{revision:deletionTarget.revision})]);
+  assert.deepEqual(deletes.map(result=>result.status).sort(),[200,404]);
+  assert.equal((await call('GET',deletePath)).status,404);
+  assert.equal((await call('PATCH',deletePath,{...input,revision:deletionTarget.revision})).status,404);
+  assert.equal((await call('GET','/cms-psychologists?pageSize=100')).body.data.items.some(row=>row.id===deletionTarget.id),false);
+  assert.equal((await call('GET','/me/psychologists?pageSize=100',undefined,'member')).body.data.items.some(row=>row.id===deletionTarget.id),false);
+  const kept=await repository.findOne({where:{id:deletionTarget.id},withDeleted:true});assert(kept.deletedAt);assert.equal(kept.revision,deletionTarget.revision+1);
+  const importAfterDelete=await upload('commit',bytes,preview.body.data.fileHash);assert.deepEqual(importAfterDelete.body.data,{created:0,skipped:40});
+  assert.equal(await repository.findOneBy({id:deletionTarget.id}),null);
+  await db.synchronize();await db.synchronize();assert((await repository.findOne({where:{id:deletionTarget.id},withDeleted:true})).deletedAt);
   console.log('PASS directory: HTTP guards/DTOs, supplied workbook, 40 published branches, repeats, null envelopes, cities, real nearest SQL, revision conflicts, hidden drafts, rollback and actual mobile adapter.');
  }finally{if(app){await app.close();}await connection.query(`DROP DATABASE IF EXISTS \`${schema}\``);await connection.end();}
 }

@@ -189,9 +189,11 @@ export class PsychologistsImport {
       const duplicate = Boolean(
         key &&
           (seen.has(key) ||
-            (await this.db
-              .getRepository(PsychologistLocation)
-              .existsBy({ identityKey: key }))),
+            (await this.db.getRepository(PsychologistLocation).findOne({
+              where: { identityKey: key },
+              withDeleted: true,
+              select: { id: true },
+            }))),
       );
       if (key) {
         seen.add(key);

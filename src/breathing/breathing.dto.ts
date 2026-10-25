@@ -118,3 +118,7 @@ export class BreathingReportDto {
     'startedAt';
   @IsIn(['asc', 'desc']) order: 'asc' | 'desc' = 'desc';
 }
+
+export class DeleteExerciseDto {
+  @IsInt() @Min(1) @Max(2147483647) revision: number;
+}

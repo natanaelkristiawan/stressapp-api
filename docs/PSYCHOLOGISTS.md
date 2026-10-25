@@ -104,3 +104,15 @@ revision/publication state and distanceKm:null) for the CMS route
 return404, and responses are private/no-store. Import list/mobile scopes remain
 unchanged. Deploy API before CMS editor routes. Regression:
 `node test/cms-record-detail.cjs` (real HTTP, repository doubles).
+
+## CMS branch deletion
+
+`DELETE /cms-psychologists/:id` accepts `{revision:number}` under the existing
+live-admin guard. Invalid payloads return400; stale revisions409; missing/deleted
+branches404. A locked transaction increments revision, unpublishes, soft deletes
+and audits actor/record/revision without copying contact data. `deletedAt` is
+synchronized under the approved development schema policy. CMS/member reads and
+cities exclude deleted rows. The unique identity key remains reserved; Excel
+preview/commit includes deleted identities when skipping duplicates, so imports
+do not recreate deleted branches. Deploy API/schema before CMS delete controls.
+The existing real HTTP/MySQL directory suite covers these cases.

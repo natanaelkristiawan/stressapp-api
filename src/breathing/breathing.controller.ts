@@ -1,5 +1,6 @@
 import {
   Body,
+  Delete,
   Controller,
   Get,
   Header,
@@ -20,6 +21,7 @@ import { MemberAuthService } from '../member-auth/member-auth.service';
 import { BreathingService } from './breathing.service';
 import {
   BreathingIdDto,
+  DeleteExerciseDto,
   BreathingListDto,
   BreathingPageDto,
   BreathingReportDto,
@@ -87,6 +89,22 @@ export class CmsBreathingController {
     @Req() request: { userData: { id: number } },
   ) {
     return { data: await this.breathing.save(input, request.userData.id) };
+  }
+  /** Soft deletes the reviewed record while preserving related history. */
+  @Delete('exercises/:id')
+  @Header('Cache-Control', 'private, no-store')
+  async remove(
+    @Param() path: BreathingIdDto,
+    @Body() input: DeleteExerciseDto,
+    @Req() request: { userData: { id: number } },
+  ) {
+    return {
+      data: await this.breathing.remove(
+        path.id,
+        input.revision,
+        request.userData.id,
+      ),
+    };
   }
   /** Updates the reviewed exercise revision without changing history. */
   @Header('Cache-Control', 'private, no-store')

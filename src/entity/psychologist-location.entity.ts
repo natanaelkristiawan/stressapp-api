@@ -1,5 +1,6 @@
 import {
   Column,
+  DeleteDateColumn,
   Entity,
   PrimaryGeneratedColumn,
   CreateDateColumn,
@@ -26,4 +27,6 @@ export class PsychologistLocation {
   @Column({ default: 1 }) revision: number;
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
+  @DeleteDateColumn({ type: 'datetime', precision: 3, nullable: true })
+  deletedAt: Date | null;
 }

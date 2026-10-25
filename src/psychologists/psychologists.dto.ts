@@ -66,3 +66,7 @@ export class LocationListDto {
 export class LocationImportDto {
   @IsString() @Matches(/^[a-f0-9]{64}$/) expectedHash: string;
 }
+
+export class DeleteLocationDto {
+  @IsInt() @Min(1) @Max(2147483647) revision: number;
+}
