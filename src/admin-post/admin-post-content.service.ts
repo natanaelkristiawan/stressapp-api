@@ -64,6 +64,22 @@ export class AdminPostContentService {
     };
   }
 
+  /** Returns a canonical content category, including archived categories, for direct CMS links. */
+  async categoryDetail(id: number) {
+    const row = await this.posts.manager
+      .getRepository(TagsEntity)
+      .findOne({ where: { id, isContentCategory: true } });
+    if (!row) {
+      throw new NotFoundException('Category not found.');
+    }
+    return {
+      id: row.id,
+      name: row.title,
+      active: !row.categoryArchived,
+      revision: row.categoryRevision,
+    };
+  }
+
   /** Creates/renames/archives one shared category; a unique normalized key handles concurrent duplicate names. */
   async saveCategory(
     input: ContentCategoryNameDto | UpdateContentCategoryDto,

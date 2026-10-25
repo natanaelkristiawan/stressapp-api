@@ -40,7 +40,7 @@ export class UpdateLocationDto extends LocationInputDto {
   @IsInt() @Min(1) revision: number;
 }
 export class LocationIdDto {
-  @Type(() => Number) @IsInt() @Min(1) id: number;
+  @Type(() => Number) @IsInt() @Min(1) @Max(2147483647) id: number;
 }
 export class LocationListDto {
   @IsOptional() @Transform(trim) @IsString() @MaxLength(120) search = '';

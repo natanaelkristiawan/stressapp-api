@@ -411,3 +411,14 @@ all published content. Draft/deleted/hidden/forum rows remain excluded. Pin orde
 uses the existing creation-time/ID descending ordering; no manual rank field.
 CMS imports default to unpinned. Check: existing disposable MySQL HTTP suite now
 includes test/content-pins.cjs. Deploy API/schema before CMS/mobile.
+
+## CMS category direct links
+
+`GET /admin-post/psychoeducation/categories/:id` returns
+`{data:{id,name,active,revision}}` to the existing active-admin guard. Queries are
+scoped to canonical content categories; archived categories remain reviewable,
+missing/unrelated tags return404. ID DTOs are bounded to positive signed32-bit
+integers; responses are private/no-store. CMS content routes use the existing
+content detail endpoint; category routes use this new read endpoint. Deploy API
+before CMS. Regression: `node test/cms-record-detail.cjs` exercises real HTTP with
+repository doubles; no production data is read/written.

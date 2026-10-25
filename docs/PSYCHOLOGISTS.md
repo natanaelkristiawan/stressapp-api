@@ -95,3 +95,12 @@ mobile transport/adapter. Identity infrastructure is mocked in this harness.
 `node test/psychologists-wiring.cjs` additionally resolves the CMS controller with
 real exported MemberAuthService and mocked infrastructure. CMS boundary checks:
 `node test/psychologists.cjs` in stressapp-cms.
+
+## CMS direct record URLs
+
+`GET /cms-psychologists/:id` returns the existing safe branch shape (including
+revision/publication state and distanceKm:null) for the CMS route
+`/psychologists/:id`. Existing active-admin guard and ID DTO apply; missing IDs
+return404, and responses are private/no-store. Import list/mobile scopes remain
+unchanged. Deploy API before CMS editor routes. Regression:
+`node test/cms-record-detail.cjs` (real HTTP, repository doubles).

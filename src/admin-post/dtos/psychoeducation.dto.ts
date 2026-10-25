@@ -22,6 +22,7 @@ export class PsychoeducationIdDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(2147483647)
   id: number;
 }
 

@@ -51,6 +51,13 @@ export class PsychoeducationController {
     return { data: await this.content.categories(query) };
   }
 
+  /** Loads one category through the existing active-admin guard and validated ID. */
+  @Get('categories/:id')
+  @Header('Cache-Control', 'private, no-store')
+  async categoryDetail(@Param() params: PsychoeducationIdDto) {
+    return { data: await this.content.categoryDetail(params.id) };
+  }
+
   /** Adds a named category without creating another content module/table. */
   @Post('categories')
   @Header('Cache-Control', 'private, no-store')

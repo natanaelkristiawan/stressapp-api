@@ -150,6 +150,16 @@ export class PsychologistsService {
     });
     return { items, total, page: input.page, pageSize: input.pageSize };
   }
+  /** Loads one branch for an authenticated CMS editor, including unpublished records. */
+  async detail(id: number) {
+    const row = await this.db
+      .getRepository(PsychologistLocation)
+      .findOne({ where: { id } });
+    if (!row) {
+      throw new NotFoundException('Branch not found.');
+    }
+    return { ...locationResponse(row), distanceKm: null };
+  }
   /** Creates or revision-checks one branch; duplicate identities never overwrite another branch. */
   async save(
     input: LocationInputDto | UpdateLocationDto,

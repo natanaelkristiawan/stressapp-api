@@ -55,6 +55,12 @@ export class CmsPsychologistsController {
   async list(@Query() query: LocationListDto) {
     return { data: await this.directory.list(query) };
   }
+  /** Loads the selected branch through the existing CMS guard and validated ID. */
+  @Get(':id')
+  @Header('Cache-Control', 'private, no-store')
+  async detail(@Param() path: LocationIdDto) {
+    return { data: await this.directory.detail(path.id) };
+  }
   /** Creates one validated branch. */
   @Post()
   @Header('Cache-Control', 'private, no-store')
