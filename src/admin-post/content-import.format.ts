@@ -156,7 +156,7 @@ export function validateImportArchive(buffer: Buffer): void {
 }
 
 /** Extracts literal cells only; formulas/errors cannot bypass DTO validation through cached values. */
-function cellText(cell: ExcelJS.Cell): string {
+export function cellText(cell: ExcelJS.Cell): string {
   if (
     cell.type === ExcelJS.ValueType.Formula ||
     cell.type === ExcelJS.ValueType.Error
@@ -185,7 +185,7 @@ function cellText(cell: ExcelJS.Cell): string {
 }
 
 /** Adapts valid prefixed SpreadsheetML (including our original sample) to ExcelJS's unprefixed tag parser. */
-async function compatibleWorkbook(buffer: Buffer): Promise<Buffer> {
+export async function compatibleWorkbook(buffer: Buffer): Promise<Buffer> {
   const zip = await JSZip.loadAsync(buffer);
   const spreadsheetNamespace =
     'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
