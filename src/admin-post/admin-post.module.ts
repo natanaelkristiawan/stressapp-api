@@ -1,3 +1,4 @@
+import { MemberAuthModule } from '../member-auth/member-auth.module';
 import { ContentImportController } from './content-import.controller';
 import { ContentImportService } from './content-import.service';
 import { CmsModerationSettingsController } from '../content-moderation/cms-moderation-settings.controller';
@@ -23,6 +24,7 @@ import { AdminPostActivityService } from './admin-post-activity.service';
 
 @Module({
   imports: [
+    MemberAuthModule,
     ContentModerationModule,
     AdminAuthModule,
     TypeOrmModule.forFeature(
