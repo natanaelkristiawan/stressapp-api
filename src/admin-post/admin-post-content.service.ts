@@ -68,46 +68,50 @@ export class AdminPostContentService {
   async saveCategory(
     input: ContentCategoryNameDto | UpdateContentCategoryDto,
     id?: number,
+    transaction?: EntityManager,
   ) {
+    const save = async (manager: EntityManager) => {
+      const repo = manager.getRepository(TagsEntity);
+      const row = id
+        ? await repo.findOne({
+            where: { id, isContentCategory: true },
+            lock: { mode: 'pessimistic_write' },
+          })
+        : repo.create({
+            isContentCategory: true,
+            categoryArchived: false,
+            categoryRevision: 1,
+          });
+      if (!row) {
+        throw new NotFoundException('Category not found.');
+      }
+      if (id && 'revision' in input) {
+        if (input.revision !== row.categoryRevision) {
+          throw new ConflictException(
+            'Category changed. Reload before saving.',
+          );
+        }
+        row.categoryArchived = !input.active;
+        row.categoryRevision++;
+      }
+      const name = input.name.normalize('NFKC').trim().replace(/\s+/g, ' ');
+      row.title = name;
+      row.categoryKey = createHash('sha256')
+        .update(name.toLowerCase())
+        .digest('hex');
+      row.slug = `content-category-${row.categoryKey}`;
+      await repo.save(row);
+      return {
+        id: row.id,
+        name: row.title,
+        active: !row.categoryArchived,
+        revision: row.categoryRevision,
+      };
+    };
     try {
-      return await this.posts.manager.transaction(async (manager) => {
-        const repo = manager.getRepository(TagsEntity);
-        const row = id
-          ? await repo.findOne({
-              where: { id, isContentCategory: true },
-              lock: { mode: 'pessimistic_write' },
-            })
-          : repo.create({
-              isContentCategory: true,
-              categoryArchived: false,
-              categoryRevision: 1,
-            });
-        if (!row) {
-          throw new NotFoundException('Category not found.');
-        }
-        if (id && 'revision' in input) {
-          if (input.revision !== row.categoryRevision) {
-            throw new ConflictException(
-              'Category changed. Reload before saving.',
-            );
-          }
-          row.categoryArchived = !input.active;
-          row.categoryRevision++;
-        }
-        const name = input.name.normalize('NFKC').trim().replace(/\s+/g, ' ');
-        row.title = name;
-        row.categoryKey = createHash('sha256')
-          .update(name.toLowerCase())
-          .digest('hex');
-        row.slug = `content-category-${row.categoryKey}`;
-        await repo.save(row);
-        return {
-          id: row.id,
-          name: row.title,
-          active: !row.categoryArchived,
-          revision: row.categoryRevision,
-        };
-      });
+      return transaction
+        ? await save(transaction)
+        : await this.posts.manager.transaction(save);
     } catch (error) {
       if (error?.code === 'ER_DUP_ENTRY') {
         throw new ConflictException(
@@ -330,28 +334,52 @@ export class AdminPostContentService {
     };
   }
 
-  /** Creates a flagged post with the authenticated admin's linked member as author. */
-  async create(input: SavePsychoeducationDto, memberId: number) {
-    return this.posts.manager.transaction(async (manager) => {
-      const values = await this.values(input, manager);
-      const post = manager.getRepository(PostEntity).create({
-        ...values,
-        isPsychoeducation: true,
-        contentRevision: 1,
-        member: { id: memberId },
-        type: input.contentType === 'video' ? 'video' : 'image',
-        post_type: PostType.Post,
-        isHidden: false,
-        reactionsCount: 0,
-        repliesCount: 0,
-        totalRepliesCount: 0,
-        viewsCount: 0,
-        published_at: input.status === 'published' ? new Date() : null,
-      });
-      await manager.save(post);
-      await assignCategories(manager, post.id, input.categoryIds);
-      return this.response(post, manager);
+  /** Validates the same rich-text/media rules during spreadsheet preview and normal writes. */
+  async validateImport(input: SavePsychoeducationDto, manager: EntityManager) {
+    await this.values(input, manager);
+  }
+
+  /** Creates a flagged post, optionally participating in an import's atomic transaction. */
+  async create(
+    input: SavePsychoeducationDto,
+    memberId: number,
+    manager?: EntityManager,
+    importKey?: string,
+  ) {
+    if (manager) {
+      return this.createRecord(input, memberId, manager, importKey);
+    }
+    return this.posts.manager.transaction((transaction) =>
+      this.createRecord(input, memberId, transaction),
+    );
+  }
+
+  /** Keeps normal CMS creation and imported creation on the same validation/relationship path. */
+  private async createRecord(
+    input: SavePsychoeducationDto,
+    memberId: number,
+    manager: EntityManager,
+    importKey?: string,
+  ) {
+    const values = await this.values(input, manager);
+    const post = manager.getRepository(PostEntity).create({
+      ...values,
+      contentImportKey: importKey ?? null,
+      isPsychoeducation: true,
+      contentRevision: 1,
+      member: { id: memberId },
+      type: input.contentType === 'video' ? 'video' : 'image',
+      post_type: PostType.Post,
+      isHidden: false,
+      reactionsCount: 0,
+      repliesCount: 0,
+      totalRepliesCount: 0,
+      viewsCount: 0,
+      published_at: input.status === 'published' ? new Date() : null,
     });
+    await manager.save(post);
+    await assignCategories(manager, post.id, input.categoryIds);
+    return this.response(post, manager);
   }
 
   /** Locks one flagged post and rejects stale edits without modifying forum posts. */

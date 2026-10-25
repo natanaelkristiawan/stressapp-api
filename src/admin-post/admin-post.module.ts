@@ -1,3 +1,5 @@
+import { ContentImportController } from './content-import.controller';
+import { ContentImportService } from './content-import.service';
 import { CmsModerationSettingsController } from '../content-moderation/cms-moderation-settings.controller';
 import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { PsychoeducationController } from './psychoeducation.controller';
@@ -33,11 +35,13 @@ import { AdminPostActivityService } from './admin-post-activity.service';
     MemberVoteModule,
   ],
   controllers: [
+    ContentImportController,
     AdminPostController,
     PsychoeducationController,
     CmsModerationSettingsController,
   ],
   providers: [
+    ContentImportService,
     AdminPostService,
     AdminPostActivityService,
     AdminPostContentService,

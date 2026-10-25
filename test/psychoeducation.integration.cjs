@@ -15,6 +15,8 @@ const { TypeOrmModule, getDataSourceToken } = require('@nestjs/typeorm');
 const { ConfigModule } = require('@nestjs/config');
 const { JwtService } = require('@nestjs/jwt');
 const { ValidationPipe } = require('@nestjs/common');
+const { ContentImportController } = require('../src/admin-post/content-import.controller');
+const { ContentImportService } = require('../src/admin-post/content-import.service');
 const { PsychoeducationController } = require('../src/admin-post/psychoeducation.controller');
 const { AdminPostContentService } = require('../src/admin-post/admin-post-content.service');
 const { CmsMembersGuard } = require('../src/cms-members/cms-members.guard');
@@ -77,8 +79,8 @@ async function main() {
         }),
         TypeOrmModule.forFeature([PostEntity, AssetsEntity, Member, SettingEntity], 'mimate'), AdminAuthModule,
       ],
-      controllers: [PsychoeducationController, UploadController, MemberContentController, CmsModerationSettingsController],
-      providers: [ModerationProviderSettingsService, ModerationMessagesService, MemberContentService, MemberAuthGuard,
+      controllers: [ContentImportController, PsychoeducationController, UploadController, MemberContentController, CmsModerationSettingsController],
+      providers: [ContentImportService, ModerationProviderSettingsService, ModerationMessagesService, MemberContentService, MemberAuthGuard,
         { provide: getQueueToken(COMMENT_QUEUE), useValue: { add: async (_name, data, options) => { queuedComments.push(data); if (realQueue) { await realQueue.add('moderate-comment', data, options); } } } },
         { provide: ContentModerationService, inject: [ModerationProviderSettingsService], useFactory: provider => ({ status: () => provider.status(), saveProvider: input => provider.save(input), classify: async () => { classifyCalls++; const action = moderationScript.shift() ?? moderationResult; return { action, type: action === 'reject' ? rejectionType : undefined, categories: action === 'reject' ? [rejectionType ?? 'profanity'] : [], model: 'synthetic', policy: 'synthetic', checkedAt: new Date().toISOString() }; } }) },
         AdminPostContentService, CmsMembersGuard, UploadService, { provide: MemberAuthService, useValue: { limit: async () => undefined, authenticateSession: async (token) => {
@@ -580,6 +582,7 @@ async function main() {
     } finally {
       if (previousTimezone === undefined) { delete process.env.TZ; } else { process.env.TZ = previousTimezone; }
     }
+    await require('./content-import.cjs')({ base, token, forgedRoleToken, db, module });
     console.log('PASS: schema/repeat-sync, CMS auth, upload validation/mock storage, conditional HTML/asset validation, YouTube links/source switching/legacy fallback, CRUD/filtering, cross-admin stale-write concurrency, forum isolation, interaction counts/visibility, mobile cursor/member privacy/queued moderation/likes/views, soft deletion and UTC filters/report buckets across three host timezones.');
   } finally {
     if (realQueue) { await realQueue.obliterate({ force: true }); await realQueue.close(); }

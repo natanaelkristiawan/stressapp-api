@@ -23,6 +23,7 @@ export class NullToEmptyInterceptor implements NestInterceptor {
         'AssessmentController',
         'CmsAssessmentController',
         'PsychoeducationController',
+        'ContentImportController',
         'MemberContentController',
       ].includes(context.getClass().name)
     )

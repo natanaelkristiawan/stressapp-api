@@ -345,3 +345,43 @@ API validates and filters postId. Legacy API article title search remains suppor
 API/CMS builds, scoped lint (existing TanStack warnings), API boundary/query check
 and CMS boundary tests pass. Browser/live database acceptance not run. No deployment.
 Next: deploy API before CMS and verify search/select/reset/back navigation.
+
+## Excel content import (2026-10-25)
+
+Active CMS admins use the existing AdminPost module:
+
+- `GET /admin-post/psychoeducation/import/template`: authenticated XLSX download,
+  17 supplied video examples plus a Guide sheet; no data is saved.
+- `POST /admin-post/psychoeducation/import/preview`: multipart `file`; returns
+  SHA-256 `fileHash`, row numbers, errors, duplicate skips, planned categories and
+  counts. No content/categories are created.
+- `POST /admin-post/psychoeducation/import/commit`: multipart `file` and
+  `expectedHash` copied from preview. Revalidates the exact file and all rows,
+  then creates all valid new rows as drafts in one transaction. Any error rolls
+  back the batch. The CMS requires preview and explicit confirmation.
+
+Only `.xlsx`, up to 2 MiB / 200 populated rows. Content sheet headers in order:
+`type,title,description,categories,articleBody,videoSource,videoUrl,thumbnailUrl`.
+Types: article/video. Category names use semicolons, up to20 names of1–80 chars;
+missing categories are automatically created, normalized and reused. Archived
+categories cause a row error until restored. No existing category is renamed.
+Article body uses existing rich HTML validation/sanitization. YouTube videoUrl
+maps to youtubeUrl; self videoUrl and optional thumbnailUrl must refer to existing
+CMS-uploaded assets. Import does not upload assets or fetch external URLs.
+
+Duplicates are skipped, including previously soft-deleted content: YouTube ID,
+self video URL, or normalized article title. Existing content is never updated.
+A nullable unique Post.contentImportKey preserves imported identity; existing
+Activity stores bounded actor/file-hash/count receipts. Same-admin retry returns
+its original result; database advisory locking serializes import batches and
+unique constraints handle concurrent ordinary category creation. No new table,
+queue or dependency. Files/row text are excluded from request logs and not stored.
+ZIP expansion, XML, formulas/error cells, macros, external workbook references,
+headers, DTOs and assets are validated before writes. Rate limits: preview30/hour,
+commit10/hour per admin. No publication, YouTube availability or embed-permission
+checks are performed. Deploy the API/schema before CMS.
+
+Verification: `PSYCHOEDUCATION_TEST_PORT=<disposable-mysql-port>
+TS_NODE_TRANSPILE_ONLY=1 node test/psychoeducation.integration.cjs` includes the
+real multipart routes, template, no-write preview, category creation, drafts,
+duplicates/concurrent retry, error boundaries and forced transaction rollback.
