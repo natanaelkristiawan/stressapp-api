@@ -621,6 +621,61 @@ export class BreathingService implements OnModuleInit {
     };
   }
 
+  /** Groups completions by UTC start day and historical exercise title, preserving report scope. */
+  async dashboard(query: BreathingReportDto) {
+    // Validate before starting parallel reads so a bad range cannot leave rejected work unhandled.
+    breathingRange(query.from, query.to);
+    const title = "JSON_UNQUOTE(JSON_EXTRACT(session.snapshot, '$.title'))";
+    const [summary, daily, patterns, recent] = await Promise.all([
+      this.summary(query),
+      this.reportQuery(query)
+        .builder.select("DATE_FORMAT(session.startedAt, '%Y-%m-%d')", 'date')
+        .addSelect("COALESCE(SUM(session.status = 'completed'), 0)", 'count')
+        .groupBy("DATE_FORMAT(session.startedAt, '%Y-%m-%d')")
+        .orderBy('date', 'ASC')
+        .getRawMany<{ date: string; count: string }>(),
+      this.reportQuery(query)
+        .builder.select('session.exerciseId', 'id')
+        .addSelect(title, 'title')
+        .addSelect('COUNT(*)', 'started')
+        .addSelect(
+          "COALESCE(SUM(session.status = 'completed'), 0)",
+          'completed',
+        )
+        .groupBy('session.exerciseId')
+        .addGroupBy(title)
+        .orderBy('started', 'DESC')
+        .addOrderBy('session.exerciseId', 'ASC')
+        .addOrderBy(title, 'ASC')
+        .limit(20)
+        .getRawMany<{
+          id: number;
+          title: string;
+          started: string;
+          completed: string;
+        }>(),
+      this.history(
+        Object.assign(new BreathingReportDto(), query, {
+          page: 1,
+          pageSize: 4,
+          sort: 'startedAt',
+          order: 'desc',
+        }),
+      ),
+    ]);
+    return {
+      ...summary,
+      daily: daily.map((row) => ({ date: row.date, count: Number(row.count) })),
+      patterns: patterns.map((row) => ({
+        id: Number(row.id),
+        title: row.title,
+        started: Number(row.started),
+        completed: Number(row.completed),
+      })),
+      recent: recent.items,
+    };
+  }
+
   /** Aggregates the same start-date cohort; null completion rate means no sessions. */
   async summary(query: BreathingReportDto) {
     const { builder } = this.reportQuery(query);

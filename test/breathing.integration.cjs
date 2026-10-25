@@ -146,6 +146,22 @@ async function main() {
     assert.equal((await call('GET', cms + '/history' + range + '&sort=member.passwordHash')).status, 400);
     let summary = (await call('GET', cms + '/summary' + range)).data;
     assert.equal(summary.started, 3); assert.equal(summary.completed, 1); assert.equal(summary.participants, 1); assert.equal(summary.completionRate, 1 / 3);
+    const dashboard = await call('GET', cms + '/dashboard' + range);
+    assert.equal(dashboard.status, 200);
+    assert.equal(dashboard.data.started, 3);
+    assert.equal(dashboard.data.daily.reduce((sum, row) => sum + row.count, 0), 1);
+    assert.equal(dashboard.data.patterns.reduce((sum, row) => sum + row.started, 0), 3);
+    assert.equal(dashboard.data.patterns[0].completed, 1);
+    assert.equal(dashboard.data.recent.length, 3);
+    assert.notEqual(dashboard.data.patterns[0].title, 'Renamed later');
+    for (const token of [null, 'member']) {
+      assert.equal((await call('GET', cms + '/dashboard' + range, null, token)).status, 401);
+    }
+    assert.equal((await call('GET', cms + '/dashboard?from=2026-02-30&to=2026-03-01')).status, 400);
+    const emptyDashboard = (await call('GET', cms + '/dashboard?from=2000-01-01&to=2000-01-01')).data;
+    assert.equal(emptyDashboard.completionRate, null);
+    assert.deepEqual(emptyDashboard.patterns, []);
+    assert.deepEqual(emptyDashboard.recent, []);
     assert.equal((await call('PUT', mobile + '/sessions/' + unknown.id + '/end', { status: 'completed', elapsedSeconds: 60 }, 'member')).status, 200);
     assert.equal((await call('GET', cms + '/summary' + range)).data.completed, 2);
     assert.equal((await call('GET', cms + '/summary?from=2000-01-01&to=2000-01-01')).data.completionRate, null);

@@ -60,6 +60,29 @@ export class CmsMoodParticipationService {
     };
   }
 
+  /** Groups member-local record days and returns the latest four safe rows. */
+  async dashboard(range: ParticipationRangeDto) {
+    // Validate before starting any parallel reads.
+    this.scope(range);
+    const [summary, daily, recent] = await Promise.all([
+      this.summary(range),
+      this.scope(range)
+        .select("DATE_FORMAT(mood.dateString, '%Y-%m-%d')", 'date')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('mood.dateString')
+        .orderBy('mood.dateString', 'ASC')
+        .getRawMany<{ date: string; count: string }>(),
+      this.list(
+        Object.assign(new ParticipationListDto(), range, { pageSize: 4 }),
+      ),
+    ]);
+    return {
+      ...summary,
+      daily: daily.map((row) => ({ date: row.date, count: Number(row.count) })),
+      recent: recent.items,
+    };
+  }
+
   /** Loads current submission content, scoping media to the same member. Returns no edit history or storage credentials. */
   async detail(id: number) {
     const result = await this.scope()

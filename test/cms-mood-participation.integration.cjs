@@ -105,6 +105,20 @@ async function main() {
     assert.equal(asc[0].memberName, 'A%_Member'); assert.equal(asc.at(-1).memberName, 'Bob');
     const oldest = (await request(`?${range}&sortBy=dateString&sortOrder=asc`)).body.data.items;
     assert.equal(oldest[0].dateString, `${month}-10`);
+    const dashboard = await request(`/dashboard?${range}`);
+    assert.equal(dashboard.status, 200);
+    assert.equal(dashboard.cache, 'private, no-store');
+    assert.equal(dashboard.body.data.totalEntries, 24);
+    assert.equal(dashboard.body.data.daily.reduce((sum, row) => sum + row.count, 0), 24);
+    assert.equal(dashboard.body.data.recent.length, 4);
+    for (const row of dashboard.body.data.recent) {
+      assert.deepEqual(Object.keys(row).sort(), ['dateString', 'id', 'memberName']);
+    }
+    assert.equal((await request(`/dashboard?${range}`, null)).status, 401);
+    assert.equal((await request('/dashboard?from=2026-02-30&to=2026-03-01')).status, 400);
+    const emptyDashboard = (await request('/dashboard?from=2001-01-01&to=2001-01-02')).body.data;
+    assert.deepEqual(emptyDashboard.daily, []);
+    assert.deepEqual(emptyDashboard.recent, []);
     const single = (await request(`/summary?from=${month}-10&to=${month}-10`)).body.data;
     assert.equal(single.totalEntries, 3); assert.equal(single.uniqueParticipants, 3);
     const empty = (await request(`/summary?from=2001-01-01&to=2001-01-02`)).body.data;

@@ -23,6 +23,13 @@ export class CmsMoodParticipationController {
   /** Injects read-only reports protected by the existing live CMS admin guard. */
   constructor(private readonly participation: CmsMoodParticipationService) {}
 
+  /** Returns dashboard aggregates and bounded metadata without private mood content. */
+  @Get('dashboard')
+  @Header('Cache-Control', 'private, no-store')
+  async dashboard(@Query() query: ParticipationRangeDto) {
+    return { data: await this.participation.dashboard(query) };
+  }
+
   /** Loads whole-range participation cards. Returns counts without mood values or private content. */
   @Get('summary')
   @Header('Cache-Control', 'private, no-store')

@@ -55,6 +55,12 @@ export class CmsBreathingController {
   async history(@Query() query: BreathingReportDto) {
     return { data: await this.breathing.history(query) };
   }
+  /** Returns UTC dashboard aggregates and the latest four session reports. */
+  @Header('Cache-Control', 'private, no-store')
+  @Get('dashboard')
+  async dashboard(@Query() query: BreathingReportDto) {
+    return { data: await this.breathing.dashboard(query) };
+  }
   /** Returns dashboard totals calculated from the same session cohort. */
   @Header('Cache-Control', 'private, no-store')
   @Get('summary')
