@@ -8,6 +8,7 @@ import {
   JoinColumn,
   Index,
 } from 'typeorm';
+import { BreathingSession } from './breathing-session.entity';
 import { PostEntity } from './post.entity';
 import { CommentEntity } from './comment.entity';
 import { ReactionEntity } from './reaction.entity';
@@ -51,7 +52,21 @@ export class Activity {
   reactionId?: number;
 
   @Column({ nullable: true, length: 20 })
-  targetType?: 'post' | 'comment' | 'reaction' | 'login' | 'member';
+  targetType?:
+    | 'post'
+    | 'comment'
+    | 'reaction'
+    | 'login'
+    | 'member'
+    | 'breathing';
+
+  @Index()
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  breathingSessionId?: string | null;
+
+  @ManyToOne(() => BreathingSession, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'breathingSessionId' })
+  breathingSession?: BreathingSession;
 
   @CreateDateColumn()
   createdAt: Date;
