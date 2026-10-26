@@ -1,460 +1,1087 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Conversation } from 'src/entity/convertation.entity';
 import { Message } from 'src/entity/message.entity';
+import { UserFollowEntity } from 'src/entity/user-follow.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
-import { In, Not, Repository } from 'typeorm';
-import { GetMessage, Conversation as ConversationInterface, History as HistoryInterface, GetMessageGroupByDate, GetConversationHistory } from './interfaces/direct-message.interface';
+import { EntityManager, In, Repository } from 'typeorm';
+import {
+  ChatMessageItemInterface,
+  ChatPartnerInterface,
+  ChatRoomDetailInterface,
+  ChatThreadItemInterface,
+  ChatThreadListInterface,
+  ChatTopicCardInterface,
+  Conversation as ConversationInterface,
+  GetConversationHistory,
+  GetMessage,
+  History as HistoryInterface,
+} from './interfaces/direct-message.interface';
 import { DateHelper } from 'src/common/helpers/date.helper';
+
+const DEFAULT_CHAT_TOPICS: ChatTopicCardInterface[] = [
+  {
+    id: 'topic-kuliner',
+    title: 'Kuliner',
+    color: '#5B7C28',
+    textColor: '#E6F34C',
+    prompt: 'Bahas makanan enak di sekitar atau tempat nongkrong favorit.',
+    subPrompt:
+      'Kamu punya rekomendasi kafe atau kuliner yang wajib dicoba di sekitarmu?',
+    type: 'kuliner',
+  },
+  {
+    id: 'topic-hobi',
+    title: 'Hobi & Minat',
+    color: '#2B6CB0',
+    textColor: '#E0F2FE',
+    prompt:
+      'Ceritakan hobi baru atau kegiatan seru yang lagi sering kamu lakuin.',
+    subPrompt:
+      'Lagi suka dengerin musik apa, atau ada buku/game yang lagi seru?',
+    type: 'hobi',
+  },
+  {
+    id: 'topic-film',
+    title: 'Film & Serial',
+    color: '#7C3AED',
+    textColor: '#FDE047',
+    prompt:
+      'Tanya rekomendasi film atau serial favorit yang seru ditonton akhir pekan.',
+    subPrompt: 'Ada tontonan Netflix atau bioskop yang menurutmu seru banget?',
+    type: 'film',
+  },
+  {
+    id: 'topic-keseharian',
+    title: 'Keseharian',
+    color: '#D97706',
+    textColor: '#FEF3C7',
+    prompt: 'Ceritakan momen seru atau hal menarik yang kamu alami minggu ini.',
+    subPrompt: 'Gimana harimu hari ini? Ada cerita lucu atau berkesan nggak?',
+    type: 'keseharian',
+  },
+];
 
 @Injectable()
 export class DirectMessageService {
+  constructor(
+    @InjectRepository(Message, 'mimate')
+    private readonly messageRepository: Repository<Message>,
 
+    @InjectRepository(Conversation, 'mimate')
+    private readonly conversationRepository: Repository<Conversation>,
 
-    constructor(
+    @InjectRepository(UserMimateEntity, 'mimate')
+    private readonly userMimateRepository: Repository<UserMimateEntity>,
 
-        @InjectRepository(Message, 'mimate')
-        private readonly messageRepository: Repository<Message>,
+    @InjectRepository(UserFollowEntity, 'mimate')
+    private readonly followRepository: Repository<UserFollowEntity>,
 
-        @InjectRepository(Conversation, 'mimate')
-        private readonly conversationRepository: Repository<Conversation>,
-    
-        @InjectRepository(UserMimateEntity, 'mimate')
-        private readonly userMimateRepository: Repository<UserMimateEntity>,
+    private readonly dateHelper: DateHelper,
+  ) {}
 
-        // date formatter
-        private readonly dateHelper: DateHelper
-    ){
-
+  /** Formats a member display name with fallback when name is empty.
+   * @returns Formatted display name.
+   */
+  private getMemberName(
+    name: string,
+    mmid_fullname: string,
+    id: number,
+  ): string {
+    let tempName = name;
+    if (!tempName || tempName.trim() === '') {
+      tempName = mmid_fullname;
+    }
+    if (!tempName || tempName.trim() === '') {
+      tempName = `user_${String(id).padStart(4, '0')}`;
     }
 
-    private getMemberName(name:string, mmid_fullname:string,  id:number): string {
-        let tempName = name
-        if (!tempName || tempName.trim() === '') {
-          tempName = mmid_fullname;
-        }
-        if (!tempName || tempName.trim() === '') {
-          tempName = `user_${String(id).padStart(4, '0')}`;
-        }
-    
-        return tempName
-        .split(' ')
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-    }   
+    return tempName
+      .split(' ')
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
 
+  /** Formats a public @username handle for a member.
+   * @returns Normalized @username handle.
+   */
+  private formatMemberUsername(member: UserMimateEntity): string {
+    const rawUsername =
+      typeof member.username === 'string' ? member.username.trim() : '';
+    if (rawUsername) {
+      return rawUsername.startsWith('@') ? rawUsername : `@${rawUsername}`;
+    }
+    const emailPrefix =
+      typeof member.email === 'string' && member.email.includes('@')
+        ? member.email.split('@')[0].trim()
+        : '';
+    if (emailPrefix) {
+      return `@${emailPrefix.toLowerCase().replace(/[^a-z0-9._]/g, '_')}`;
+    }
+    return `@user_${member.id}`;
+  }
 
-    async findOrCreateConversation(member1Id: number, member2Id: number): Promise<ConversationInterface> {
-        const allConversations = await this.conversationRepository.find({
-          relations: ['participants'],
-        });
-    
-        // Find existing one-on-one conversation with exactly the same 2 members
-        const existing = allConversations.find((c) => {
-          const ids = c.participants.map((p) => p.id).sort((a, b) => a - b);
-          const target = [member1Id, member2Id].sort((a, b) => a - b);
-          return ids.length === 2 && ids[0] === target[0] && ids[1] === target[1];
-        });
-    
-        if (existing) {
-          return {
-            id: existing.id,
-            createdAt: existing.createdAt,
-            updatedAt: existing.updatedAt,
-            participants: existing.participants.map((participant) => ({
-              id: participant.id,
-              name: this.getMemberName(participant.name, participant.mmid_fullname, participant.id), 
-              profilePictureUrl: participant.profilePictureUrl,
-              isOwner: participant.id === member1Id
-            }))
-          }
-        }
-    
-        const member1 = await this.userMimateRepository.findOneOrFail({ where: { id: member1Id } });
-        const member2 = await this.userMimateRepository.findOneOrFail({ where: { id: member2Id } });
-    
-        const newConversation = this.conversationRepository.create({
-          participants: [member1, member2],
-        });
-    
-        let response = await this.conversationRepository.save(newConversation);
+  /** Extracts normalized preference labels from a member's preferences array or hobby string.
+   * @returns Array of preference strings.
+   */
+  private extractPreferences(member?: UserMimateEntity): string[] {
+    if (!member) {
+      return [];
+    }
+    if (Array.isArray(member.preferences) && member.preferences.length > 0) {
+      return member.preferences
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0);
+    }
+    if (typeof member.hobby === 'string' && member.hobby.trim().length > 0) {
+      return member.hobby
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+    }
+    return [];
+  }
 
+  /** Maps a UserMimateEntity into a safe ChatPartnerInterface object.
+   * @returns ChatPartnerInterface.
+   */
+  private formatPartner(member: UserMimateEntity): ChatPartnerInterface {
+    const location =
+      typeof member.location === 'string' && member.location.trim().length > 0
+        ? member.location.trim()
+        : typeof member.address === 'string' && member.address.trim().length > 0
+        ? member.address.trim()
+        : 'Jakarta';
+
+    return {
+      id: member.id,
+      name: this.getMemberName(member.name, member.mmid_fullname, member.id),
+      username: this.formatMemberUsername(member),
+      avatarUrl: member.profilePictureUrl ? member.profilePictureUrl : '',
+      location,
+      preferences: this.extractPreferences(member),
+    };
+  }
+
+  /** Builds conversation topic cards personalized with shared or partner preferences when present.
+   * @returns Array of ChatTopicCardInterface items.
+   */
+  private buildTopicsForParticipants(
+    selfMember: UserMimateEntity | undefined,
+    partnerMember: UserMimateEntity,
+  ): ChatTopicCardInterface[] {
+    const selfPrefs = this.extractPreferences(selfMember);
+    const partnerPrefs = this.extractPreferences(partnerMember);
+    const sharedPrefs = partnerPrefs.filter((pref) =>
+      selfPrefs.some((own) => own.toLowerCase() === pref.toLowerCase()),
+    );
+    const highlightedPrefs =
+      sharedPrefs.length > 0 ? sharedPrefs : partnerPrefs;
+    const partnerFirstName = this.getMemberName(
+      partnerMember.name,
+      partnerMember.mmid_fullname,
+      partnerMember.id,
+    ).split(' ')[0];
+
+    return DEFAULT_CHAT_TOPICS.map((topic) => {
+      if (topic.type === 'hobi' && highlightedPrefs.length > 0) {
+        const topList = highlightedPrefs.slice(0, 3).join(', ');
+        const prefix =
+          sharedPrefs.length > 0
+            ? `Kalian sama-sama suka ${topList}!`
+            : `${partnerFirstName} tertarik dengan ${topList}.`;
         return {
-            id: response.id,
-            createdAt: response.createdAt,
-            updatedAt: response.updatedAt,
-            participants: response.participants.map((participant) => ({
-                id: participant.id,
-                name: this.getMemberName(participant.name, participant.mmid_fullname, participant.id),
-                // check if profilePictureUrl is null or undefined
-                profilePictureUrl: participant?.profilePictureUrl ? participant?.profilePictureUrl: '',
-                isOwner: participant.id === member1Id
-            }))
-        }
-        
-    }
-
-    // convert 2025-04-17 into 17 April 2025
-    formatDate(date: string): string {
-        const dateObj = new Date(date);
-        return dateObj.toLocaleDateString('id-ID', { month: 'long', day: 'numeric', year: 'numeric' });
-    }
-
-
-    async sendMessage(conversationId: number, senderId: number, content: string): Promise<GetMessage> {
-        const conversation = await this.conversationRepository.findOneBy({ id: conversationId });
-        if (!conversation) throw new NotFoundException('Conversation not found');
-    
-        const sender = await this.userMimateRepository.findOneBy({ id: senderId });
-        if (!sender) throw new NotFoundException('Sender not found');
-
-        let message = new Message()
-        message.conversation = conversation
-        message.sender = sender
-        message.content = content
-        message.createdAt = new Date()
-
-        let response = await this.messageRepository.save(message);
-
-        
-        // Keep the original UTC instant.
-        let messageTime = new Date(response.createdAt);
-        
-        return {
-          id: response.id,
-          content: response.content,
-          createdAt: response.createdAt,
-          time: messageTime.toLocaleTimeString('en-US', {
-          timeZone: 'UTC',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }),
-          date: this.formatDate(messageTime.toISOString().split('T')[0]),
-          sender: {
-            id: sender.id,
-            name: this.getMemberName(sender.name, sender.mmid_fullname, sender.id),
-            profilePictureUrl: sender.profilePictureUrl,
-            isOwner: sender.id === senderId
-          }
-        }
-    }
-
-   
-
-
-    async getMessagesByConversationId(conversationId: number, userId: number): Promise<GetConversationHistory> {
-      // Check if user is a participant of the conversation
-      let query = await this.conversationRepository.find({where:{
-        id: conversationId,
-        
-      }, relations: ["participants"], take: 1})
-
-      let imParticipants = query[0]
-
-      // send error if user is not a participant of the conversation
-      if(!imParticipants.participants.some(p => p.id === userId)) {
-        throw new NotFoundException('You are not participants');
+          ...topic,
+          prompt: `Ngobrol seputar hobi ${topList} yang seru untuk dibahas bareng.`,
+          subPrompt: `${prefix} Tanyakan pengalaman serunya!`,
+        };
       }
-      
+      return { ...topic };
+    });
+  }
 
-      let recipient = imParticipants.participants.find(p => p.id !== userId)
-      let sender = imParticipants.participants.find(p => p.id === userId)
+  /** Formats a UTC Date into HH:mm string.
+   * @returns 24-hour time string in UTC.
+   */
+  private formatUtcTime(dateInput: Date | string): string {
+    const dateObj = new Date(dateInput);
+    return dateObj.toLocaleTimeString('en-US', {
+      timeZone: 'UTC',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
 
+  /** Checks whether two members have an accepted mutual friendship in user_follows.
+   * @returns True when an accepted friendship exists between member1Id and member2Id.
+   */
+  private async hasAcceptedFriendship(
+    member1Id: number,
+    member2Id: number,
+    manager?: EntityManager,
+  ): Promise<boolean> {
+    const whereClause = [
+      {
+        followerId: member1Id,
+        followingId: member2Id,
+        status: 'accepted' as const,
+      },
+      {
+        followerId: member2Id,
+        followingId: member1Id,
+        status: 'accepted' as const,
+      },
+    ];
+    const row = manager
+      ? await manager.findOne(UserFollowEntity, { where: whereClause })
+      : await this.followRepository.findOne({ where: whereClause });
+    return Boolean(row);
+  }
 
-       // Get the messages
-    const messages = await this.messageRepository.find({
-      where: { conversation: { id: conversationId } },
-      order: { createdAt: 'ASC' }, // Newest first or oldest first depending
-      relations: ['sender', 'conversation.participants'],
+  /** Finds an existing 1-on-1 conversation between two members using participant rows.
+   * @returns Matching Conversation with participants or null.
+   */
+  private async findExistingPairConversation(
+    member1Id: number,
+    member2Id: number,
+    manager?: EntityManager,
+  ): Promise<Conversation | null> {
+    const repo = manager
+      ? manager.getRepository(Conversation)
+      : this.conversationRepository;
+
+    const member1Convos = await repo.find({
+      where: {
+        participants: {
+          id: member1Id,
+        },
+      },
+      select: ['id'],
     });
 
+    if (member1Convos.length === 0) {
+      return null;
+    }
 
-    let results: GetMessage[] = []
-      
-    results = messages.map((msg) => {
-      const recipient = msg.conversation.participants.find(p => p.id !== msg.sender.id);
+    const candidateIds = member1Convos.map((convo) => convo.id);
+    const candidates = await repo.find({
+      where: {
+        id: In(candidateIds),
+      },
+      relations: ['participants'],
+      order: {
+        updatedAt: 'DESC',
+        id: 'DESC',
+      },
+    });
 
-      let messageTime = new Date(msg.createdAt);
-  
+    const targetIds = [member1Id, member2Id].sort((a, b) => a - b);
+    const matched = candidates.find((convo) => {
+      if (!Array.isArray(convo.participants)) {
+        return false;
+      }
+      const participantIds = convo.participants
+        .map((participant) => participant.id)
+        .sort((a, b) => a - b);
+      return (
+        participantIds.length === 2 &&
+        participantIds[0] === targetIds[0] &&
+        participantIds[1] === targetIds[1]
+      );
+    });
+
+    return matched ?? null;
+  }
+
+  /** Finds or creates a 1-on-1 conversation between two accepted friends with row locking.
+   * @returns ConversationInterface for the member pair.
+   */
+  async findOrCreateConversation(
+    member1Id: number,
+    member2Id: number,
+  ): Promise<ConversationInterface> {
+    if (member1Id === member2Id) {
+      throw new BadRequestException(
+        'Tidak dapat memulai obrolan dengan diri sendiri.',
+      );
+    }
+
+    const orderedIds = [member1Id, member2Id].sort((a, b) => a - b);
+
+    return this.userMimateRepository.manager.transaction(async (manager) => {
+      const lockedMembers = await manager
+        .createQueryBuilder(UserMimateEntity, 'member')
+        .setLock('pessimistic_write')
+        .where('member.id IN (:...orderedIds)', { orderedIds })
+        .getMany();
+
+      const member1 = lockedMembers.find((item) => item.id === member1Id);
+      const member2 = lockedMembers.find((item) => item.id === member2Id);
+
+      if (
+        !member1 ||
+        member1.deleted_at ||
+        member1.is_suspended ||
+        !member2 ||
+        member2.deleted_at ||
+        member2.is_suspended
+      ) {
+        throw new NotFoundException('Pengguna tidak ditemukan.');
+      }
+
+      const areFriends = await this.hasAcceptedFriendship(
+        member1Id,
+        member2Id,
+        manager,
+      );
+      if (!areFriends) {
+        throw new ForbiddenException(
+          'Anda hanya dapat mengirim pesan kepada teman yang sudah terkoneksi.',
+        );
+      }
+
+      const existing = await this.findExistingPairConversation(
+        member1Id,
+        member2Id,
+        manager,
+      );
+
+      if (existing) {
+        return {
+          id: existing.id,
+          createdAt: existing.createdAt,
+          updatedAt: existing.updatedAt,
+          participants: existing.participants.map((participant) => ({
+            id: participant.id,
+            name: this.getMemberName(
+              participant.name,
+              participant.mmid_fullname,
+              participant.id,
+            ),
+            profilePictureUrl: participant.profilePictureUrl
+              ? participant.profilePictureUrl
+              : '',
+            isOwner: participant.id === member1Id,
+          })),
+        };
+      }
+
+      const repo = manager.getRepository(Conversation);
+      const newConversation = repo.create({
+        participants: [member1, member2],
+      });
+      const saved = await repo.save(newConversation);
+
+      return {
+        id: saved.id,
+        createdAt: saved.createdAt,
+        updatedAt: saved.updatedAt,
+        participants: saved.participants.map((participant) => ({
+          id: participant.id,
+          name: this.getMemberName(
+            participant.name,
+            participant.mmid_fullname,
+            participant.id,
+          ),
+          profilePictureUrl: participant?.profilePictureUrl
+            ? participant.profilePictureUrl
+            : '',
+          isOwner: participant.id === member1Id,
+        })),
+      };
+    });
+  }
+
+  /** Converts a YYYY-MM-DD date string into Indonesian long date format.
+   * @returns Formatted date string.
+   */
+  formatDate(date: string): string {
+    const dateObj = new Date(date);
+    return dateObj.toLocaleDateString('id-ID', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }
+
+  /** Sends a text message inside an existing conversation after verifying participation and friendship.
+   * @returns Saved GetMessage record.
+   */
+  async sendMessage(
+    conversationId: number,
+    senderId: number,
+    content: string,
+  ): Promise<GetMessage> {
+    const trimmedContent = typeof content === 'string' ? content.trim() : '';
+    if (!trimmedContent) {
+      throw new BadRequestException('Pesan tidak boleh kosong.');
+    }
+
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+      relations: ['participants'],
+    });
+    if (!conversation) {
+      throw new NotFoundException('Percakapan tidak ditemukan.');
+    }
+
+    const sender = conversation.participants?.find(
+      (participant) => participant.id === senderId,
+    );
+    if (!sender) {
+      throw new ForbiddenException('Anda bukan peserta dalam percakapan ini.');
+    }
+
+    const recipient = conversation.participants?.find(
+      (participant) => participant.id !== senderId,
+    );
+    if (!recipient || recipient.deleted_at || recipient.is_suspended) {
+      throw new ForbiddenException('Penerima pesan tidak tersedia.');
+    }
+
+    const areFriends = await this.hasAcceptedFriendship(senderId, recipient.id);
+    if (!areFriends) {
+      throw new ForbiddenException(
+        'Anda hanya dapat mengirim pesan kepada teman yang sudah terkoneksi.',
+      );
+    }
+
+    const now = new Date();
+    const message = new Message();
+    message.conversation = conversation;
+    message.sender = sender;
+    message.content = trimmedContent;
+    message.createdAt = now;
+
+    const response = await this.messageRepository.save(message);
+    await this.conversationRepository.update(
+      { id: conversationId },
+      { updatedAt: now },
+    );
+
+    const messageTime = new Date(response.createdAt);
+
+    return {
+      id: response.id,
+      content: response.content,
+      createdAt: response.createdAt,
+      time: this.formatUtcTime(messageTime),
+      date: this.formatDate(messageTime.toISOString().split('T')[0]),
+      sender: {
+        id: sender.id,
+        name: this.getMemberName(sender.name, sender.mmid_fullname, sender.id),
+        profilePictureUrl: sender.profilePictureUrl
+          ? sender.profilePictureUrl
+          : '',
+        isOwner: true,
+      },
+    };
+  }
+
+  /** Loads grouped message history for a conversation after verifying participant membership.
+   * @returns GetConversationHistory.
+   */
+  async getMessagesByConversationId(
+    conversationId: number,
+    userId: number,
+  ): Promise<GetConversationHistory> {
+    const imParticipants = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+      relations: ['participants'],
+    });
+
+    if (!imParticipants) {
+      throw new NotFoundException('Percakapan tidak ditemukan.');
+    }
+
+    if (
+      !imParticipants.participants.some(
+        (participant) => participant.id === userId,
+      )
+    ) {
+      throw new ForbiddenException('Anda bukan peserta dalam percakapan ini.');
+    }
+
+    const recipient = imParticipants.participants.find(
+      (participant) => participant.id !== userId,
+    );
+    const sender = imParticipants.participants.find(
+      (participant) => participant.id === userId,
+    );
+
+    if (!recipient || !sender) {
+      throw new NotFoundException('Peserta percakapan tidak ditemukan.');
+    }
+
+    const messages = await this.messageRepository.find({
+      where: { conversation: { id: conversationId } },
+      order: { createdAt: 'ASC', id: 'ASC' },
+      relations: ['sender'],
+    });
+
+    const results: GetMessage[] = messages.map((msg) => {
+      const messageTime = new Date(msg.createdAt);
+
       return {
         id: msg.id,
         content: msg.content,
         createdAt: messageTime,
-        // time change into am or pm  
-        time: messageTime.toLocaleTimeString('en-US', {
-          timeZone: 'UTC',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }),
+        time: this.formatUtcTime(messageTime),
         date: this.formatDate(messageTime.toISOString().split('T')[0]),
         sender: {
           isOwner: msg.sender.id === userId,
           id: msg.sender.id,
-          name: this.getMemberName(msg.sender.name, msg.sender.mmid_fullname, msg.sender.id),
-          profilePictureUrl: msg.sender.profilePictureUrl,
-        }
+          name: this.getMemberName(
+            msg.sender.name,
+            msg.sender.mmid_fullname,
+            msg.sender.id,
+          ),
+          profilePictureUrl: msg.sender.profilePictureUrl
+            ? msg.sender.profilePictureUrl
+            : '',
+        },
       };
     });
 
-    // group by date
-    const groupedMessages = results.reduce((acc, msg) => {
-      const date = msg.date;
-      if (!acc[date]) {
-        acc[date] = [];
-      } 
-      acc[date].push(msg);
-      return acc;
-    }, {});
-    // return grouped messages
-    let history = Object.entries(groupedMessages).map(([date, messages]) => ({
+    const groupedMessages = results.reduce<Record<string, GetMessage[]>>(
+      (acc, msg) => {
+        const date = msg.date;
+        if (!acc[date]) {
+          acc[date] = [];
+        }
+        acc[date].push(msg);
+        return acc;
+      },
+      {},
+    );
+
+    const history = Object.entries(groupedMessages).map(([date, group]) => ({
       date,
-      messages: messages as GetMessage[]
+      messages: group,
     }));
-    
 
-    let senderSeenAtFormatted = ""
-
-    if(sender.last_seen_at) {
-      senderSeenAtFormatted = this.dateHelper.getDateRange(sender.last_seen_at, new Date())
+    let senderSeenAtFormatted = '';
+    if (sender.last_seen_at) {
+      senderSeenAtFormatted = this.dateHelper.getDateRange(
+        sender.last_seen_at,
+        new Date(),
+      );
     }
 
-    let recipientSeenAtFormatted = ""
-
-    if(recipient.last_seen_at) {
-      recipientSeenAtFormatted = this.dateHelper.getDateRange(recipient.last_seen_at, new Date())
+    let recipientSeenAtFormatted = '';
+    if (recipient.last_seen_at) {
+      recipientSeenAtFormatted = this.dateHelper.getDateRange(
+        recipient.last_seen_at,
+        new Date(),
+      );
     }
 
-    // sender last seen at
-    
     return {
       id: conversationId,
       sender: {
         id: userId,
         name: this.getMemberName(sender.name, sender.mmid_fullname, sender.id),
-        // check if profilePictureUrl is null or undefined
-        profilePictureUrl: sender?.profilePictureUrl ? sender?.profilePictureUrl: '',
+        profilePictureUrl: sender?.profilePictureUrl
+          ? sender.profilePictureUrl
+          : '',
         isOwner: sender.id === userId,
-        lastSeenAt: sender.last_seen_at ? sender.last_seen_at : "",
+        lastSeenAt: sender.last_seen_at ? sender.last_seen_at : '',
         lastSeenAtTitle: senderSeenAtFormatted,
-        date: sender.last_seen_at ? this.formatDate(new Date(sender.last_seen_at).toISOString().split('T')[0]) : "",
-        time: sender.last_seen_at ? new Date(sender.last_seen_at).toLocaleTimeString('en-US', {
-          timeZone: 'UTC',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }) : "",
+        date: sender.last_seen_at
+          ? this.formatDate(
+              new Date(sender.last_seen_at).toISOString().split('T')[0],
+            )
+          : '',
+        time: sender.last_seen_at
+          ? this.formatUtcTime(sender.last_seen_at)
+          : '',
       },
       receiver: {
         id: recipient.id,
-        name: this.getMemberName(recipient.name, recipient.mmid_fullname, recipient.id), 
-        // check if profilePictureUrl is null or undefined
-        profilePictureUrl: recipient?.profilePictureUrl ? recipient?.profilePictureUrl: '',
-        isOwner: recipient.id === userId ,
-        lastSeenAt: recipient.last_seen_at ? recipient.last_seen_at : "",
+        name: this.getMemberName(
+          recipient.name,
+          recipient.mmid_fullname,
+          recipient.id,
+        ),
+        profilePictureUrl: recipient?.profilePictureUrl
+          ? recipient.profilePictureUrl
+          : '',
+        isOwner: recipient.id === userId,
+        lastSeenAt: recipient.last_seen_at ? recipient.last_seen_at : '',
         lastSeenAtTitle: recipientSeenAtFormatted,
-        date: recipient.last_seen_at ? this.formatDate(new Date(recipient.last_seen_at).toISOString().split('T')[0]) : "",
-        time: recipient.last_seen_at ? new Date(recipient.last_seen_at).toLocaleTimeString('en-US', {
-          timeZone: 'UTC',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }) : "",
+        date: recipient.last_seen_at
+          ? this.formatDate(
+              new Date(recipient.last_seen_at).toISOString().split('T')[0],
+            )
+          : '',
+        time: recipient.last_seen_at
+          ? this.formatUtcTime(recipient.last_seen_at)
+          : '',
       },
-      history: history    
+      history,
+    };
+  }
+
+  /** Lists conversation summaries for a user (legacy DirectMessageController format).
+   * @returns Array of HistoryInterface items.
+   */
+  async getUserConversationList(
+    userId: number,
+    search?: string,
+  ): Promise<HistoryInterface[]> {
+    const query = await this.conversationRepository.find({
+      where: {
+        participants: {
+          id: userId,
+        },
+      },
+      select: ['id'],
+    });
+
+    if (query.length === 0) {
+      return [];
+    }
+
+    const conversationIds = query.map((element) => element.id);
+    let conversations = await this.conversationRepository.find({
+      where: {
+        id: In(conversationIds),
+      },
+      relations: ['participants', 'messages'],
+    });
+
+    if (search !== undefined && search.trim() !== '') {
+      const normalizedSearch = search.trim().toLowerCase();
+      conversations = conversations.filter((convo) => {
+        return convo.participants.some((participant) => {
+          if (participant.id === userId) {
+            return false;
+          }
+          const displayName = this.getMemberName(
+            participant.name,
+            participant.mmid_fullname,
+            participant.id,
+          );
+          return displayName.toLowerCase().includes(normalizedSearch);
+        });
+      });
+    }
+
+    const results: HistoryInterface[] = [];
+
+    for (const convo of conversations) {
+      const partner = convo.participants.find(
+        (participant) => participant.id !== userId,
+      );
+      if (!partner || partner.deleted_at) {
+        continue;
+      }
+
+      const formatSender = {
+        id: partner.id,
+        name: this.getMemberName(
+          partner.name,
+          partner.mmid_fullname,
+          partner.id,
+        ),
+        profilePictureUrl: partner?.profilePictureUrl
+          ? partner.profilePictureUrl
+          : '',
+        isOwner: false,
+      };
+
+      const unreadCount = await this.countUnreadFromSender(
+        convo.id,
+        partner.id,
+        userId,
+      );
+
+      const lastMessage = [...(convo.messages ?? [])].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
+
+      if (!lastMessage) {
+        continue;
+      }
+
+      const lastMessageTime = new Date(lastMessage.createdAt);
+
+      results.push({
+        id: convo.id,
+        sender: formatSender,
+        lastMessage: lastMessage.content,
+        lastMessageAt: lastMessage.createdAt,
+        time: this.formatUtcTime(lastMessageTime),
+        date: this.formatDate(lastMessageTime.toISOString().split('T')[0]),
+        unreadCount,
+      });
+    }
+
+    results.sort((a, b) => {
+      const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return results;
+  }
+
+  /** Lists chat threads for the authenticated member on /me/chats.
+   * @returns ChatThreadListInterface ordered by latest activity descending.
+   */
+  async listMemberChatThreads(
+    userId: number,
+    search?: string,
+  ): Promise<ChatThreadListInterface> {
+    const memberConvoRows = await this.conversationRepository.find({
+      where: {
+        participants: {
+          id: userId,
+        },
+      },
+      select: ['id'],
+    });
+
+    if (memberConvoRows.length === 0) {
+      return { items: [] };
+    }
+
+    const conversationIds = memberConvoRows.map((row) => row.id);
+    const [conversations, acceptedFollows] = await Promise.all([
+      this.conversationRepository.find({
+        where: {
+          id: In(conversationIds),
+        },
+        relations: ['participants', 'messages'],
+      }),
+      this.followRepository.find({
+        where: [
+          { followerId: userId, status: 'accepted' },
+          { followingId: userId, status: 'accepted' },
+        ],
+      }),
+    ]);
+
+    const acceptedPartnerIds = new Set<number>();
+    for (const row of acceptedFollows) {
+      const otherId =
+        row.followerId === userId ? row.followingId : row.followerId;
+      if (typeof otherId === 'number' && otherId > 0) {
+        acceptedPartnerIds.add(otherId);
+      }
+    }
+
+    const normalizedSearch =
+      typeof search === 'string' && search.trim().length > 0
+        ? search.trim().toLowerCase()
+        : '';
+
+    const itemsWithSortTime: Array<{
+      item: ChatThreadItemInterface;
+      sortTimeMs: number;
+    }> = [];
+
+    for (const convo of conversations) {
+      const partner = convo.participants?.find(
+        (participant) => participant.id !== userId,
+      );
+      if (!partner || partner.deleted_at || partner.is_suspended) {
+        continue;
+      }
+
+      const partnerInfo = this.formatPartner(partner);
+      const sortedMessages = [...(convo.messages ?? [])].sort((a, b) => {
+        const diff =
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        if (diff !== 0) {
+          return diff;
+        }
+        return b.id - a.id;
+      });
+
+      const latestMessage = sortedMessages[0];
+      const lastMessageText = latestMessage
+        ? latestMessage.content
+        : 'Mulai obrolan dengan temanmu';
+      const referenceDate =
+        latestMessage?.createdAt ?? convo.updatedAt ?? convo.createdAt;
+      const sortTimeMs = referenceDate ? new Date(referenceDate).getTime() : 0;
+
+      if (normalizedSearch) {
+        const matchesName = partnerInfo.name
+          .toLowerCase()
+          .includes(normalizedSearch);
+        const matchesUsername = partnerInfo.username
+          .toLowerCase()
+          .includes(normalizedSearch);
+        const matchesMessage = lastMessageText
+          .toLowerCase()
+          .includes(normalizedSearch);
+        if (!matchesName && !matchesUsername && !matchesMessage) {
+          continue;
+        }
+      }
+
+      const unreadCount = await this.countUnreadFromSender(
+        convo.id,
+        partner.id,
+        userId,
+      );
+
+      itemsWithSortTime.push({
+        sortTimeMs,
+        item: {
+          id: String(convo.id),
+          conversationId: convo.id,
+          partnerId: partnerInfo.id,
+          name: partnerInfo.name,
+          username: partnerInfo.username,
+          avatarUrl: partnerInfo.avatarUrl,
+          lastMessage: lastMessageText,
+          lastMessageAt: latestMessage?.createdAt
+            ? new Date(latestMessage.createdAt).toISOString()
+            : null,
+          time: referenceDate ? this.formatUtcTime(referenceDate) : '',
+          unreadCount,
+          isFriend: acceptedPartnerIds.has(partnerInfo.id),
+        },
+      });
+    }
+
+    itemsWithSortTime.sort((a, b) => {
+      if (b.sortTimeMs !== a.sortTimeMs) {
+        return b.sortTimeMs - a.sortTimeMs;
+      }
+      return b.item.conversationId - a.item.conversationId;
+    });
+
+    return {
+      items: itemsWithSortTime.map((entry) => entry.item),
+    };
+  }
+
+  /** Finds or creates a conversation with an accepted friend and returns the full chat room detail.
+   * @returns ChatRoomDetailInterface.
+   */
+  async openMemberChatWithFriend(
+    userId: number,
+    friendMemberId: number,
+  ): Promise<ChatRoomDetailInterface> {
+    const conversation = await this.findOrCreateConversation(
+      userId,
+      friendMemberId,
+    );
+    return this.getMemberChatRoom(userId, conversation.id);
+  }
+
+  /** Loads a conversation's partner profile, friendship status, messages, and topic cards for a participant.
+   * @returns ChatRoomDetailInterface.
+   */
+  async getMemberChatRoom(
+    userId: number,
+    conversationId: number,
+  ): Promise<ChatRoomDetailInterface> {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+      relations: ['participants'],
+    });
+
+    if (!conversation) {
+      throw new NotFoundException('Percakapan tidak ditemukan.');
+    }
+
+    const selfMember = conversation.participants?.find(
+      (participant) => participant.id === userId,
+    );
+    if (!selfMember) {
+      throw new ForbiddenException('Anda bukan peserta dalam percakapan ini.');
+    }
+
+    const partnerMember = conversation.participants?.find(
+      (participant) => participant.id !== userId,
+    );
+    if (!partnerMember || partnerMember.deleted_at) {
+      throw new NotFoundException('Peserta percakapan tidak ditemukan.');
+    }
+
+    await this.markMessagesAsRead(conversationId, userId);
+
+    const [messages, isFriend] = await Promise.all([
+      this.messageRepository.find({
+        where: { conversation: { id: conversationId } },
+        order: { createdAt: 'ASC', id: 'ASC' },
+        relations: ['sender'],
+      }),
+      this.hasAcceptedFriendship(userId, partnerMember.id),
+    ]);
+
+    const formattedMessages: ChatMessageItemInterface[] = messages.map(
+      (msg) => {
+        const createdAtDate = new Date(msg.createdAt);
+        const senderId = msg.sender?.id ?? 0;
+        return {
+          id: String(msg.id),
+          messageId: msg.id,
+          sender: senderId === userId ? 'user' : 'other',
+          senderId,
+          text: msg.content,
+          time: this.formatUtcTime(createdAtDate),
+          createdAt: createdAtDate.toISOString(),
+        };
+      },
+    );
+
+    return {
+      conversationId: conversation.id,
+      partner: this.formatPartner(partnerMember),
+      isFriend:
+        isFriend && !partnerMember.is_suspended && !partnerMember.deleted_at,
+      messages: formattedMessages,
+      topics: this.buildTopicsForParticipants(selfMember, partnerMember),
+    };
+  }
+
+  /** Sends a message in a member chat room and returns the formatted ChatMessageItemInterface.
+   * @returns ChatMessageItemInterface.
+   */
+  async sendMemberChatMessage(
+    userId: number,
+    conversationId: number,
+    content: string,
+  ): Promise<ChatMessageItemInterface> {
+    const saved = await this.sendMessage(conversationId, userId, content);
+    const createdAtDate = new Date(saved.createdAt);
+    return {
+      id: String(saved.id),
+      messageId: saved.id,
+      sender: 'user',
+      senderId: userId,
+      text: saved.content,
+      time: saved.time,
+      createdAt: createdAtDate.toISOString(),
+    };
+  }
+
+  /** Soft-deletes a conversation after checking participant authorization.
+   * @returns Promise<void>.
+   */
+  async softDeleteConversationById(
+    conversationId: number,
+    userId: number,
+  ): Promise<void> {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+      relations: ['participants'],
+    });
+
+    if (!conversation) {
+      throw new NotFoundException(
+        `Conversation with ID ${conversationId} not found`,
+      );
+    }
+
+    const isParticipant = conversation.participants.some(
+      (user) => user.id === userId,
+    );
+    if (!isParticipant) {
+      throw new ForbiddenException(
+        'You are not a participant of this conversation',
+      );
+    }
+
+    await this.conversationRepository.softDelete(conversationId);
+  }
+
+  /** Counts unread messages sent by partnerId to userId in a conversation.
+   * @returns Unread message count.
+   */
+  private async countUnreadFromSender(
+    conversationId: number,
+    partnerId: number,
+    userId: number,
+  ): Promise<number> {
+    return this.messageRepository
+      .createQueryBuilder('message')
+      .leftJoin('message.readBy', 'reader')
+      .where('message.conversationId = :conversationId', { conversationId })
+      .andWhere('message.senderId = :senderId', { senderId: partnerId })
+      .andWhere((qb) => {
+        const sub = qb
+          .subQuery()
+          .select('mr.message_id')
+          .from('message_reads', 'mr')
+          .where('mr.user_id = :userId')
+          .getQuery();
+        return 'message.id NOT IN ' + sub;
+      })
+      .setParameter('userId', userId)
+      .getCount();
+  }
+
+  /** Marks all unread messages from the other participant in a conversation as read by userId.
+   * @returns Promise<void>.
+   */
+  async markMessagesAsRead(
+    conversationId: number,
+    userId: number,
+  ): Promise<void> {
+    const messages = await this.messageRepository
+      .createQueryBuilder('message')
+      .leftJoin('message.readBy', 'reader')
+      .where('message.conversationId = :conversationId', { conversationId })
+      .andWhere('message.senderId != :userId', { userId })
+      .andWhere((qb) => {
+        const subQuery = qb
+          .subQuery()
+          .select('message_reads.message_id')
+          .from('message_reads', 'message_reads')
+          .where('message_reads.user_id = :userId')
+          .getQuery();
+        return 'message.id NOT IN ' + subQuery;
+      })
+      .setParameter('userId', userId)
+      .getMany();
+
+    if (messages.length > 0) {
+      for (const message of messages) {
+        await this.messageRepository
+          .createQueryBuilder()
+          .relation(Message, 'readBy')
+          .of(message)
+          .add(userId);
+      }
     }
   }
-    
 
-
-    async getUserConversationList(userId: number, search?): Promise<HistoryInterface[]> {
-      // get list convertation id
-
-      let query = await this.conversationRepository.find({
-        where: {
-          participants:{
-            id: userId
-          }
-        },
-        relations:["participants"]
+  /** Counts unread messages in a conversation for userId.
+   * @returns Unread message count.
+   */
+  async countUnreadMessages(
+    conversationId: number,
+    userId: number,
+  ): Promise<number> {
+    return this.messageRepository
+      .createQueryBuilder('message')
+      .leftJoin('message.readBy', 'reader')
+      .where('message.conversationId = :conversationId', { conversationId })
+      .andWhere('message.senderId != :userId', { userId })
+      .andWhere((qb) => {
+        const subQuery = qb
+          .subQuery()
+          .select('message_reads.message_id')
+          .from('message_reads', 'message_reads')
+          .where('message_reads.user_id = :userId')
+          .getQuery();
+        return 'message.id NOT IN ' + subQuery;
       })
-
-      // get the recieper
-      let convertations:number[]=[]
-
-      for (let index = 0; index < query.length; index++) {
-        const element = query[index];
-
-        convertations.push(element.id)
-      }
-
-      let conversations = await this.conversationRepository.find({where:{
-        id:In(convertations)
-      }, relations:["participants", "messages"]});
-      
-
-      if(search !== undefined) {
-        if(search !== "") {
-          // search with like - use same logic as getMemberName to match displayed names
-          conversations = conversations.filter(convo => {
-            return convo.participants.some(p => {
-              const displayName = this.getMemberName(p.name, p.mmid_fullname, p.id);
-              return displayName.toLowerCase().includes(search.toLowerCase());
-            });
-          });
-        }
-      }
-
-
-
-    
-
-      const results = [];
-
-      for (const convo of conversations) {
-        const sender = convo.participants.find(p => p.id !== userId);
-        
-        if(sender === undefined) {
-          continue;
-        }
-
-        const formatSender = {
-          id: sender.id,
-          name: this.getMemberName(sender.name, sender.mmid_fullname, sender.id),
-          // check if profilePictureUrl is null or undefined
-          profilePictureUrl: sender?.profilePictureUrl ? sender?.profilePictureUrl: '',
-          isOwner: sender.id === userId,
-        };
-
-        const unreadCount = await this.messageRepository
-          .createQueryBuilder('message')
-          .leftJoin('message.readBy', 'reader')
-          .where('message.conversationId = :conversationId', { conversationId: convo.id })
-          .andWhere('message.senderId = :senderId', { senderId: sender.id })
-          .andWhere(qb => {
-            const sub = qb
-              .subQuery()
-              .select('mr.message_id')
-              .from('message_reads', 'mr')
-              .where('mr.user_id = :userId')
-              .getQuery();
-            return 'message.id NOT IN ' + sub;
-          })
-          .setParameter('userId', userId)
-          .getCount();
-
-        // 👇 Skip conversations with 0 unread messages
-       
-        const lastMessage = convo.messages.sort((a, b) =>
-          b.createdAt.getTime() - a.createdAt.getTime(),
-        )[0];
-
-        if (lastMessage === undefined) {
-          continue;
-        }
-
-        let lastMessageAtFormatted = ""
-
-        if(lastMessage.createdAt) {
-          lastMessageAtFormatted = this.dateHelper.getDateRange(lastMessage.createdAt, new Date())
-        }
-
-        // Keep the original UTC instant.
-        let lastMessageTime = new Date(lastMessage.createdAt);
-        
-        results.push({
-          id: convo.id,
-          sender: formatSender,
-          lastMessage: lastMessage.content,
-          lastMessageAt: lastMessage.createdAt,
-          lastMessageAtTitle: lastMessageAtFormatted,
-          // time in am pm with same timezone as the user
-          time: lastMessageTime.toLocaleTimeString('en-US', {
-          timeZone: 'UTC',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-          }),
-          date: this.formatDate(lastMessageTime.toISOString().split('T')[0]),
-          unreadCount,
-        });
-      }
-      
- 
-    
-      return results
-    
-    }
-    
-
-    async softDeleteConversationById(conversationId: number, userId: number): Promise<void> {
-      const conversation = await this.conversationRepository.findOne({
-        where: { id: conversationId },
-        relations: ['participants'],
-      });
-    
-      if (!conversation) {
-        throw new NotFoundException(`Conversation with ID ${conversationId} not found`);
-      }
-    
-      const isParticipant = conversation.participants.some((user) => user.id === userId);
-      if (!isParticipant) {
-        throw new ForbiddenException('You are not a participant of this conversation');
-      }
-    
-      await this.conversationRepository.softDelete(conversationId);
-    }
-
-
-    async markMessagesAsRead(conversationId: number, userId: number): Promise<void> {
-      const messages = await this.messageRepository
-        .createQueryBuilder('message')
-        .leftJoin('message.readBy', 'reader')
-        .where('message.conversationId = :conversationId', { conversationId })
-        .andWhere(qb => {
-          const subQuery = qb
-            .subQuery()
-            .select('message_reads.message_id')
-            .from('message_reads', 'message_reads')
-            .where('message_reads.user_id = :userId')
-            .getQuery();
-          return 'message.id NOT IN ' + subQuery;
-        })
-        .setParameter('userId', userId)
-        .getMany();
-    
-      if (messages.length > 0) {
-        for (const message of messages) {
-          await this.messageRepository
-            .createQueryBuilder()
-            .relation(Message, 'readBy')
-            .of(message)
-            .add(userId);
-        }
-      }
-    }
-
-    async countUnreadMessages(conversationId: number, userId: number): Promise<number> {
-      return this.messageRepository
-        .createQueryBuilder('message')
-        .leftJoin('message.readBy', 'reader')
-        .where('message.conversationId = :conversationId', { conversationId })
-        .andWhere(qb => {
-          const subQuery = qb
-            .subQuery()
-            .select('message_reads.message_id')
-            .from('message_reads', 'message_reads')
-            .where('message_reads.user_id = :userId')
-            .getQuery();
-          return 'message.id NOT IN ' + subQuery;
-        })
-        .setParameter('userId', userId)
-        .getCount();
-    }
-
-
-    
-    
-    
+      .setParameter('userId', userId)
+      .getCount();
+  }
 }

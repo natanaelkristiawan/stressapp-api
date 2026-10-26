@@ -986,7 +986,11 @@ export class PostService {
     }
 
 
-    async deletePost(postId: number, memberId: number): Promise<Boolean> {
+    async deletePost(
+        postId: number,
+        memberId: number,
+        authorizedCmsAdmin = false,
+    ): Promise<Boolean> {
 
         const existingPost = await this.postRepository.findOne({
             where: { id: postId, isPsychoeducation: false },
@@ -997,17 +1001,19 @@ export class PostService {
             throw new NotFoundException('Post not found');
         }
 
-        // if member admin
-        let checkAdmin = await this.userMimateRepository.findOneBy({ id: memberId, member_role: 1 })
-        let IsAdmin = false
+        if (!authorizedCmsAdmin) {
+            // if member admin
+            let checkAdmin = await this.userMimateRepository.findOneBy({ id: memberId, member_role: 1 })
+            let IsAdmin = false
 
-        if (checkAdmin) {
-            IsAdmin = true // admin
-        }
+            if (checkAdmin) {
+                IsAdmin = true // admin
+            }
 
-        if (!IsAdmin) {
-            if (existingPost.member.id !== memberId) {
-                throw new ForbiddenException('You are not the owner of this post');
+            if (!IsAdmin) {
+                if (existingPost.member.id !== memberId) {
+                    throw new ForbiddenException('You are not the owner of this post');
+                }
             }
         }
 

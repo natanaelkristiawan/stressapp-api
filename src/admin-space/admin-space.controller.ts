@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AdminSpaceListDto } from './dtos/admin-space.dto';
 import { AdminSpaceService } from './admin-space.service';
@@ -10,10 +21,12 @@ import { AdminSpaceCreateDto, AdminSpaceViewDto, AdminSpaceUpdateDto, AdminSpace
 import { DataSpace } from './interfaces/datatable.interface';
 import { Response } from 'express';
 import { AdminPostService } from 'src/admin-post/admin-post.service';
+import { CmsMembersGuard } from 'src/cms-members/cms-members.guard';
 
 @Controller('admin-space')
 @ApiTags('ADMIN SPACE')
 @ApiBearerAuth('access-token')
+@UseGuards(CmsMembersGuard)
 export class AdminSpaceController {
     constructor(private readonly adminSpaceService: AdminSpaceService, private readonly adminPostService: AdminPostService) {}
 
@@ -662,6 +675,16 @@ export class AdminSpaceController {
         };
     }
 
+    @Get(':id')
+    @ApiOperation({ summary: 'Get space by id' })
+    async getSpaceById(@Param('id') id: number): Promise<GlobalResponse<AdminSpaceViewDto>> {
+        const data = await this.adminSpaceService.viewSpace(id);
+        return {
+            message: 'Success',
+            data: data,
+        };
+    }
+
     // update space
     @Post('update')
     @ApiOperation({ summary: 'Update space' })
@@ -675,6 +698,19 @@ export class AdminSpaceController {
         };
     }
 
+    @Patch(':id')
+    @ApiOperation({ summary: 'Update space by id' })
+    async updateSpaceById(
+        @Param('id') id: number,
+        @Body() dto: Partial<AdminSpaceUpdateDto>,
+    ): Promise<GlobalResponse<AdminSpaceViewDto>> {
+        const data = await this.adminSpaceService.updateSpace({ ...dto, id });
+        return {
+            message: 'Success',
+            data: data,
+        };
+    }
+
     // delete space
     @Delete('delete')
     @ApiOperation({ summary: 'Delete space' })
@@ -682,6 +718,16 @@ export class AdminSpaceController {
     @ApiResponse({ status: 400, description: 'Bad Request', schema: { example: { success: false, alert: { code: 400, message: 'Bad Request' }, data: {} } } })
     async deleteSpace(@Body() dto: AdminSpaceDeleteDto): Promise<GlobalResponse<{ deleted: boolean }>> {
         const data = await this.adminSpaceService.deleteSpace(dto);
+        return {
+            message: data.deleted ? 'Deleted' : 'Not Found',
+            data: data,
+        };
+    }
+
+    @Delete(':id')
+    @ApiOperation({ summary: 'Delete space by id' })
+    async deleteSpaceById(@Param('id') id: number): Promise<GlobalResponse<{ deleted: boolean }>> {
+        const data = await this.adminSpaceService.deleteSpace({ id });
         return {
             message: data.deleted ? 'Deleted' : 'Not Found',
             data: data,

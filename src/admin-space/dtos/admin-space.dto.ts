@@ -69,16 +69,20 @@ export class AdminSpaceCreateDto {
     @IsNotEmpty()
     name: string;
 
+    @ApiPropertyOptional({description: "Description", example: "Deskripsi komunitas"})
+    @Type(() => String)
+    @IsString()
+    @IsOptional()
+    description?: string;
+
     @ApiPropertyOptional({
         description: "Is Dealer",
         example: false,
-        enum: [false, true],
         default: false
     })
     @IsOptional()
     @IsBoolean()
-    @IsIn([false, true],)
-    is_dealer?: false;
+    is_dealer?: boolean;
 }
 
 // DTO for viewing a single space (response)

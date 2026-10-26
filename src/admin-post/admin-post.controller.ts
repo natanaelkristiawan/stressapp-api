@@ -17,6 +17,7 @@ import { AdminPostActivityService } from './admin-post-activity.service';
 @Controller('admin-post')
 @ApiTags('ADMIN POST')
 @ApiBearerAuth('access-token')
+@UseGuards(CmsMembersGuard)
 export class AdminPostController {
 
     constructor(
@@ -355,7 +356,7 @@ export class AdminPostController {
     }
 
       // delete post
-    @Delete('delete/:id')
+    @Delete(['delete/:id', ':id'])
     @ApiOperation({ summary: 'Delete post' })
     @ApiResponse({ status: 200, description: 'Success', example: {
       "success": true,
@@ -375,7 +376,7 @@ export class AdminPostController {
       }}) 
     async deletePost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
       const { id:userId } = request.userData; // admin
-      const data = await this.postService.deletePost(id, userId);
+      const data = await this.postService.deletePost(id, userId, true);
 
       await this.adminPostActivityService.createActivity({
         userId,

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SpaceEntity } from 'src/entity/space.entity';
@@ -24,8 +24,8 @@ export class AdminSpaceService {
 
         const query = this.spaceRepository.createQueryBuilder('space');
 
-        // statik
-        query.where('backup_space_id = :backup_space', {backup_space: 15});
+        // Exclude the internal hidden root container (backup_space_id = 0)
+        query.where('(space.backup_space_id != 0 OR space.backup_space_id IS NULL)');
         
         // search
         if (search) {
@@ -35,6 +35,8 @@ export class AdminSpaceService {
         // sort
         if (sort) {
             query.orderBy(`space.${sort}`, order === 'asc' ? 'ASC' : 'DESC');
+        } else {
+            query.orderBy('space.id', 'DESC');
         }    
 
         // pagination
@@ -86,41 +88,44 @@ export class AdminSpaceService {
     }
 
     // create space
-    async createSpace(dto: AdminSpaceCreateDto):Promise<DataSpace> {
-        const { name, image, banner, is_dealer } = dto
+    async createSpace(dto: AdminSpaceCreateDto): Promise<DataSpace> {
+        const { name, description, image, banner, is_dealer } = dto;
 
-        let space = this.spaceRepository.create({
-            name: name,
-            image: image,
-            banner: banner,
+        const home = await this.spaceRepository.findOne({ where: { backup_space_id: 0 } });
+        const parentSpaceId = home?.id ?? 15;
+
+        const space = this.spaceRepository.create({
+            name,
+            description: description ?? '',
+            image: image ?? '',
+            banner: banner ?? '',
             membersCount: 0,
             postsCount: 0,
-            backup_space_id: 15,
+            backup_space_id: parentSpaceId,
             created_at: new Date(),
-            is_dealer: is_dealer
-        })
+            is_dealer: Boolean(is_dealer),
+        });
 
         // save
-        let data = await this.spaceRepository.save(space)
-
-        // set as response
+        const data = await this.spaceRepository.save(space);
 
         return {
             id: data.id,
-            name:data.name,
+            name: data.name,
             image: data.image,
             banner: data.banner,
             membersCount: data.membersCount,
             postsCount: data.postsCount,
             created_at: data.created_at,
-        }
-
+        };
     }
 
     // view space by id
     async viewSpace(id: number): Promise<AdminSpaceViewDto> {
         const space = await this.spaceRepository.findOne({ where: { id } });
-        if (!space) throw new Error('Space not found');
+        if (!space) {
+            throw new NotFoundException('Space not found');
+        }
         return {
             id: space.id,
             name: space.name,
@@ -138,7 +143,9 @@ export class AdminSpaceService {
     // update space
     async updateSpace(dto: AdminSpaceUpdateDto): Promise<AdminSpaceViewDto> {
         const space = await this.spaceRepository.findOne({ where: { id: dto.id } });
-        if (!space) throw new Error('Space not found');
+        if (!space) {
+            throw new NotFoundException('Space not found');
+        }
         if (dto.name !== undefined) space.name = dto.name;
         if (dto.description !== undefined) space.description = dto.description;
         if (dto.image !== undefined) space.image = dto.image;
@@ -161,8 +168,12 @@ export class AdminSpaceService {
 
     // delete space
     async deleteSpace(dto: AdminSpaceDeleteDto): Promise<{ deleted: boolean }> {
+        const space = await this.spaceRepository.findOne({ where: { id: dto.id } });
+        if (!space) {
+            throw new NotFoundException('Space not found');
+        }
         const result = await this.spaceRepository.delete(dto.id);
-        return { deleted: result.affected > 0 };
+        return { deleted: (result.affected ?? 0) > 0 };
     }
 
 }
