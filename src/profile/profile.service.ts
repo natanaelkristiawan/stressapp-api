@@ -35,8 +35,6 @@ import { PostEntity } from 'src/entity/post.entity';
 import { CommentEntity } from 'src/entity/comment.entity';
 import { ReactionEntity } from 'src/entity/reaction.entity';
 
-const DEFAULT_MEMBER_AVATAR =
-    'https://s3.temusobat.tech/temu-sobat/sample-friend.jpg';
 const DEFAULT_MEMBER_LOCATION = 'Jakarta';
 const ONLINE_WINDOW_MS = 15 * 60 * 1000;
 
@@ -638,15 +636,19 @@ export class ProfileService {
         }
     }
 
-    /** Resolves a member's profile picture URL or returns the default avatar.
-     * @returns Non-empty avatar URL string.
+    /** Resolves a member's profile picture URL or returns an empty string when not uploaded.
+     * @returns Valid HTTP/HTTPS avatar URL string or empty string.
      */
     private getMemberAvatarUrl(member: UserMimateEntity): string {
         const trimmedUrl = member.profilePictureUrl?.trim();
-        if (trimmedUrl && /^https?:\/\//i.test(trimmedUrl)) {
+        if (
+            trimmedUrl &&
+            /^https?:\/\//i.test(trimmedUrl) &&
+            !trimmedUrl.endsWith('/sample-friend.jpg')
+        ) {
             return trimmedUrl;
         }
-        return DEFAULT_MEMBER_AVATAR;
+        return '';
     }
 
     /** Determines whether a member has been active within the recent online window.

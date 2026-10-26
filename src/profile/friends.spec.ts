@@ -28,9 +28,7 @@ function createMemberFixture(
   member.mmid_fullname = overrides.mmid_fullname ?? member.name;
   member.email = overrides.email ?? `member${overrides.id}@example.com`;
   member.address = overrides.address ?? 'Jakarta';
-  member.profilePictureUrl =
-    overrides.profilePictureUrl ??
-    'https://s3.temusobat.tech/temu-sobat/sample-friend.jpg';
+  member.profilePictureUrl = overrides.profilePictureUrl ?? undefined;
   member.bio = overrides.bio ?? 'Test bio';
   member.hobby = overrides.hobby ?? 'Membaca, Musik';
   member.is_suspended = overrides.is_suspended ?? false;
