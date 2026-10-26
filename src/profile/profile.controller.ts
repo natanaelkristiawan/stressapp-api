@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -17,6 +18,7 @@ import {
   FriendConnectionsQueryDto,
   FriendDiscoverQueryDto,
   FriendMemberIdParamDto,
+  UpdateMemberProfileDto,
 } from './dtos/friends.dto';
 import { GlobalResponse } from 'src/interfaces/global.interface';
 import {
@@ -25,6 +27,7 @@ import {
   FriendMemberProfileInterface,
   FriendMutationResultInterface,
   MemberFollowInterface,
+  MemberSelfProfileInterface,
   profile,
 } from './interfaces/profile.interface';
 import {
@@ -862,6 +865,61 @@ export class MemberFriendsController {
     );
     return {
       message: 'Permintaan pertemanan dihapus.',
+      data,
+    };
+  }
+}
+
+@ApiTags('PROFILE')
+@ApiBearerAuth('access-token')
+@Controller('me/profile')
+@UseGuards(MemberAuthGuard)
+export class MemberProfileController {
+  constructor(
+    private readonly profileService: ProfileService,
+    private readonly memberAuth: MemberAuthService,
+  ) {}
+
+  /** Loads the authenticated member's own profile details and preferences. */
+  @Get()
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Get authenticated member profile and preferences' })
+  async getProfile(
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<MemberSelfProfileInterface>> {
+    await this.memberAuth.limit(
+      'profile-read',
+      String(request.member.id),
+      180,
+      3600,
+    );
+    const data = await this.profileService.getSelfProfile(request.member.id);
+    return {
+      message: 'Profil berhasil dimuat.',
+      data,
+    };
+  }
+
+  /** Updates the authenticated member's profile info, avatar URL, or preferences. */
+  @Patch()
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Update authenticated member profile and preferences' })
+  async updateProfile(
+    @Body() body: UpdateMemberProfileDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<MemberSelfProfileInterface>> {
+    await this.memberAuth.limit(
+      'profile-write',
+      String(request.member.id),
+      60,
+      3600,
+    );
+    const data = await this.profileService.updateSelfProfile(
+      request.member.id,
+      body,
+    );
+    return {
+      message: 'Profil berhasil disimpan.',
       data,
     };
   }

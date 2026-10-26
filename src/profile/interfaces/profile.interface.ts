@@ -108,3 +108,15 @@ export interface FriendMutationResultInterface {
   memberId: number;
   relationshipStatus: FriendRelationshipState;
 }
+
+export interface MemberSelfProfileInterface {
+  id: number;
+  name: string;
+  email: string;
+  emailVerified: boolean;
+  username: string;
+  location: string;
+  bio: string;
+  avatarUrl: string;
+  preferences: string[];
+}

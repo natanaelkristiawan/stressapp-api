@@ -17,11 +17,13 @@ import {
     FriendProfilePostInterface,
     FriendRelationshipState,
     MemberFollowInterface,
+    MemberSelfProfileInterface,
     profile,
 } from './interfaces/profile.interface';
 import {
     FriendConnectionsQueryDto,
     FriendDiscoverQueryDto,
+    UpdateMemberProfileDto,
 } from './dtos/friends.dto';
 import { UpdateProfileDto } from './dtos/update-profile.dto';
 import { UserFollowEntity } from 'src/entity/user-follow.entity';
@@ -445,10 +447,15 @@ export class ProfileService {
         return true;
     }
 
-    /** Builds a consistent @username handle from email prefix or display name.
+    /** Builds a consistent @username handle from stored username, email prefix, or display name.
      * @returns A lowercase @username string.
      */
     private getMemberUsername(member: UserMimateEntity): string {
+        const storedUsername = member.username?.trim().replace(/^@+/, '');
+        if (storedUsername && storedUsername.length > 0) {
+            return `@${storedUsername}`;
+        }
+
         const emailLocalPart = member.email?.split('@')[0] ?? '';
         const normalizedEmailHandle = emailLocalPart
             .toLowerCase()
@@ -478,11 +485,157 @@ export class ProfileService {
      * @returns Non-empty location label.
      */
     private getMemberLocation(member: UserMimateEntity): string {
+        const trimmedLocation = member.location?.trim();
+        if (trimmedLocation && trimmedLocation.length > 0) {
+            return trimmedLocation;
+        }
         const trimmedAddress = member.address?.trim();
         if (trimmedAddress && trimmedAddress.length > 0) {
             return trimmedAddress;
         }
         return DEFAULT_MEMBER_LOCATION;
+    }
+
+    /** Extracts a member's preference tags from the JSON column or legacy hobby string.
+     * @returns Array of trimmed non-empty preference strings.
+     */
+    private getMemberPreferences(member: UserMimateEntity): string[] {
+        if (Array.isArray(member.preferences)) {
+            return member.preferences
+                .map((item) => (typeof item === 'string' ? item.trim() : ''))
+                .filter((item) => item.length > 0);
+        }
+        return (member.hobby ?? '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+    }
+
+    /** Maps a Member entity into the authenticated member's own profile response.
+     * @returns MemberSelfProfileInterface for mobile profile state.
+     */
+    private toSelfProfile(member: UserMimateEntity): MemberSelfProfileInterface {
+        return {
+            id: member.id,
+            name: member.name?.trim() || '',
+            email: member.email || '',
+            emailVerified: Boolean(member.verifiedAt),
+            username: member.username?.trim() || '',
+            location:
+                member.location?.trim() || member.address?.trim() || '',
+            bio: member.bio?.trim() || '',
+            avatarUrl: member.profilePictureUrl?.trim() || '',
+            preferences: this.getMemberPreferences(member),
+        };
+    }
+
+    /** Loads the authenticated member's own profile from the database.
+     * @returns MemberSelfProfileInterface.
+     */
+    async getSelfProfile(memberId: number): Promise<MemberSelfProfileInterface> {
+        const member = await this.userMimateRepository.findOne({
+            where: { id: memberId },
+        });
+        if (!this.isMemberEligibleForFriends(member)) {
+            throw new NotFoundException('Profil pengguna tidak ditemukan.');
+        }
+        return this.toSelfProfile(member);
+    }
+
+    /** Updates the authenticated member's profile fields and preferences inside a transaction.
+     * @returns Updated MemberSelfProfileInterface.
+     */
+    async updateSelfProfile(
+        memberId: number,
+        input: UpdateMemberProfileDto,
+    ): Promise<MemberSelfProfileInterface> {
+        try {
+            return await this.userMimateRepository.manager.transaction(
+                async (manager) => {
+                    const lockedMembers = await manager
+                        .createQueryBuilder(UserMimateEntity, 'member')
+                        .setLock('pessimistic_write')
+                        .where('member.id IN (:...orderedIds)', {
+                            orderedIds: [memberId],
+                        })
+                        .getMany();
+
+                    const member = lockedMembers.find(
+                        (item) => item.id === memberId,
+                    );
+                    if (!this.isMemberEligibleForFriends(member)) {
+                        throw new NotFoundException(
+                            'Profil pengguna tidak ditemukan.',
+                        );
+                    }
+
+                    if (input.name !== undefined) {
+                        member.name = input.name;
+                    }
+                    if (input.username !== undefined) {
+                        const normalizedUsername =
+                            typeof input.username === 'string'
+                                ? input.username.trim().replace(/^@+/, '')
+                                : '';
+                        member.username =
+                            normalizedUsername.length > 0
+                                ? normalizedUsername
+                                : null;
+                    }
+                    if (input.location !== undefined) {
+                        const normalizedLocation =
+                            typeof input.location === 'string'
+                                ? input.location.trim()
+                                : '';
+                        member.location =
+                            normalizedLocation.length > 0
+                                ? normalizedLocation
+                                : null;
+                        member.address = member.location;
+                    }
+                    if (input.bio !== undefined) {
+                        const normalizedBio =
+                            typeof input.bio === 'string'
+                                ? input.bio.trim()
+                                : '';
+                        member.bio =
+                            normalizedBio.length > 0 ? normalizedBio : null;
+                    }
+                    if (input.avatarUrl !== undefined) {
+                        const normalizedAvatar =
+                            typeof input.avatarUrl === 'string'
+                                ? input.avatarUrl.trim()
+                                : '';
+                        member.profilePictureUrl =
+                            normalizedAvatar.length > 0
+                                ? normalizedAvatar
+                                : null;
+                    }
+                    if (input.preferences !== undefined) {
+                        member.preferences = input.preferences;
+                        member.hobby =
+                            input.preferences.length > 0
+                                ? input.preferences.join(', ')
+                                : null;
+                    }
+
+                    await manager.save(UserMimateEntity, member);
+                    return this.toSelfProfile(member);
+                },
+            );
+        } catch (error) {
+            if (
+                typeof error === 'object' &&
+                error !== null &&
+                'code' in error &&
+                error.code === 'ER_DUP_ENTRY'
+            ) {
+                throw new ConflictException(
+                    'Username sudah digunakan oleh pengguna lain.',
+                );
+            }
+            throw error;
+        }
     }
 
     /** Resolves a member's profile picture URL or returns the default avatar.
@@ -690,7 +843,7 @@ export class ProfileService {
         if (query.location) {
             const normalizedLocation = `%${query.location.trim().toLowerCase()}%`;
             qb.andWhere(
-                "LOWER(COALESCE(NULLIF(TRIM(member.address), ''), :defaultLocation)) LIKE :locationFilter",
+                "LOWER(COALESCE(NULLIF(TRIM(member.location), ''), NULLIF(TRIM(member.address), ''), :defaultLocation)) LIKE :locationFilter",
                 {
                     defaultLocation: DEFAULT_MEMBER_LOCATION,
                     locationFilter: normalizedLocation,
@@ -701,7 +854,7 @@ export class ProfileService {
         if (query.search) {
             const normalizedSearch = `%${query.search.trim().toLowerCase()}%`;
             qb.andWhere(
-                "(LOWER(COALESCE(member.name, '')) LIKE :searchFilter OR LOWER(COALESCE(member.mmid_fullname, '')) LIKE :searchFilter OR LOWER(COALESCE(member.email, '')) LIKE :searchFilter)",
+                "(LOWER(COALESCE(member.name, '')) LIKE :searchFilter OR LOWER(COALESCE(member.mmid_fullname, '')) LIKE :searchFilter OR LOWER(COALESCE(member.username, '')) LIKE :searchFilter OR LOWER(COALESCE(member.email, '')) LIKE :searchFilter)",
                 { searchFilter: normalizedSearch },
             );
         }
@@ -939,10 +1092,7 @@ export class ProfileService {
             };
         });
 
-        const parsedPreferences = (member.hobby ?? '')
-            .split(',')
-            .map((item) => item.trim())
-            .filter((item) => item.length > 0);
+        const parsedPreferences = this.getMemberPreferences(member);
 
         const bioText =
             member.bio?.trim() ||

@@ -86,14 +86,29 @@ export class MemberAuthService {
     );
   }
   /** Builds the public member identity without credentials or private columns.
-   * @returns The member ID, email, display name and verification status.
+   * @returns The member ID, email, display name, verification status, and profile details.
    */
   private view(member: Member) {
+    const rawPreferences = Array.isArray(member.preferences)
+      ? member.preferences.filter(
+          (item): item is string =>
+            typeof item === 'string' && item.trim().length > 0,
+        )
+      : (member.hobby ?? '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0);
+
     return {
       id: member.id,
       email: member.email,
-      name: member.name,
+      name: member.name || '',
       emailVerified: !!member.verifiedAt,
+      username: member.username || '',
+      location: member.location?.trim() || member.address?.trim() || '',
+      bio: member.bio || '',
+      avatarUrl: member.profilePictureUrl || '',
+      preferences: rawPreferences,
     };
   }
   /** Creates or updates a pending registration and requests its verification OTP.

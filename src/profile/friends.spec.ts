@@ -11,6 +11,7 @@ import {
   FriendConnectionsQueryDto,
   FriendDiscoverQueryDto,
   FriendMemberIdParamDto,
+  UpdateMemberProfileDto,
 } from './dtos/friends.dto';
 import { UserFollowEntity } from 'src/entity/user-follow.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
@@ -144,13 +145,35 @@ function createFriendsHarness() {
       Object.assign(entity, data);
       return entity;
     },
-    save: async (_entity: unknown, row: UserFollowEntity) => {
-      if (!row.id) {
-        row.id = nextFollowId++;
-        row.followedAt = new Date('2026-01-02T00:00:00Z');
-        follows.push(row);
+    save: async (entity: unknown, row: UserFollowEntity | UserMimateEntity) => {
+      if (entity === UserMimateEntity) {
+        const memberRow = row as UserMimateEntity;
+        if (memberRow.username) {
+          for (const existing of members.values()) {
+            if (
+              existing.id !== memberRow.id &&
+              existing.username &&
+              existing.username.toLowerCase() ===
+                memberRow.username.toLowerCase()
+            ) {
+              const dupError = new Error('Duplicate username') as Error & {
+                code: string;
+              };
+              dupError.code = 'ER_DUP_ENTRY';
+              throw dupError;
+            }
+          }
+        }
+        members.set(memberRow.id, memberRow);
+        return memberRow;
       }
-      return row;
+      const followRow = row as UserFollowEntity;
+      if (!followRow.id) {
+        followRow.id = nextFollowId++;
+        followRow.followedAt = new Date('2026-01-02T00:00:00Z');
+        follows.push(followRow);
+      }
+      return followRow;
     },
     remove: async (
       _entity: unknown,
@@ -229,15 +252,16 @@ function createFriendsHarness() {
             }
             if (
               locationFilter &&
-              !(member.address || 'Jakarta')
+              !(member.location || member.address || 'Jakarta')
                 .toLowerCase()
                 .includes(locationFilter)
             ) {
               return false;
             }
             if (searchFilter) {
-              const haystack =
-                `${member.name} ${member.mmid_fullname} ${member.email}`.toLowerCase();
+              const haystack = `${member.name} ${member.mmid_fullname} ${
+                member.username ?? ''
+              } ${member.email}`.toLowerCase();
               if (!haystack.includes(searchFilter)) {
                 return false;
               }
@@ -413,5 +437,76 @@ describe('Friends Connection Feature (ProfileService & DTOs)', () => {
     expect(acceptedProfile.relationshipStatus).toBe('accepted');
     expect(acceptedProfile.connectionsCount).toBe(1);
     expect(acceptedProfile.connectionsLabel).toBe('1 koneksi');
+  });
+
+  it('validates UpdateMemberProfileDto and updates member profile, avatarUrl, and preferences', async () => {
+    const validUpdate = plainToInstance(UpdateMemberProfileDto, {
+      name: '  Andi Wijaya  ',
+      username: '  @andiwijaya_99  ',
+      location: '  Yogyakarta  ',
+      bio: '  Suka lari pagi dan fotografi.  ',
+      avatarUrl: 'https://s3.temusobat.tech/temu-sobat/images/andi-new.jpg',
+      preferences: [' Olahraga ', 'Fotografi', 'Olahraga', 'Membaca Buku'],
+    });
+    const validationErrors = await validate(validUpdate);
+    expect(validationErrors).toHaveLength(0);
+    expect(validUpdate.name).toBe('Andi Wijaya');
+    expect(validUpdate.username).toBe('andiwijaya_99');
+    expect(validUpdate.location).toBe('Yogyakarta');
+    expect(validUpdate.bio).toBe('Suka lari pagi dan fotografi.');
+    expect(validUpdate.preferences).toEqual([
+      'Olahraga',
+      'Fotografi',
+      'Membaca Buku',
+    ]);
+
+    const invalidUpdate = plainToInstance(UpdateMemberProfileDto, {
+      name: '',
+      username: 'invalid username with spaces!',
+      avatarUrl: 'ftp://invalid-scheme.example.com/a.jpg',
+    });
+    const invalidErrors = await validate(invalidUpdate);
+    expect(invalidErrors.length).toBeGreaterThanOrEqual(3);
+
+    const { service } = createFriendsHarness();
+    const initialProfile = await service.getSelfProfile(1);
+    expect(initialProfile.name).toBe('Andi Pratama');
+    expect(initialProfile.email).toBe('andi@example.com');
+
+    const updatedProfile = await service.updateSelfProfile(1, validUpdate);
+    expect(updatedProfile).toEqual({
+      id: 1,
+      name: 'Andi Wijaya',
+      email: 'andi@example.com',
+      emailVerified: true,
+      username: 'andiwijaya_99',
+      location: 'Yogyakarta',
+      bio: 'Suka lari pagi dan fotografi.',
+      avatarUrl: 'https://s3.temusobat.tech/temu-sobat/images/andi-new.jpg',
+      preferences: ['Olahraga', 'Fotografi', 'Membaca Buku'],
+    });
+
+    const publicView = await service.getFriendMemberProfile(2, 1);
+    expect(publicView.name).toBe('Andi Wijaya');
+    expect(publicView.username).toBe('@andiwijaya_99');
+    expect(publicView.location).toBe('Yogyakarta');
+    expect(publicView.bio).toBe('Suka lari pagi dan fotografi.');
+    expect(publicView.avatarUrl).toBe(
+      'https://s3.temusobat.tech/temu-sobat/images/andi-new.jpg',
+    );
+    expect(publicView.preferences).toEqual([
+      'Olahraga',
+      'Fotografi',
+      'Membaca Buku',
+    ]);
+
+    await expect(
+      service.updateSelfProfile(
+        2,
+        plainToInstance(UpdateMemberProfileDto, {
+          username: 'andiwijaya_99',
+        }),
+      ),
+    ).rejects.toThrow(ConflictException);
   });
 });

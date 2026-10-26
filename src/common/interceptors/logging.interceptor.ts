@@ -39,6 +39,8 @@ export class LoggingInterceptor implements NestInterceptor {
         'AssessmentController',
         'CmsAssessmentController',
         'UploadController',
+        'MemberFriendsController',
+        'MemberProfileController',
       ].includes(context.getClass().name)
     )
       return next.handle();
