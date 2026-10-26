@@ -6,10 +6,11 @@ import {
   HttpCode,
   Post,
   Req,
+  Res,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import {
   EmailDto,
   GoogleLoginDto,
@@ -72,6 +73,42 @@ export class MemberAuthController {
   ) {
     await this.limit(req);
     return this.auth.loginWithGoogle(dto);
+  }
+  /** Serves the HTTPS OAuth relay page that forwards the Google ID token back into the native mobile app scheme.
+   * @returns HTML redirect page for native OAuth sessions.
+   */
+  @Get('google/callback')
+  googleCallback(@Res() res: Response) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).send(`<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Melanjutkan ke Temu SoBAT...</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #FFF7F2; color: #0F1E36; text-align: center; padding: 24px; }
+    .btn { display: inline-block; margin-top: 16px; padding: 12px 24px; background: #F2703D; color: #FFFFFF; border-radius: 10px; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <p>Melanjutkan login ke aplikasi Temu SoBAT...</p>
+  <a id="open-app" class="btn" href="myapp://auth/login">Kembali ke Aplikasi</a>
+  <script>
+    (function () {
+      var hash = window.location.hash || '';
+      var search = window.location.search || '';
+      var target = 'myapp://auth/login' + search + hash;
+      var link = document.getElementById('open-app');
+      if (link) {
+        link.setAttribute('href', target);
+      }
+      window.location.replace(target);
+    })();
+  </script>
+</body>
+</html>`);
   }
   /** Validates a refresh credential and requests atomic rotation.
    * @returns A renewed JWT/refresh pair with expiry timestamps.

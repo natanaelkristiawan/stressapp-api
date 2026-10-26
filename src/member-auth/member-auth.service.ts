@@ -33,7 +33,7 @@ import {
 import { OAuth2Client } from 'google-auth-library';
 
 const DEFAULT_GOOGLE_CLIENT_ID =
-  '563762520506-i1vfs17l17viqvj0c57u828jjqm75av9.apps.googleusercontent.com';
+  '563762520506-i1vfs17l17viqvj0c57u828jjqm75av9.apps.googleusercontent.com,563762520506-0dkhupgea904glbctavvhg40lii2uk3j.apps.googleusercontent.com';
 const GENERIC = {
   message: 'Jika akun memenuhi syarat, kode OTP dikirim ke email Anda.',
 };
