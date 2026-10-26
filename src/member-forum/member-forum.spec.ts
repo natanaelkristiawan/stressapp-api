@@ -1,5 +1,14 @@
 import 'reflect-metadata';
 import { MemberForumService } from './member-forum.service';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { PostService } from 'src/post/post.service';
+import {
+  CreateMemberForumPostDto,
+  CreateMemberForumCommentDto,
+  MemberForumFeedQueryDto,
+  ToggleReactionDto,
+} from './dtos/member-forum.dto';
 import { ReportReason } from 'src/entity/post-report.entity';
 
 describe('MemberForumService', () => {
@@ -15,13 +24,18 @@ describe('MemberForumService', () => {
 
   beforeEach(() => {
     postRepo = {
-      findOne: jest.fn(),
+      findOne: jest.fn().mockResolvedValue({
+        id: 10,
+        member: { id: 1 },
+        status: 'PUBLISHED',
+        isHidden: false,
+      }),
     };
     reactionRepo = {
       findOne: jest.fn(),
     };
     spaceRepo = {
-      findOne: jest.fn(),
+      findOne: jest.fn().mockResolvedValue({ id: 4 }),
       findOneBy: jest.fn(),
     };
     postService = {
@@ -29,6 +43,7 @@ describe('MemberForumService', () => {
       detailPost: jest.fn(),
       createPost: jest.fn(),
       deletePost: jest.fn(),
+      updatePost: jest.fn(),
     };
     spaceService = {
       getHomeSpaces: jest.fn(),
@@ -70,7 +85,11 @@ describe('MemberForumService', () => {
             id: 101,
             title: 'Sample Post',
             textContent: 'Content body',
-            member: { id: 1, name: 'Alice', profilePictureUrl: 'https://pic.jpg' },
+            member: {
+              id: 1,
+              name: 'Alice',
+              profilePictureUrl: 'https://pic.jpg',
+            },
             reactionCount: 5,
             reaction: [{ reacted: true }],
             space: { id: 7, name: 'Warga MiMate' },
@@ -177,7 +196,11 @@ describe('MemberForumService', () => {
 
       const res = await service.toggleReaction(10, 1, 'heart');
 
-      expect(reactionService.createReaction).toHaveBeenCalledWith(10, 'heart', 1);
+      expect(reactionService.createReaction).toHaveBeenCalledWith(
+        10,
+        'heart',
+        1,
+      );
       expect(res).toEqual({ reacted: true, likes: 8 });
     });
 
@@ -274,5 +297,216 @@ describe('MemberForumService', () => {
       );
       expect(ok).toBe(true);
     });
+  });
+  describe('member boundaries', () => {
+    it('redacts anonymous identity while preserving ownership', async () => {
+      postService.detailPost.mockResolvedValue({
+        id: 10,
+        member: {
+          id: 1,
+          name: 'Anonim',
+          profilePictureUrl: 'https://private.test/avatar',
+        },
+        is_post_owner: true,
+      });
+      const post = await service.getPostDetail(10, 1);
+      expect(post).toMatchObject({
+        author: 'Anonim',
+        authorId: 0,
+        avatarUrl: '',
+        own: true,
+      });
+    });
+
+    it('rejects inaccessible posts before detail, comments, reactions or reports', async () => {
+      postRepo.findOne.mockResolvedValue(null);
+      await expect(service.getPostDetail(10, 1)).rejects.toThrow(
+        'Post not found',
+      );
+      await expect(service.getComments(10, 1)).rejects.toThrow(
+        'Post not found',
+      );
+      await expect(
+        service.createComment(10, 1, { content: 'Hello' }),
+      ).rejects.toThrow('Post not found');
+      await expect(service.toggleReaction(10, 1)).rejects.toThrow(
+        'Post not found',
+      );
+      await expect(
+        service.reportPost(10, { reason: 'Spam' }, 1),
+      ).rejects.toThrow('Post not found');
+      expect(commentService.createComment).not.toHaveBeenCalled();
+      expect(reactionService.createReaction).not.toHaveBeenCalled();
+      expect(postService.detailPost).not.toHaveBeenCalled();
+      expect(postRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 10,
+            isPsychoeducation: false,
+            isHidden: false,
+            status: 'PUBLISHED',
+          },
+        }),
+      );
+    });
+
+    it('does not inherit legacy admin privileges for someone else’s post', async () => {
+      await expect(service.deletePost(10, 2)).rejects.toThrow('not the owner');
+      await expect(
+        service.updatePost(10, { title: 'Title', caption: 'Body' }, 2),
+      ).rejects.toThrow('not the owner');
+      expect(postService.deletePost).not.toHaveBeenCalled();
+      expect(postService.updatePost).not.toHaveBeenCalled();
+    });
+
+    it('does not delete educational comments through the forum route', async () => {
+      commentService.getCommentById.mockResolvedValue({
+        member: { id: 1 },
+        post: { isPsychoeducation: true },
+      });
+      await expect(service.deleteComment(9, 1)).rejects.toThrow(
+        'not the owner',
+      );
+      expect(commentService.deleteComment).not.toHaveBeenCalled();
+    });
+
+    it('rejects missing or unavailable community IDs rather than posting to a fallback', async () => {
+      await expect(service.getFeed({ tab: 'komunitas' }, 1)).rejects.toThrow(
+        'Community ID is required',
+      );
+      spaceRepo.findOne.mockResolvedValue(null);
+      await expect(
+        service.createPost(
+          { title: 'Title', caption: 'Body', spaceId: 999 },
+          1,
+        ),
+      ).rejects.toThrow('Community not found');
+      expect(postService.createPost).not.toHaveBeenCalled();
+    });
+
+    it('persists edits through the moderated post service', async () => {
+      postService.updatePost.mockResolvedValue({
+        id: 10,
+        member: { id: 1, name: 'Anonim' },
+      });
+      const post = await service.updatePost(
+        10,
+        { title: ' Title ', caption: ' Body ', anonymous: true },
+        1,
+      );
+      expect(postService.updatePost).toHaveBeenCalledWith(
+        10,
+        {
+          title: 'Title',
+          content: 'Body',
+          spaceId: undefined,
+          image: undefined,
+          is_anonymous: true,
+        },
+        1,
+        1,
+      );
+      expect(post.authorId).toBe(0);
+    });
+  });
+});
+
+describe('forum input validation', () => {
+  it('rejects whitespace-only content, unsafe URLs and unbounded requests', async () => {
+    for (const input of [
+      plainToInstance(CreateMemberForumPostDto, {
+        title: '   ',
+        caption: 'Body',
+      }),
+      plainToInstance(CreateMemberForumPostDto, {
+        title: 'Title',
+        caption: '   ',
+      }),
+      plainToInstance(CreateMemberForumPostDto, {
+        title: 'Title',
+        caption: 'Body',
+        image: 'javascript:alert(1)',
+      }),
+      plainToInstance(CreateMemberForumCommentDto, { content: '   ' }),
+      plainToInstance(MemberForumFeedQueryDto, { limit: 9999 }),
+      plainToInstance(MemberForumFeedQueryDto, { after: 'x'.repeat(201) }),
+      plainToInstance(ToggleReactionDto, { reaction: 'x'.repeat(1000) }),
+    ]) {
+      expect((await validate(input)).length).toBeGreaterThan(0);
+    }
+    expect(
+      await validate(
+        plainToInstance(CreateMemberForumPostDto, {
+          title: 'Title',
+          caption: 'Body',
+          image: 'https://example.test/image.jpg',
+          anonymous: true,
+        }),
+      ),
+    ).toHaveLength(0);
+  });
+});
+
+describe('forum feed paging and visibility', () => {
+  it('isolates cursors between members and filters and ends at the exact page boundary', async () => {
+    const cache = new Map<string, string>();
+    const repository = {
+      count: jest.fn().mockResolvedValue(2),
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const service = Object.assign(Object.create(PostService.prototype), {
+      postRepository: repository,
+      redis: {
+        get: jest.fn(async (key: string) => cache.get(key)),
+        set: jest.fn(async (key: string, value: string) =>
+          cache.set(key, value),
+        ),
+      },
+    }) as PostService;
+    const first = await service.collectPosts(
+      'latest',
+      2,
+      '',
+      undefined,
+      undefined,
+      1,
+    );
+    expect(first.hasNext).toBe(false);
+    expect(repository.find).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          isPsychoeducation: false,
+          isHidden: false,
+          status: 'PUBLISHED',
+        },
+        skip: 0,
+      }),
+    );
+    await service.collectPosts(
+      'latest',
+      2,
+      first.after,
+      undefined,
+      undefined,
+      2,
+    );
+    expect(repository.find).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skip: 0 }),
+    );
+    await service.collectPosts(
+      'latest',
+      2,
+      first.after,
+      undefined,
+      undefined,
+      1,
+    );
+    expect(repository.find).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skip: 2 }),
+    );
+    await service.collectPosts('space', 2, first.after, 4, undefined, 1);
+    expect(repository.find).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skip: 0 }),
+    );
   });
 });

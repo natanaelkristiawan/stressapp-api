@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { PostEntity } from 'src/entity/post.entity';
 import { ReactionEntity } from 'src/entity/reaction.entity';
 import { SpaceEntity } from 'src/entity/space.entity';
@@ -113,14 +113,13 @@ export class MemberForumService {
 
   /** Formats raw post DTO from PostService into mobile forum schema contract. */
   private formatPost(post: PostDto, memberId: number): FormattedForumPost {
-    const isLiked = Boolean(
-      post.reaction?.some((r) => r.reacted) ||
-        false,
-    );
+    const isLiked = Boolean(post.reaction?.some((r) => r.reacted) || false);
 
     const hasPhoto = Boolean(
       post.image || (post.medias && post.medias.length > 0),
     );
+
+    const anonymous = post.member?.name === 'Anonim';
 
     return {
       id: String(post.id),
@@ -129,8 +128,8 @@ export class MemberForumService {
       caption: post.textContent || post.description || '',
       image: post.image || (post.medias?.[0]?.url ?? ''),
       author: post.member?.name || 'Anonim',
-      authorId: post.member?.id ?? 0,
-      avatarUrl: post.member?.profilePictureUrl || '',
+      authorId: anonymous ? 0 : post.member?.id ?? 0,
+      avatarUrl: anonymous ? '' : post.member?.profilePictureUrl || '',
       own: Boolean(post.is_post_owner || post.member?.id === memberId),
       photo: hasPhoto,
       audio: post.type === 'audio',
@@ -144,6 +143,38 @@ export class MemberForumService {
     };
   }
 
+  private async requireVisiblePost(postId: number): Promise<PostEntity> {
+    const post = await this.postRepository.findOne({
+      where: {
+        id: postId,
+        isPsychoeducation: false,
+        isHidden: false,
+        status: 'PUBLISHED',
+      },
+      relations: ['member'],
+    });
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+    return post;
+  }
+
+  private async requireOwner(postId: number, memberId: number): Promise<void> {
+    const post = await this.requireVisiblePost(postId);
+    if (post.member?.id !== memberId) {
+      throw new ForbiddenException('You are not the owner of this post');
+    }
+  }
+
+  private async requireCommunity(spaceId: number): Promise<void> {
+    const space = await this.spaceRepository.findOne({
+      where: { id: spaceId, hidden: 0, inviteOnly: 0, backup_space_id: Not(0) },
+    });
+    if (!space) {
+      throw new NotFoundException('Community not found');
+    }
+  }
+
   /** Retrieves paginated forum posts by tab ("untuk-anda", "following", "komunitas", "mine"). */
   async getFeed(
     query: MemberForumFeedQueryDto,
@@ -155,6 +186,12 @@ export class MemberForumService {
     totalData: number;
   }> {
     const tab = query.tab || 'untuk-anda';
+    if (tab === 'komunitas') {
+      if (!query.spaceId) {
+        throw new BadRequestException('Community ID is required');
+      }
+      await this.requireCommunity(query.spaceId);
+    }
     const limit = query.limit || 15;
     const after = query.after || '';
     const order = query.order;
@@ -215,6 +252,7 @@ export class MemberForumService {
     postId: number,
     memberId: number,
   ): Promise<FormattedForumPost> {
+    await this.requireVisiblePost(postId);
     const post = await this.postService.detailPost(postId, memberId);
     if (!post) {
       throw new NotFoundException('Post not found');
@@ -227,6 +265,9 @@ export class MemberForumService {
     dto: CreateMemberForumPostDto,
     memberId: number,
   ): Promise<FormattedForumPost> {
+    if (dto.spaceId) {
+      await this.requireCommunity(dto.spaceId);
+    }
     const created = await this.postService.createPost(
       {
         title: dto.title.trim(),
@@ -242,8 +283,33 @@ export class MemberForumService {
     return this.formatPost(created, memberId);
   }
 
+  async updatePost(
+    postId: number,
+    dto: CreateMemberForumPostDto,
+    memberId: number,
+  ): Promise<FormattedForumPost> {
+    await this.requireOwner(postId, memberId);
+    if (dto.spaceId) {
+      await this.requireCommunity(dto.spaceId);
+    }
+    const post = await this.postService.updatePost(
+      postId,
+      {
+        title: dto.title.trim(),
+        content: dto.caption.trim(),
+        spaceId: dto.spaceId,
+        image: dto.image,
+        is_anonymous: dto.anonymous,
+      },
+      memberId,
+      memberId,
+    );
+    return this.formatPost(post, memberId);
+  }
+
   /** Deletes an owned forum post. */
   async deletePost(postId: number, memberId: number): Promise<boolean> {
+    await this.requireOwner(postId, memberId);
     const result = await this.postService.deletePost(postId, memberId);
     return Boolean(result);
   }
@@ -254,6 +320,7 @@ export class MemberForumService {
     memberId: number,
     reactionType = 'heart',
   ): Promise<{ reacted: boolean; likes: number }> {
+    await this.requireVisiblePost(postId);
     const existing = await this.reactionRepository.findOne({
       where: {
         post: { id: postId },
@@ -289,6 +356,7 @@ export class MemberForumService {
     after: string;
     totalData: number;
   }> {
+    await this.requireVisiblePost(postId);
     const result = await this.commentService.getComments(
       postId,
       limit,
@@ -315,7 +383,9 @@ export class MemberForumService {
         authorId: reply.member?.id ?? 0,
         avatarUrl: reply.member?.profilePictureUrl || '',
         content: reply.description || reply.title || '',
-        createdAt: reply.published_at ? new Date(reply.published_at).toISOString() : '',
+        createdAt: reply.published_at
+          ? new Date(reply.published_at).toISOString()
+          : '',
         parentId: c.id,
         own: reply.member?.id === memberId,
       })),
@@ -335,6 +405,7 @@ export class MemberForumService {
     memberId: number,
     dto: CreateMemberForumCommentDto,
   ): Promise<FormattedForumComment> {
+    await this.requireVisiblePost(postId);
     const created = await this.commentService.createComment(
       {
         post_id: postId,
@@ -353,7 +424,9 @@ export class MemberForumService {
       authorId: created.member?.id ?? memberId,
       avatarUrl: created.member?.profilePictureUrl || '',
       content: created.description || created.title || '',
-      createdAt: created.published_at ? new Date(created.published_at).toISOString() : new Date().toISOString(),
+      createdAt: created.published_at
+        ? new Date(created.published_at).toISOString()
+        : new Date().toISOString(),
       parentId: created.parent_id ? Number(created.parent_id) : null,
       own: true,
       replies: [],
@@ -363,6 +436,11 @@ export class MemberForumService {
   /** Deletes an owned forum comment. */
   async deleteComment(commentId: number, memberId: number): Promise<boolean> {
     const comment = await this.commentService.getCommentById(commentId);
+    if (comment.post?.isPsychoeducation || comment.member?.id !== memberId) {
+      throw new ForbiddenException(
+        'You are not the owner of this forum comment',
+      );
+    }
     return await this.commentService.deleteComment(memberId, comment);
   }
 
@@ -387,6 +465,7 @@ export class MemberForumService {
     spaceId: number,
     memberId: number,
   ): Promise<FormattedCommunity> {
+    await this.requireCommunity(spaceId);
     const s = await this.spaceService.detailSpace(spaceId, memberId);
     if (!s) {
       throw new NotFoundException('Community not found');
@@ -406,12 +485,14 @@ export class MemberForumService {
 
   /** Joins/follows a community space. */
   async joinCommunity(spaceId: number, memberId: number): Promise<boolean> {
+    await this.requireCommunity(spaceId);
     await this.spaceService.follow(spaceId, memberId);
     return true;
   }
 
   /** Leaves/unfollows a community space. */
   async leaveCommunity(spaceId: number, memberId: number): Promise<boolean> {
+    await this.requireCommunity(spaceId);
     await this.spaceService.unfollow(spaceId, memberId);
     return true;
   }
@@ -422,6 +503,7 @@ export class MemberForumService {
     dto: ReportMemberForumPostDto,
     memberId: number,
   ): Promise<boolean> {
+    await this.requireVisiblePost(postId);
     await this.postReportService.createPostReport(
       {
         postId,

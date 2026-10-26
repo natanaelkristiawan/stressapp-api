@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -9,6 +9,9 @@ import {
   IsPositive,
   IsString,
   MaxLength,
+  Max,
+  IsUrl,
+  ValidateIf,
   Min,
 } from 'class-validator';
 
@@ -24,26 +27,39 @@ export class MemberForumFeedQueryDto {
   @IsIn(['untuk-anda', 'following', 'komunitas', 'mine'])
   tab?: 'untuk-anda' | 'following' | 'komunitas' | 'mine';
 
-  @ApiPropertyOptional({ description: 'Community / Space ID for komunitas tab', example: 7 })
+  @ApiPropertyOptional({
+    description: 'Community / Space ID for komunitas tab',
+    example: 7,
+  })
   @Type(() => Number)
   @IsOptional()
   @IsInt()
   @IsPositive()
   spaceId?: number;
 
-  @ApiPropertyOptional({ description: 'Pagination limit', example: 15, default: 15 })
+  @ApiPropertyOptional({
+    description: 'Pagination limit',
+    example: 15,
+    default: 15,
+  })
   @Type(() => Number)
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(50)
   limit?: number = 15;
 
   @ApiPropertyOptional({ description: 'Pagination cursor', example: '' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   after?: string;
 
-  @ApiPropertyOptional({ description: 'Sorting order', example: 'latest', enum: ['latest', 'popular'] })
+  @ApiPropertyOptional({
+    description: 'Sorting order',
+    example: 'latest',
+    enum: ['latest', 'popular'],
+  })
   @IsOptional()
   @IsString()
   @IsIn(['latest', 'popular'])
@@ -52,16 +68,24 @@ export class MemberForumFeedQueryDto {
 
 /** Payload for member forum post creation. */
 export class CreateMemberForumPostDto {
-  @ApiProperty({ description: 'Post title', example: 'Berbagi pengalaman kesehatan mental' })
+  @ApiProperty({
+    description: 'Post title',
+    example: 'Berbagi pengalaman kesehatan mental',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   title: string;
 
-  @ApiProperty({ description: 'Post body text / caption', example: 'Hari ini saya belajar meluangkan waktu untuk diri sendiri...' })
+  @ApiProperty({
+    description: 'Post body text / caption',
+    example: 'Hari ini saya belajar meluangkan waktu untuk diri sendiri...',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(10000)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   caption: string;
 
   @ApiPropertyOptional({ description: 'Selected community ID', example: 7 })
@@ -71,12 +95,21 @@ export class CreateMemberForumPostDto {
   @IsPositive()
   spaceId?: number;
 
-  @ApiPropertyOptional({ description: 'Attached image URL', example: 'https://example.com/photo.jpg' })
+  @ApiPropertyOptional({
+    description: 'Attached image URL',
+    example: 'https://example.com/photo.jpg',
+  })
   @IsOptional()
   @IsString()
+  @MaxLength(2048)
+  @ValidateIf((_object, value) => value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
   image?: string;
 
-  @ApiPropertyOptional({ description: 'Display author as anonymous', example: false })
+  @ApiPropertyOptional({
+    description: 'Display author as anonymous',
+    example: false,
+  })
   @IsOptional()
   @IsBoolean()
   anonymous?: boolean;
@@ -84,13 +117,20 @@ export class CreateMemberForumPostDto {
 
 /** Payload for creating a comment or replying to a comment. */
 export class CreateMemberForumCommentDto {
-  @ApiProperty({ description: 'Comment text', example: 'Terima kasih atas sarannya!' })
+  @ApiProperty({
+    description: 'Comment text',
+    example: 'Terima kasih atas sarannya!',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(5000)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   content: string;
 
-  @ApiPropertyOptional({ description: 'Parent comment ID if this is a reply', example: 12 })
+  @ApiPropertyOptional({
+    description: 'Parent comment ID if this is a reply',
+    example: 12,
+  })
   @Type(() => Number)
   @IsOptional()
   @IsInt()
@@ -100,9 +140,14 @@ export class CreateMemberForumCommentDto {
 
 /** Payload for toggling like / reaction on a post. */
 export class ToggleReactionDto {
-  @ApiPropertyOptional({ description: 'Reaction type', example: 'heart', default: 'heart' })
+  @ApiPropertyOptional({
+    description: 'Reaction type',
+    example: 'heart',
+    default: 'heart',
+  })
   @IsOptional()
   @IsString()
+  @IsIn(['heart'])
   reaction?: string = 'heart';
 }
 
@@ -112,9 +157,13 @@ export class ReportMemberForumPostDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   reason: string;
 
-  @ApiPropertyOptional({ description: 'Additional details', example: 'Konten berulang dan tidak relevan.' })
+  @ApiPropertyOptional({
+    description: 'Additional details',
+    example: 'Konten berulang dan tidak relevan.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
@@ -123,15 +172,21 @@ export class ReportMemberForumPostDto {
 
 /** Query parameters for retrieving post comments. */
 export class MemberForumCommentsQueryDto {
-  @ApiPropertyOptional({ description: 'Pagination limit', example: 15, default: 15 })
+  @ApiPropertyOptional({
+    description: 'Pagination limit',
+    example: 15,
+    default: 15,
+  })
   @Type(() => Number)
   @IsOptional()
   @IsInt()
   @Min(1)
+  @Max(50)
   limit?: number = 15;
 
   @ApiPropertyOptional({ description: 'Pagination cursor', example: '' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   after?: string;
 }

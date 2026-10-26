@@ -102,16 +102,7 @@ export class PostService {
         let redisInfo: Information
         let postQuery: PostEntity[]
 
-        let skipHiddenFilter = false
-        if (userId != null) {
-            const adminLinkedToMember = await this.userAdminRepository.findOne({
-                where: { backup_member_id: userId },
-            })
-            if (adminLinkedToMember) {
-                skipHiddenFilter = true
-            }
-        }
-
+        const skipHiddenFilter = false
         // let modes = [
         //     'latest',
         //     'space',
@@ -130,7 +121,7 @@ export class PostService {
 
         if (after != "") {
             // find in redis
-            cacheKey = `${mode}Posts:${after}`;
+            cacheKey = `${mode}Posts:${userId}:${IDvalue}:${sort}:${limit}:${after}`;
             const cachedInformation = await this.redis.get(cacheKey);
 
             if (cachedInformation) {
@@ -287,6 +278,8 @@ export class PostService {
             // No 30-day filter for default mode
             config = { where: whereCond, ...config }
         }
+        config.where = { ...config.where, status: 'PUBLISHED', isHidden: false };
+        totalData = await this.postRepository.count({ where: config.where });
         postQuery = await this.postRepository.find(config)
 
         let posts: Post[] = []
@@ -476,7 +469,7 @@ export class PostService {
         // save in redis
         redisInfo = {
             totalData: totalData,
-            hasNext: (totalData < (page * limit)) ? false : true,
+            hasNext: totalData > page * limit,
             page: page,
             limit: limit,
             offset: offset,
@@ -484,12 +477,12 @@ export class PostService {
         }
 
         // describe again for get new key
-        cacheKey = `${mode}Posts:${after}`;
+        cacheKey = `${mode}Posts:${userId}:${IDvalue}:${sort}:${limit}:${after}`;
         await this.redis.set(cacheKey, JSON.stringify(redisInfo), 'EX', 60 * 5); // 5 min TTL
 
         return {
             totalData: totalData,
-            hasNext: (totalData < (page * limit)) ? false : true,
+            hasNext: totalData > page * limit,
             page: page,
             limit: limit,
             offset: offset,
@@ -982,8 +975,17 @@ export class PostService {
             }
         }
 
+        if (params.image !== undefined) {
+            existingPost.image = params.image || null;
+        }
+        if (params.is_anonymous !== undefined) {
+            existingPost.createdBy = params.is_anonymous ? 'Anonim' : null;
+        }
+
         existingPost.updated_at = timestamp;
-        existingPost.isHidden = false;
+        if (authorizedCmsAdmin) {
+            existingPost.isHidden = false;
+        }
         existingPost.type = type
         if (postType !== undefined) existingPost.post_type = postType
         if (voteStart !== undefined) existingPost.vote_start = voteStart ? new Date(voteStart) : null;

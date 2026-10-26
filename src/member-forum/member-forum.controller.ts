@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   ParseIntPipe,
   Post,
   Query,
@@ -82,6 +83,16 @@ export class MemberForumController {
       message: 'Success create post',
       data,
     };
+  }
+
+  @Patch('posts/:id')
+  async updatePost(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateMemberForumPostDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FormattedForumPost>> {
+    const data = await this.forumService.updatePost(id, dto, request.member.id);
+    return { message: 'Success update post', data };
   }
 
   @Delete('posts/:id')
@@ -236,11 +247,7 @@ export class MemberForumController {
     @Body() dto: ReportMemberForumPostDto,
     @Req() request: MemberRequest,
   ): Promise<GlobalResponse<boolean>> {
-    const data = await this.forumService.reportPost(
-      id,
-      dto,
-      request.member.id,
-    );
+    const data = await this.forumService.reportPost(id, dto, request.member.id);
     return {
       message: 'Success report post',
       data,
