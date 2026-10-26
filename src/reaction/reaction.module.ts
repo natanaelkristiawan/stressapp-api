@@ -15,6 +15,7 @@ import { UserFollowEntity } from 'src/entity/user-follow.entity';
     QueueModule,
   ],
   controllers: [ReactionController],
-  providers: [ReactionService] 
+  providers: [ReactionService],
+  exports: [ReactionService],
 })
 export class ReactionModule {}

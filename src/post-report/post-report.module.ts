@@ -9,6 +9,7 @@ import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 @Module({
   imports: [TypeOrmModule.forFeature([PostReport, PostEntity, UserMimateEntity], 'mimate')],
   controllers: [PostReportController],
-  providers: [PostReportService]
+  providers: [PostReportService],
+  exports: [PostReportService],
 })
 export class PostReportModule {}

@@ -31,5 +31,6 @@ import { CommentReactionEntity } from 'src/entity/comment-reaction.entity';
   ],
   controllers: [CommentController],
   providers: [CmsMembersGuard, CommentService],
+  exports: [CommentService],
 })
 export class CommentModule {}

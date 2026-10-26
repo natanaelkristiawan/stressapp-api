@@ -61,7 +61,17 @@ export class CreatePostDto {
   @Type(() => Number)
   @IsOptional() // M
   @IsNumber()
-  spaceId: number;
+  spaceId?: number;
+
+  @ApiPropertyOptional({ description: 'Direct image URL', example: 'https://example.com/photo.jpg' })
+  @IsOptional()
+  @IsString()
+  image?: string;
+
+  @ApiPropertyOptional({ description: 'Whether author is displayed as anonymous', example: false })
+  @IsOptional()
+  @IsBoolean()
+  is_anonymous?: boolean;
 
   @ApiPropertyOptional({
     description: 'For asset image or video (Set ID from upload response)',

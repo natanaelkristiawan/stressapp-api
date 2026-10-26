@@ -40,6 +40,7 @@ import { MemberSpaceEntity } from './entity/member-spaces.entity';
 import { UploadModule } from './upload/upload.module';
 import { ProfileModule } from './profile/profile.module';
 import { DirectMessageModule } from './direct-message/direct-message.module';
+import { MemberForumModule } from './member-forum/member-forum.module';
 import { Conversation } from './entity/convertation.entity';
 import { Message } from './entity/message.entity';
 import { UserFollowEntity } from './entity/user-follow.entity';
@@ -171,6 +172,7 @@ import { CronModule } from './cron/cron.module';
     UploadModule,
     ProfileModule,
     DirectMessageModule,
+    MemberForumModule,
     CommentModule,
     ReactionModule,
     PostReportModule,
@@ -274,6 +276,8 @@ export class AppModule {
         { path: 'me/chats/(.*)', method: RequestMethod.ALL },
         { path: 'me/profile', method: RequestMethod.ALL },
         { path: 'me/profile/(.*)', method: RequestMethod.ALL },
+        { path: 'me/forum', method: RequestMethod.ALL },
+        { path: 'me/forum/(.*)', method: RequestMethod.ALL },
         { path: 'is-live', method: RequestMethod.GET },
         { path: 'admin-auth/login', method: RequestMethod.ALL },
         { path: 'admin-auth/login/(.*)', method: RequestMethod.ALL },
@@ -319,6 +323,8 @@ export class AppModule {
       { path: 'me/chats/(.*)', method: RequestMethod.ALL },
       { path: 'me/profile', method: RequestMethod.ALL },
       { path: 'me/profile/(.*)', method: RequestMethod.ALL },
+      { path: 'me/forum', method: RequestMethod.ALL },
+      { path: 'me/forum/(.*)', method: RequestMethod.ALL },
       { path: 'upload/image', method: RequestMethod.POST },
       { path: 'upload/audio', method: RequestMethod.POST },
       { path: 'upload/cms', method: RequestMethod.POST },

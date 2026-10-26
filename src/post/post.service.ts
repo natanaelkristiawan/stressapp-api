@@ -392,7 +392,9 @@ export class PostService {
 
             // check image
 
-            let name = this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id)
+            let name = element.createdBy === 'Anonim'
+            ? 'Anonim'
+            : this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id)
 
             let votes: { id: number; vote: string; total_vote?: number; percentage?: number }[] = [];
             let my_vote_id = 0
@@ -607,7 +609,9 @@ export class PostService {
 
         let published_at_title = this.dateHelper.getDateRange(new Date(element.created_at), new Date())
 
-        let name = this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id)
+        let name = element.createdBy === 'Anonim'
+            ? 'Anonim'
+            : this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id)
 
 
         let votes: { id: number; vote: string; total_vote?: number; percentage?: number }[] = [];
@@ -697,10 +701,14 @@ export class PostService {
         let shortenText = this.shortenText(content)
 
         // get spaceID 
-        let space = await this.spaceRepository.findOneBy({ id: spaceId })
+        let space = spaceId ? await this.spaceRepository.findOneBy({ id: spaceId }) : null
+        if (!space) {
+            space = (await this.spaceRepository.findOne({ where: { id: 7 } })) ||
+                (await this.spaceRepository.findOne({ where: { backup_space_id: Not(0) } }))
+        }
 
         // check if space dealer
-        if (space.is_dealer) {
+        if (space && space.is_dealer) {
             // check if member is dealer
             let member = await this.userMimateRepository.findOneBy({ id: memberId })
             if (!member.is_dealer) {
@@ -709,8 +717,8 @@ export class PostService {
         }
 
         let dataThumb: AssetsEntity | null = null
-        let image: string | null = null
-        if (mediaIds) {
+        let image: string | null = params.image || null
+        if (mediaIds && mediaIds.length > 0) {
             dataThumb = await this.assetRepository.findOneBy({ id: mediaIds[0] })
 
             if (dataThumb) {
@@ -774,7 +782,7 @@ export class PostService {
             reactionsCount: 0,
             status: "PUBLISHED",
             moderation,
-            spaceId: space.spaceId,
+            spaceId: space?.spaceId,
             space: space,
             repliesCount: 0,
             totalRepliesCount: 0,
@@ -784,6 +792,7 @@ export class PostService {
             textContent: content,
             thumbnail: dataThumb == null ? null : dataThumb.info,
             image: image,
+            createdBy: params.is_anonymous ? 'Anonim' : null,
             tags: tagCollection,
             mediaIds: JSON.stringify(mediaIds),
             hasMoreContent: 1,
