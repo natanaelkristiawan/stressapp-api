@@ -1,19 +1,31 @@
 import { PartialType } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  IsUrl,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 
 export class AdminSpaceListDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100000)
-  page: number = 1;
+  page = 1;
 
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
-  limit: number = 10;
+  limit = 10;
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
@@ -30,7 +42,7 @@ export class AdminSpaceListDto {
 }
 
 export class AdminSpaceCreateDto {
-  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
@@ -38,19 +50,19 @@ export class AdminSpaceCreateDto {
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
-  @MaxLength(500)
+  @MaxLength(255)
   description?: string;
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
-  @MaxLength(2048)
+  @MaxLength(255)
   @ValidateIf((_object, value) => value !== '')
   @IsUrl({ protocols: ['https'], require_protocol: true })
   image?: string;
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
-  @MaxLength(2048)
+  @MaxLength(255)
   @ValidateIf((_object, value) => value !== '')
   @IsUrl({ protocols: ['https'], require_protocol: true })
   banner?: string;
@@ -66,7 +78,9 @@ export class ForumVersionDto {
   version: string;
 }
 
-export class AdminSpacePatchDto extends PartialType(AdminSpaceCreateDto, { skipNullProperties: false }) {
+export class AdminSpacePatchDto extends PartialType(AdminSpaceCreateDto, {
+  skipNullProperties: false,
+}) {
   @IsString()
   @Matches(/^[a-f0-9]{64}$/)
   version: string;

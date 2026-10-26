@@ -15,10 +15,20 @@ import { TagsEntity } from 'src/entity/tags.entity';
 
 /** Opaque snapshot of moderated fields; counters can change without invalidating a review. */
 export function forumPostVersion(post: PostEntity): string {
-    return createHash('sha256').update(JSON.stringify([
-        post.id, post.title, post.textContent, post.image, post.status,
-        post.isHidden, post.backup_space_id, post.updated_at,
-    ])).digest('hex');
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        post.id,
+        post.title,
+        post.textContent,
+        post.image,
+        post.status,
+        post.isHidden,
+        post.backup_space_id,
+        post.updated_at,
+      ]),
+    )
+    .digest('hex');
 }
 
 @Injectable()
@@ -555,24 +565,43 @@ export class AdminPostService {
     }
 
     /** Applies a CMS decision and audit atomically after comparing the reviewed snapshot. */
-    async moderatePost(id: number, version: string, action: 'hide' | 'show' | 'delete', actorId: number): Promise<boolean> {
+    async moderatePost(
+        id: number,
+        version: string,
+        action: 'hide' | 'show' | 'delete',
+        actorId: number,
+    ): Promise<boolean> {
         return this.postRepository.manager.transaction(async (manager) => {
             const post = await manager.findOne(PostEntity, {
-                where: { id, isPsychoeducation: false }, lock: { mode: 'pessimistic_write' },
+                where: { id, isPsychoeducation: false },
+                lock: { mode: 'pessimistic_write' },
             });
-            if (!post) { throw new NotFoundException('Post not found'); }
+            if (!post) {
+                throw new NotFoundException('Post not found');
+            }
             if (forumPostVersion(post) !== version) {
                 throw new ConflictException('Post changed. Reload before moderating.');
             }
             if (action === 'delete') {
                 await manager.softRemove(PostEntity, post);
                 if (post.backup_member_id) {
-                    const total = await manager.count(PostEntity, { where: { member: { id: post.backup_member_id }, isPsychoeducation: false } });
-                    await manager.update(UserMimateEntity, post.backup_member_id, { total_posts: total });
+                    const total = await manager.count(PostEntity, {
+                        where: {
+                            member: { id: post.backup_member_id },
+                            isPsychoeducation: false,
+                        },
+                    });
+                    await manager.update(UserMimateEntity, post.backup_member_id, {
+                        total_posts: total,
+                    });
                 }
                 if (post.backup_space_id) {
-                    const total = await manager.count(PostEntity, { where: { space: { id: post.backup_space_id } } });
-                    await manager.update(SpaceEntity, post.backup_space_id, { postsCount: total });
+                    const total = await manager.count(PostEntity, {
+                        where: { space: { id: post.backup_space_id } },
+                    });
+                    await manager.update(SpaceEntity, post.backup_space_id, {
+                        postsCount: total,
+                    });
                 }
             } else {
                 // This method is called only after the controller's live CMS guard.
@@ -580,7 +609,12 @@ export class AdminPostService {
                 await manager.save(PostEntity, post);
             }
             await manager.save(Activity, {
-                userId: actorId, postId: id, action, targetType: 'post', source: 'admin', createdAt: new Date(),
+                userId: actorId,
+                postId: id,
+                action,
+                targetType: 'post',
+                source: 'admin',
+                createdAt: new Date(),
             });
             return true;
         });
