@@ -8,6 +8,7 @@ import { OTP_EMAIL_QUEUE } from './member-auth.email.processor';
 import { createHash, createHmac } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { MemberAuthService } from './member-auth.service';
+import { GoogleLoginDto } from './member-auth.dto';
 import { Member } from '../entity/user-mimate.entity';
 import { MemberOtp } from '../entity/member-otp.entity';
 import { MemberSession } from '../entity/member-session.entity';
@@ -51,9 +52,10 @@ describe('registration OTP session', () => {
     };
     const manager = {
       delete: jest.fn(async () => undefined),
-      findOne: async () => member,
+      findOne: jest.fn(async () => member),
       findOneBy: async () => otp,
       getRepository: () => ({ createQueryBuilder: () => query }),
+      insert: jest.fn(async () => undefined),
       save: jest.fn(
         async (entity: unknown, value?: unknown) => value || entity,
       ),
@@ -203,5 +205,48 @@ describe('registration OTP session', () => {
     expect(
       manager.save.mock.calls.some((call) => call[0] === MemberSession),
     ).toBe(false);
+  });
+
+  it('verifies a Google ID token and creates or links a verified member session', async () => {
+    const { service, member, manager } = await setup('registration');
+    const googleClient = (
+      service as unknown as {
+        googleClient: {
+          verifyIdToken: jest.Mock;
+        };
+      }
+    ).googleClient;
+
+    jest.spyOn(googleClient, 'verifyIdToken').mockResolvedValue({
+      getPayload: () => ({
+        email: 'test@example.test',
+        email_verified: true,
+        name: 'Google User',
+        picture: 'https://lh3.googleusercontent.com/a/default-user',
+      }),
+    } as never);
+
+    const dto: GoogleLoginDto = {
+      idToken: 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature',
+      rememberMe: true,
+    };
+
+    const result = await service.loginWithGoogle(dto);
+    expect(result).toEqual(
+      expect.objectContaining({
+        token: expect.any(String),
+        refreshToken: expect.stringMatching(/^refresh_/),
+        member: expect.objectContaining({
+          id: 7,
+          email: 'test@example.test',
+          emailVerified: true,
+          avatarUrl: 'https://lh3.googleusercontent.com/a/default-user',
+        }),
+      }),
+    );
+    expect(member.verifiedAt).toBeInstanceOf(Date);
+    expect(
+      manager.save.mock.calls.some((call) => call[0] === MemberSession),
+    ).toBe(true);
   });
 });

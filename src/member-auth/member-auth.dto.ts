@@ -39,6 +39,22 @@ export class LoginDto extends EmailDto {
   @IsString() @Length(1, 72) @PasswordBytes() password: string;
   @IsOptional() @IsBoolean() rememberMe?: boolean;
 }
+
+export class GoogleLoginDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @Length(20, 4096)
+  @Matches(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/, {
+    message: 'Token Google tidak valid.',
+  })
+  idToken: string;
+
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
+}
 export class RegisterDto extends EmailDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,

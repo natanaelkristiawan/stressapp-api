@@ -12,7 +12,12 @@ import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
 import { CookieOptions, Request, Response } from 'express';
 import { getCorsOptions } from '../common/config/cors';
-import { LoginDto, VerifyOtpDto, WebSessionDto } from './member-auth.dto';
+import {
+  GoogleLoginDto,
+  LoginDto,
+  VerifyOtpDto,
+  WebSessionDto,
+} from './member-auth.dto';
 import { MemberAuthService } from './member-auth.service';
 
 const REFRESH_COOKIE = 'member_refresh';
@@ -97,6 +102,22 @@ export class MemberWebAuthController {
   ) {
     await this.validateRequest(request);
     return this.writeSession(await this.auth.login(input), request, response);
+  }
+
+  /** Logs a browser in using a verified Google OAuth ID token and writes the HttpOnly refresh cookie. */
+  @Post('google')
+  @HttpCode(200)
+  async googleLogin(
+    @Body() input: GoogleLoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.validateRequest(request);
+    return this.writeSession(
+      await this.auth.loginWithGoogle(input),
+      request,
+      response,
+    );
   }
 
   /** Verifies registration into a cookie session; recovery still returns only reset proof. */

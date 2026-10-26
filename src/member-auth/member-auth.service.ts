@@ -24,8 +24,16 @@ import * as bcrypt from 'bcrypt';
 import { Member } from '../entity/user-mimate.entity';
 import { MemberOtp } from '../entity/member-otp.entity';
 import { MemberSession } from '../entity/member-session.entity';
-import { LoginDto, RegisterDto, VerifyOtpDto } from './member-auth.dto';
+import {
+  GoogleLoginDto,
+  LoginDto,
+  RegisterDto,
+  VerifyOtpDto,
+} from './member-auth.dto';
+import { OAuth2Client } from 'google-auth-library';
 
+const DEFAULT_GOOGLE_CLIENT_ID =
+  '563762520506-i1vfs17l17viqvj0c57u828jjqm75av9.apps.googleusercontent.com';
 const GENERIC = {
   message: 'Jika akun memenuhi syarat, kode OTP dikirim ke email Anda.',
 };
@@ -33,6 +41,7 @@ const INVALID = 'Kode OTP tidak valid atau kedaluwarsa.';
 @Injectable()
 export class MemberAuthService {
   private readonly dummyHash = bcrypt.hash('invalid-password', 12);
+  private readonly googleClient = new OAuth2Client();
   /** Injects database, email queue, rate limiting, configuration and JWT dependencies.
    * @returns A service instance; no credentials are stored in mutable request state.
    */
@@ -386,6 +395,136 @@ export class MemberAuthService {
           'Email belum diverifikasi. Silakan verifikasi OTP.',
           403,
         );
+      return this.createSession(manager, member, dto.rememberMe);
+    });
+  }
+
+  /** Verifies a Google OAuth ID token against the configured Web Client ID.
+   * @returns Verified Google email, display name, and optional avatar URL.
+   */
+  private async verifyGoogleIdToken(idToken: string): Promise<{
+    email: string;
+    name: string;
+    pictureUrl: string | null;
+  }> {
+    const rawAudiences =
+      this.config.get<string>('GOOGLE_CLIENT_ID') || DEFAULT_GOOGLE_CLIENT_ID;
+    const audiences = rawAudiences
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: audiences,
+      });
+      const payload = ticket.getPayload();
+      const email = payload?.email?.trim().toLowerCase() || '';
+      if (!payload || !email || payload.email_verified !== true) {
+        throw new UnauthorizedException(
+          'Email akun Google belum terverifikasi.',
+        );
+      }
+
+      const fallbackName = email.split('@')[0] || 'Pengguna';
+      const displayName = (payload.name?.trim() || fallbackName).slice(0, 100);
+      const rawPicture = payload.picture?.trim() || '';
+      const pictureUrl =
+        rawPicture.length > 0 &&
+        rawPicture.length <= 255 &&
+        /^https?:\/\//i.test(rawPicture)
+          ? rawPicture
+          : null;
+
+      return {
+        email,
+        name: displayName,
+        pictureUrl,
+      };
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      throw new UnauthorizedException(
+        'Sesi login Google tidak valid atau telah kedaluwarsa.',
+      );
+    }
+  }
+
+  /** Authenticates or registers a member using a verified Google ID token and creates a session.
+   * @returns A one-day JWT and refresh credentials lasting 7 or 30 days.
+   */
+  async loginWithGoogle(dto: GoogleLoginDto) {
+    const googleProfile = await this.verifyGoogleIdToken(dto.idToken);
+    await this.limit('login-email', googleProfile.email, 15, 900);
+
+    return this.db.transaction(async (manager) => {
+      let member = await manager.findOne(Member, {
+        where: { email: googleProfile.email },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      const now = new Date();
+      if (!member) {
+        try {
+          await manager.insert(Member, {
+            email: googleProfile.email,
+            name: googleProfile.name,
+            profilePictureUrl: googleProfile.pictureUrl,
+            termsAcceptedAt: now,
+            verifiedAt: now,
+            created_at: now,
+            memberAuthEnabled: true,
+            is_suspended: false,
+          });
+        } catch (error) {
+          if (
+            !(error instanceof Error) ||
+            !('code' in error) ||
+            error.code !== 'ER_DUP_ENTRY'
+          ) {
+            throw error;
+          }
+        }
+        member = await manager.findOne(Member, {
+          where: { email: googleProfile.email },
+          lock: { mode: 'pessimistic_write' },
+        });
+      }
+
+      if (!member || member.is_suspended || member.deleted_at) {
+        throw new UnauthorizedException(
+          'Akun ini tidak dapat digunakan untuk masuk.',
+        );
+      }
+
+      let hasChanges = false;
+      if (!member.memberAuthEnabled) {
+        member.memberAuthEnabled = true;
+        hasChanges = true;
+      }
+      if (!member.verifiedAt) {
+        member.verifiedAt = now;
+        hasChanges = true;
+      }
+      if (!member.termsAcceptedAt) {
+        member.termsAcceptedAt = now;
+        hasChanges = true;
+      }
+      if (!member.name?.trim() && googleProfile.name) {
+        member.name = googleProfile.name;
+        hasChanges = true;
+      }
+      if (!member.profilePictureUrl?.trim() && googleProfile.pictureUrl) {
+        member.profilePictureUrl = googleProfile.pictureUrl;
+        hasChanges = true;
+      }
+
+      if (hasChanges) {
+        await manager.save(Member, member);
+      }
+
       return this.createSession(manager, member, dto.rememberMe);
     });
   }

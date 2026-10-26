@@ -12,6 +12,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import {
   EmailDto,
+  GoogleLoginDto,
   RefreshDto,
   LoginDto,
   OtpRequestDto,
@@ -61,6 +62,16 @@ export class MemberAuthController {
   ) {
     await this.limit(req);
     return this.auth.login(dto);
+  }
+  /** Validates a Google OAuth ID token and establishes a member session.
+   * @returns Access/refresh credentials and the public member identity.
+   */
+  @Post('google') @HttpCode(200) async googleLogin(
+    @Body() dto: GoogleLoginDto,
+    @Req() req: Request,
+  ) {
+    await this.limit(req);
+    return this.auth.loginWithGoogle(dto);
   }
   /** Validates a refresh credential and requests atomic rotation.
    * @returns A renewed JWT/refresh pair with expiry timestamps.
