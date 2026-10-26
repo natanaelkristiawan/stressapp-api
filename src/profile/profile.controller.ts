@@ -1,9 +1,37 @@
-import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { ProfileService } from './profile.service';
 import { DetailProfileDto } from './dtos/detail-profile.dto';
+import {
+  FriendConnectionsQueryDto,
+  FriendDiscoverQueryDto,
+  FriendMemberIdParamDto,
+} from './dtos/friends.dto';
 import { GlobalResponse } from 'src/interfaces/global.interface';
-import { MemberFollowInterface, profile } from './interfaces/profile.interface';
+import {
+  FriendConnectionsInterface,
+  FriendDiscoverPageInterface,
+  FriendMemberProfileInterface,
+  FriendMutationResultInterface,
+  MemberFollowInterface,
+  profile,
+} from './interfaces/profile.interface';
+import {
+  MemberAuthGuard,
+  MemberRequest,
+} from 'src/member-auth/member-auth.guard';
+import { MemberAuthService } from 'src/member-auth/member-auth.service';
 import { PostService } from 'src/post/post.service';
 import { GetPostsDto } from 'src/post/dtos/get-posts.dto';
 import { PostCollectionResponse } from 'src/post/interfaces/post.interface';
@@ -679,4 +707,162 @@ export class ProfileController {
   }
 
 
+}
+
+@ApiTags('FRIENDS')
+@ApiBearerAuth('access-token')
+@Controller('me/friends')
+@UseGuards(MemberAuthGuard)
+export class MemberFriendsController {
+  constructor(
+    private readonly profileService: ProfileService,
+    private readonly memberAuth: MemberAuthService,
+  ) {}
+
+  /** Lists paginated discoverable members excluding self and already-accepted friends. */
+  @Get('discover')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Discover members to add as friends' })
+  async discover(
+    @Query() query: FriendDiscoverQueryDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FriendDiscoverPageInterface>> {
+    await this.memberAuth.limit(
+      'friends-discover',
+      String(request.member.id),
+      180,
+      3600,
+    );
+    const data = await this.profileService.discoverMembers(
+      request.member.id,
+      query,
+    );
+    return {
+      message: 'Daftar temukan teman berhasil dimuat.',
+      data,
+    };
+  }
+
+  /** Lists incoming pending friend requests and accepted friends for the authenticated member. */
+  @Get('connections')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'List incoming friend requests and accepted friends' })
+  async connections(
+    @Query() query: FriendConnectionsQueryDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FriendConnectionsInterface>> {
+    await this.memberAuth.limit(
+      'friends-connections',
+      String(request.member.id),
+      180,
+      3600,
+    );
+    const data = await this.profileService.getFriendConnections(
+      request.member.id,
+      query,
+    );
+    return {
+      message: 'Daftar koneksi pertemanan berhasil dimuat.',
+      data,
+    };
+  }
+
+  /** Loads public profile details, relationship status, connection count, and posts for a member. */
+  @Get('members/:id')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Get member public profile and friendship status' })
+  async memberProfile(
+    @Param() params: FriendMemberIdParamDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FriendMemberProfileInterface>> {
+    await this.memberAuth.limit(
+      'friends-profile',
+      String(request.member.id),
+      180,
+      3600,
+    );
+    const data = await this.profileService.getFriendMemberProfile(
+      request.member.id,
+      params.id,
+    );
+    return {
+      message: 'Profil pengguna berhasil dimuat.',
+      data,
+    };
+  }
+
+  /** Sends a friend invitation to the target member. */
+  @Post('requests/:id')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Send a friend invitation to a member' })
+  async sendRequest(
+    @Param() params: FriendMemberIdParamDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FriendMutationResultInterface>> {
+    await this.memberAuth.limit(
+      'friends-mutate',
+      String(request.member.id),
+      60,
+      3600,
+    );
+    const data = await this.profileService.sendFriendRequest(
+      request.member.id,
+      params.id,
+    );
+    return {
+      message: 'Permintaan pertemanan terkirim.',
+      data,
+    };
+  }
+
+  /** Approves an incoming friend request from the specified requester member. */
+  @Post('requests/:id/accept')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Accept an incoming friend request' })
+  async acceptRequest(
+    @Param() params: FriendMemberIdParamDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FriendMutationResultInterface>> {
+    await this.memberAuth.limit(
+      'friends-mutate',
+      String(request.member.id),
+      60,
+      3600,
+    );
+    const data = await this.profileService.acceptFriendRequest(
+      request.member.id,
+      params.id,
+    );
+    return {
+      message: 'Permintaan pertemanan diterima.',
+      data,
+    };
+  }
+
+  /** Declines and deletes an incoming friend request so the sender can request again later. */
+  @Post('requests/:id/decline')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Decline and remove an incoming friend request' })
+  async declineRequest(
+    @Param() params: FriendMemberIdParamDto,
+    @Req() request: MemberRequest,
+  ): Promise<GlobalResponse<FriendMutationResultInterface>> {
+    await this.memberAuth.limit(
+      'friends-mutate',
+      String(request.member.id),
+      60,
+      3600,
+    );
+    const data = await this.profileService.declineFriendRequest(
+      request.member.id,
+      params.id,
+    );
+    return {
+      message: 'Permintaan pertemanan dihapus.',
+      data,
+    };
+  }
 }

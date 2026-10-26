@@ -29,6 +29,7 @@ export class NullToEmptyInterceptor implements NestInterceptor {
         'MemberPsychologistsController',
         'CmsBreathingController',
         'MemberBreathingController',
+        'MemberFriendsController',
       ].includes(context.getClass().name)
     )
       return next.handle();

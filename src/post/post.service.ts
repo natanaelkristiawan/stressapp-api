@@ -242,20 +242,33 @@ export class PostService {
             }
         } else if (mode == 'following') {
 
-            // get following
+            // get accepted friends in either direction
             let following = await this.userFollowRepository.find({
-                where: {
-                    followerId: userId
-                }
+                where: [
+                    {
+                        followerId: userId,
+                        status: 'accepted',
+                    },
+                    {
+                        followingId: userId,
+                        status: 'accepted',
+                    },
+                ],
             })
 
-
+            const friendIds = following
+                .map((item) =>
+                    item.followerId === userId
+                        ? item.followingId
+                        : item.followerId,
+                )
+                .filter((id): id is number => typeof id === 'number');
 
             // get total data with following
             let whereCond: any = {
                 isPsychoeducation: false,
                 member: {
-                    id: In(following.map(item => item.followingId))
+                    id: In(friendIds),
                 },
             };
             if (!skipHiddenFilter) {

@@ -1,6 +1,6 @@
 import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
-import { ProfileController } from './profile.controller';
+import { MemberFriendsController, ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
@@ -19,17 +19,19 @@ import { ActivityModule } from 'src/activity/activity.module';
 import { QuestModule } from 'src/quest/quest.module';
 import { MemberVoteModule } from 'src/member-vote/member-vote.module';
 import { UserAdmin } from 'src/entity/user-admin.entity';
+import { MemberAuthModule } from 'src/member-auth/member-auth.module';
 
 @Module({
   imports:[
     ContentModerationModule,
+    MemberAuthModule,
     TypeOrmModule.forFeature([UserMimateEntity, PostEntity, TagsEntity,  PostTagsEntity, AssetsEntity, SpaceEntity, ReactionEntity, UserFollowEntity, MemberSpaceEntity, CommentEntity, UserAdmin], 'mimate'),
     QueueModule,
     ActivityModule,
     QuestModule,
     MemberVoteModule
   ],
-  controllers: [ProfileController],
+  controllers: [ProfileController, MemberFriendsController],
   providers: [ProfileService, PostService],
   exports: [ProfileService]
 })
