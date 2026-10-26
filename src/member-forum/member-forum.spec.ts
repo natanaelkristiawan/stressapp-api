@@ -78,54 +78,57 @@ describe('MemberForumService', () => {
   });
 
   describe('getFeed', () => {
-    it('calls collectPosts with mode latest for default untuk-anda tab', async () => {
-      postService.collectPosts.mockResolvedValue({
-        data: [
-          {
-            id: 101,
-            title: 'Sample Post',
-            textContent: 'Content body',
-            member: {
-              id: 1,
-              name: 'Alice',
-              profilePictureUrl: 'https://pic.jpg',
+    it.each([undefined, 'untuk-anda', 'following'] as const)(
+      'restricts main feed %s to accepted friends',
+      async (tab) => {
+        postService.collectPosts.mockResolvedValue({
+          data: [
+            {
+              id: 101,
+              title: 'Sample Post',
+              textContent: 'Content body',
+              member: {
+                id: 1,
+                name: 'Alice',
+                profilePictureUrl: 'https://pic.jpg',
+              },
+              reactionCount: 5,
+              reaction: [{ reacted: true }],
+              space: { id: 7, name: 'Warga MiMate' },
+              totalRepliesCount: 3,
+              created_at: '2026-10-26T10:00:00.000Z',
             },
-            reactionCount: 5,
-            reaction: [{ reacted: true }],
-            space: { id: 7, name: 'Warga MiMate' },
-            totalRepliesCount: 3,
-            created_at: '2026-10-26T10:00:00.000Z',
-          },
-        ],
-        hasNext: false,
-        after: 'next-cursor',
-        totalData: 1,
-      });
+          ],
+          hasNext: false,
+          after: 'next-cursor',
+          totalData: 1,
+        });
 
-      const result = await service.getFeed({ tab: 'untuk-anda', limit: 10 }, 1);
+        const result = await service.getFeed({ tab, limit: 10 }, 1);
 
-      expect(postService.collectPosts).toHaveBeenCalledWith(
-        'latest',
-        10,
-        '',
-        undefined,
-        undefined,
-        1,
-      );
-      expect(result.items).toHaveLength(1);
-      expect(result.items[0]).toMatchObject({
-        id: '101',
-        postId: 101,
-        title: 'Sample Post',
-        caption: 'Content body',
-        author: 'Alice',
-        own: true,
-        liked: true,
-        likes: 5,
-        repliesCount: 3,
-        communityName: 'Warga MiMate',
-      });
-    });
+        expect(postService.collectPosts).toHaveBeenCalledWith(
+          'following',
+          10,
+          '',
+          undefined,
+          undefined,
+          1,
+        );
+        expect(result.items).toHaveLength(1);
+        expect(result.items[0]).toMatchObject({
+          id: '101',
+          postId: 101,
+          title: 'Sample Post',
+          caption: 'Content body',
+          author: 'Alice',
+          own: true,
+          liked: true,
+          likes: 5,
+          repliesCount: 3,
+          communityName: 'Warga MiMate',
+        });
+      },
+    );
 
     it('calls collectPosts with mode following for friend posts', async () => {
       postService.collectPosts.mockResolvedValue({
@@ -448,6 +451,49 @@ describe('forum input validation', () => {
 });
 
 describe('forum feed paging and visibility', () => {
+  it.each([
+    { friendships: [] },
+    {
+      friendships: [
+        { followerId: 1, followingId: 2, status: 'accepted' },
+        { followerId: 3, followingId: 1, status: 'accepted' },
+      ],
+    },
+  ])(
+    'scopes friend feeds without a public fallback: %j',
+    async ({ friendships }) => {
+      const repository = {
+        count: jest.fn().mockResolvedValue(0),
+        find: jest.fn().mockResolvedValue([]),
+      };
+      const friends = { find: jest.fn().mockResolvedValue(friendships) };
+      const service = Object.assign(Object.create(PostService.prototype), {
+        postRepository: repository,
+        userFollowRepository: friends,
+        redis: { get: jest.fn(), set: jest.fn() },
+      }) as PostService;
+      const result = await service.collectPosts(
+        'following',
+        15,
+        '',
+        undefined,
+        undefined,
+        1,
+      );
+      expect(friends.find).toHaveBeenCalledWith({
+        where: [
+          { followerId: 1, status: 'accepted' },
+          { followingId: 1, status: 'accepted' },
+        ],
+      });
+      const where = repository.find.mock.calls[0][0].where;
+      expect(where.member.id.value).toEqual(friendships.length ? [2, 3] : []);
+      expect(where.status).toBe('PUBLISHED');
+      expect(where.isHidden).toBe(false);
+      expect(result.data).toEqual([]);
+    },
+  );
+
   it('isolates cursors between members and filters and ends at the exact page boundary', async () => {
     const cache = new Map<string, string>();
     const repository = {

@@ -197,16 +197,7 @@ export class MemberForumService {
     const order = query.order;
 
     let result;
-    if (tab === 'following') {
-      result = await this.postService.collectPosts(
-        'following',
-        limit,
-        after,
-        undefined,
-        order,
-        memberId,
-      );
-    } else if (tab === 'komunitas') {
+    if (tab === 'komunitas') {
       result = await this.postService.collectPosts(
         'space',
         limit,
@@ -226,7 +217,7 @@ export class MemberForumService {
       );
     } else {
       result = await this.postService.collectPosts(
-        'latest',
+        'following',
         limit,
         after,
         undefined,

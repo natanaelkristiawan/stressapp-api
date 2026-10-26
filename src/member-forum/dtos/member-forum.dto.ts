@@ -18,7 +18,8 @@ import {
 /** Query parameters for fetching posts across forum tabs. */
 export class MemberForumFeedQueryDto {
   @ApiPropertyOptional({
-    description: 'Tab selection: untuk-anda, following, komunitas, mine',
+    description:
+      'untuk-anda and following show accepted friends only; komunitas and mine are separate feeds',
     example: 'untuk-anda',
     enum: ['untuk-anda', 'following', 'komunitas', 'mine'],
   })
