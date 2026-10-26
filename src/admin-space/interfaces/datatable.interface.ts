@@ -5,6 +5,7 @@ export interface Datatable {
 }
 export interface DataSpace {
     id: number;
+    version?: string;
     name: string;
     membersCount: number;
     postsCount: number;

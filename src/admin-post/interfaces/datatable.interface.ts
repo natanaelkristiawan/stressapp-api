@@ -5,6 +5,8 @@ export interface Datatable {
 }
 export interface DataPost {
     id: number;
+    version?: string;
+    textContent?: string;
     backup_member_id?: number;
     backup_space_id?: number;    
     title: string;

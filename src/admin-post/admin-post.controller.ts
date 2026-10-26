@@ -1,3 +1,4 @@
+import { AdminSpaceIdDto, ForumVersionDto } from '../admin-space/dtos/admin-space.dto';
 import { CmsMembersGuard } from '../cms-members/cms-members.guard';
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards, Res } from '@nestjs/common';
 import { Response } from 'express';
@@ -303,19 +304,9 @@ export class AdminPostController {
         },
         "data": {}
       }})
-    async hidePost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
-      const { id:userId } = request.userData; // admin
-      const data = await this.adminPostService.hideShowPost(id, true, request.userData.id);
-
-      await this.adminPostActivityService.createActivity({
-        userId,
-        postId: id,
-        action: 'hide',
-        targetType: 'admin-post',
-        source: 'admin',
-      });
-
-      return { message: 'Success', data: data };
+    async hidePost(@Param() { id }: AdminSpaceIdDto, @Body() dto: ForumVersionDto, @Req() request): Promise<GlobalResponse<boolean>> {
+      const data = await this.adminPostService.moderatePost(id, dto.version, 'hide', request.userData.id);
+      return { message: 'Success', data };
     }
 
     // show post
@@ -340,19 +331,9 @@ export class AdminPostController {
         "data": {}
       }})
     @UseGuards(CmsMembersGuard)
-    async showPost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
-      const { id:userId } = request.userData; // admin
-      const data = await this.adminPostService.hideShowPost(id, false, request.userData.id, true);
-
-      await this.adminPostActivityService.createActivity({
-        userId,
-        postId: id,
-        action: 'show',
-        targetType: 'admin-post',
-        source: 'admin',
-      });
-
-      return { message: 'Success', data: data };
+    async showPost(@Param() { id }: AdminSpaceIdDto, @Body() dto: ForumVersionDto, @Req() request): Promise<GlobalResponse<boolean>> {
+      const data = await this.adminPostService.moderatePost(id, dto.version, 'show', request.userData.id);
+      return { message: 'Success', data };
     }
 
       // delete post
@@ -374,19 +355,9 @@ export class AdminPostController {
         },
         "data": {}
       }}) 
-    async deletePost(@Param('id') id: number, @Req() request): Promise<GlobalResponse<boolean>> {
-      const { id:userId } = request.userData; // admin
-      const data = await this.postService.deletePost(id, userId, true);
-
-      await this.adminPostActivityService.createActivity({
-        userId,
-        postId: id,
-        action: 'delete',
-        targetType: 'admin-post',
-        source: 'admin',
-      });
-
-      return { message: 'Success', data: data === true };
+    async deletePost(@Param() { id }: AdminSpaceIdDto, @Body() dto: ForumVersionDto, @Req() request): Promise<GlobalResponse<boolean>> {
+      const data = await this.adminPostService.moderatePost(id, dto.version, 'delete', request.userData.id);
+      return { message: 'Success', data };
     }
 
     // move post to space

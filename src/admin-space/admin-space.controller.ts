@@ -17,7 +17,7 @@ import { GlobalResponse } from 'src/interfaces/global.interface';
 import { Datatable } from './interfaces/datatable.interface';
 import { AdminPostExportDto, AdminPostListDto } from 'src/admin-post/dtos/admin-post.dto';
 import { Datatable as DatatablePost } from 'src/admin-post/interfaces/datatable.interface';
-import { AdminSpaceCreateDto, AdminSpaceViewDto, AdminSpaceUpdateDto, AdminSpaceDeleteDto } from './dtos/admin-space.dto';
+import { AdminSpaceCreateDto, AdminSpaceViewDto, AdminSpaceUpdateDto, AdminSpaceDeleteDto, AdminSpacePatchDto, AdminSpaceIdDto, ForumVersionDto } from './dtos/admin-space.dto';
 import { DataSpace } from './interfaces/datatable.interface';
 import { Response } from 'express';
 import { AdminPostService } from 'src/admin-post/admin-post.service';
@@ -667,7 +667,7 @@ export class AdminSpaceController {
     @ApiOperation({ summary: 'View space by id' })
     @ApiResponse({ status: 200, description: 'Success', type: AdminSpaceViewDto })
     @ApiResponse({ status: 404, description: 'Not Found', schema: { example: { success: false, alert: { code: 404, message: 'Not Found' }, data: {} } } })
-    async viewSpace(@Param('id') id: number): Promise<GlobalResponse<AdminSpaceViewDto>> {
+    async viewSpace(@Param() { id }: AdminSpaceIdDto): Promise<GlobalResponse<AdminSpaceViewDto>> {
         const data = await this.adminSpaceService.viewSpace(id);
         return {
             message: 'Success',
@@ -677,7 +677,7 @@ export class AdminSpaceController {
 
     @Get(':id')
     @ApiOperation({ summary: 'Get space by id' })
-    async getSpaceById(@Param('id') id: number): Promise<GlobalResponse<AdminSpaceViewDto>> {
+    async getSpaceById(@Param() { id }: AdminSpaceIdDto): Promise<GlobalResponse<AdminSpaceViewDto>> {
         const data = await this.adminSpaceService.viewSpace(id);
         return {
             message: 'Success',
@@ -701,8 +701,8 @@ export class AdminSpaceController {
     @Patch(':id')
     @ApiOperation({ summary: 'Update space by id' })
     async updateSpaceById(
-        @Param('id') id: number,
-        @Body() dto: Partial<AdminSpaceUpdateDto>,
+        @Param() { id }: AdminSpaceIdDto,
+        @Body() dto: AdminSpacePatchDto,
     ): Promise<GlobalResponse<AdminSpaceViewDto>> {
         const data = await this.adminSpaceService.updateSpace({ ...dto, id });
         return {
@@ -726,8 +726,8 @@ export class AdminSpaceController {
 
     @Delete(':id')
     @ApiOperation({ summary: 'Delete space by id' })
-    async deleteSpaceById(@Param('id') id: number): Promise<GlobalResponse<{ deleted: boolean }>> {
-        const data = await this.adminSpaceService.deleteSpace({ id });
+    async deleteSpaceById(@Param() { id }: AdminSpaceIdDto, @Body() dto: ForumVersionDto): Promise<GlobalResponse<{ deleted: boolean }>> {
+        const data = await this.adminSpaceService.deleteSpace({ id, version: dto.version });
         return {
             message: data.deleted ? 'Deleted' : 'Not Found',
             data: data,

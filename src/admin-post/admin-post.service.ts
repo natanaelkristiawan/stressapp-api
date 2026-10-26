@@ -1,5 +1,7 @@
+import { createHash } from 'crypto';
+import { Activity } from 'src/entity/activity.entity';
 import { ContentModerationService } from '../content-moderation/content-moderation.service';
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { AdminPostAnalyticsDto, AdminPostExportDto, AdminPostListDto, CreatePostHighlightDto } from './dtos/admin-post.dto';
 import { DataPost, Datatable } from './interfaces/datatable.interface';
 import { PostEntity } from 'src/entity/post.entity';
@@ -10,6 +12,14 @@ import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 import * as ExcelJS from 'exceljs';
 import { PostTagsEntity } from 'src/entity/post-tags.entity';
 import { TagsEntity } from 'src/entity/tags.entity';
+
+/** Opaque snapshot of moderated fields; counters can change without invalidating a review. */
+export function forumPostVersion(post: PostEntity): string {
+    return createHash('sha256').update(JSON.stringify([
+        post.id, post.title, post.textContent, post.image, post.status,
+        post.isHidden, post.backup_space_id, post.updated_at,
+    ])).digest('hex');
+}
 
 @Injectable()
 export class AdminPostService {
@@ -189,6 +199,7 @@ export class AdminPostService {
     
         return {
           id: post.id,
+          version: forumPostVersion(post),
           backup_member_id: post.backup_member_id,
           backup_space_id: post.backup_space_id,
           title: post.title,
@@ -312,6 +323,8 @@ export class AdminPostService {
         }
         return {
             id: post.id,
+            version: forumPostVersion(post),
+            textContent: post.textContent,
             backup_member_id: post.backup_member_id,
             backup_space_id: post.backup_space_id,
             title: post.title,
@@ -539,6 +552,38 @@ export class AdminPostService {
         await this.postRepository.save(post);
 
         return post;
+    }
+
+    /** Applies a CMS decision and audit atomically after comparing the reviewed snapshot. */
+    async moderatePost(id: number, version: string, action: 'hide' | 'show' | 'delete', actorId: number): Promise<boolean> {
+        return this.postRepository.manager.transaction(async (manager) => {
+            const post = await manager.findOne(PostEntity, {
+                where: { id, isPsychoeducation: false }, lock: { mode: 'pessimistic_write' },
+            });
+            if (!post) { throw new NotFoundException('Post not found'); }
+            if (forumPostVersion(post) !== version) {
+                throw new ConflictException('Post changed. Reload before moderating.');
+            }
+            if (action === 'delete') {
+                await manager.softRemove(PostEntity, post);
+                if (post.backup_member_id) {
+                    const total = await manager.count(PostEntity, { where: { member: { id: post.backup_member_id }, isPsychoeducation: false } });
+                    await manager.update(UserMimateEntity, post.backup_member_id, { total_posts: total });
+                }
+                if (post.backup_space_id) {
+                    const total = await manager.count(PostEntity, { where: { space: { id: post.backup_space_id } } });
+                    await manager.update(SpaceEntity, post.backup_space_id, { postsCount: total });
+                }
+            } else {
+                // This method is called only after the controller's live CMS guard.
+                post.isHidden = action === 'hide';
+                await manager.save(PostEntity, post);
+            }
+            await manager.save(Activity, {
+                userId: actorId, postId: id, action, targetType: 'post', source: 'admin', createdAt: new Date(),
+            });
+            return true;
+        });
     }
 
     // hide post

@@ -1,6 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { createHash } from 'crypto';
+import { PostEntity } from 'src/entity/post.entity';
+import { MemberSpaceEntity } from 'src/entity/member-spaces.entity';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { SpaceEntity } from 'src/entity/space.entity';
 import { AdminSpaceListDto , AdminSpaceCreateDto, AdminSpaceViewDto, AdminSpaceUpdateDto, AdminSpaceDeleteDto } from './dtos/admin-space.dto';
 import { Datatable, DataSpace } from './interfaces/datatable.interface';
@@ -29,7 +32,7 @@ export class AdminSpaceService {
         
         // search
         if (search) {
-            query.andWhere('space.name LIKE :search OR space.description LIKE :search', { search: `%${search}%` });
+            query.andWhere('(space.name LIKE :search OR space.description LIKE :search)', { search: `%${search}%` });
         }
 
         // sort
@@ -51,6 +54,7 @@ export class AdminSpaceService {
         // collect data
         const items = data.map((item) => ({
             id: item.id,
+            version: this.version(item),
             name: item.name,
             description: item.description,
             membersCount: item.membersCount,
@@ -92,13 +96,18 @@ export class AdminSpaceService {
         const { name, description, image, banner, is_dealer } = dto;
 
         const home = await this.spaceRepository.findOne({ where: { backup_space_id: 0 } });
-        const parentSpaceId = home?.id ?? 15;
+        if (!home) {
+            throw new ConflictException('Community root is missing. Configure it before creating communities.');
+        }
+        const parentSpaceId = home.id;
 
         const space = this.spaceRepository.create({
             name,
             description: description ?? '',
             image: image ?? '',
             banner: banner ?? '',
+            hidden: 0,
+            inviteOnly: 0,
             membersCount: 0,
             postsCount: 0,
             backup_space_id: parentSpaceId,
@@ -109,71 +118,85 @@ export class AdminSpaceService {
         // save
         const data = await this.spaceRepository.save(space);
 
+        return this.view(data);
+    }
+
+    /** Hashes editable fields only; member/post counters do not invalidate an editor. */
+    private version(space: SpaceEntity): string {
+        return createHash('sha256').update(JSON.stringify([
+            space.id, space.name, space.description, space.image, space.banner,
+            space.is_dealer, space.backup_space_id, space.hidden, space.inviteOnly,
+        ])).digest('hex');
+    }
+
+    /** Maps the same complete response for create, list and edit. */
+    private view(space: SpaceEntity): AdminSpaceViewDto {
         return {
-            id: data.id,
-            name: data.name,
-            image: data.image,
-            banner: data.banner,
-            membersCount: data.membersCount,
-            postsCount: data.postsCount,
-            created_at: data.created_at,
+            id: space.id, version: this.version(space), name: space.name,
+            description: space.description, image: space.image, banner: space.banner,
+            membersCount: space.membersCount, postsCount: space.postsCount,
+            backup_space_id: space.backup_space_id, is_dealer: space.is_dealer,
+            created_at: space.created_at,
         };
     }
 
-    // view space by id
+    /** Internal root records cannot be read or mutated as communities. */
+    private requireCommunity(space: SpaceEntity | null): SpaceEntity {
+        if (!space || space.backup_space_id === 0) {
+            throw new NotFoundException('Community not found');
+        }
+        return space;
+    }
+
+    /** Loads a community directly by ID, excluding the root. */
     async viewSpace(id: number): Promise<AdminSpaceViewDto> {
-        const space = await this.spaceRepository.findOne({ where: { id } });
-        if (!space) {
-            throw new NotFoundException('Space not found');
-        }
-        return {
-            id: space.id,
-            name: space.name,
-            description: space.description,
-            image: space.image,
-            banner: space.banner,
-            membersCount: space.membersCount,
-            postsCount: space.postsCount,
-            backup_space_id: space.backup_space_id,
-            is_dealer: space.is_dealer,
-            created_at: space.created_at,
-        };
+        return this.view(this.requireCommunity(await this.spaceRepository.findOne({ where: { id } })));
     }
 
-    // update space
+    /** Locks and compares the editor snapshot before changing a community. */
+    private async editable(manager: EntityManager, id: number, version: string): Promise<SpaceEntity> {
+        const space = this.requireCommunity(await manager.findOne(SpaceEntity, {
+            where: { id }, lock: { mode: 'pessimistic_write' },
+        }));
+        if (this.version(space) !== version) {
+            throw new ConflictException('Community changed. Reload before saving.');
+        }
+        return space;
+    }
+
+    /** Updates only editable fields under the same lock as the version check. */
     async updateSpace(dto: AdminSpaceUpdateDto): Promise<AdminSpaceViewDto> {
-        const space = await this.spaceRepository.findOne({ where: { id: dto.id } });
-        if (!space) {
-            throw new NotFoundException('Space not found');
-        }
-        if (dto.name !== undefined) space.name = dto.name;
-        if (dto.description !== undefined) space.description = dto.description;
-        if (dto.image !== undefined) space.image = dto.image;
-        if (dto.banner !== undefined) space.banner = dto.banner;
-        if (dto.is_dealer !== undefined) space.is_dealer = dto.is_dealer;
-        await this.spaceRepository.save(space);
-        return {
-            id: space.id,
-            name: space.name,
-            description: space.description,
-            image: space.image,
-            banner: space.banner,
-            membersCount: space.membersCount,
-            postsCount: space.postsCount,
-            backup_space_id: space.backup_space_id,
-            is_dealer: space.is_dealer,
-            created_at: space.created_at,
-        };
+        return this.spaceRepository.manager.transaction(async (manager) => {
+            const space = await this.editable(manager, dto.id, dto.version);
+            if (dto.name !== undefined) { space.name = dto.name; }
+            if (dto.description !== undefined) { space.description = dto.description; }
+            if (dto.image !== undefined) { space.image = dto.image; }
+            if (dto.banner !== undefined) { space.banner = dto.banner; }
+            if (dto.is_dealer !== undefined) { space.is_dealer = dto.is_dealer; }
+            await manager.save(SpaceEntity, space);
+            return this.view(space);
+        });
     }
 
-    // delete space
+    /** Refuses destructive deletion of communities with any retained references. */
     async deleteSpace(dto: AdminSpaceDeleteDto): Promise<{ deleted: boolean }> {
-        const space = await this.spaceRepository.findOne({ where: { id: dto.id } });
-        if (!space) {
-            throw new NotFoundException('Space not found');
+        try {
+            return await this.spaceRepository.manager.transaction(async (manager) => {
+                const space = await this.editable(manager, dto.id, dto.version);
+                const posts = await manager.count(PostEntity, { where: { space: { id: dto.id } }, withDeleted: true });
+                const memberships = await manager.count(MemberSpaceEntity, { where: { backup_space_id: dto.id } });
+                const children = await manager.count(SpaceEntity, { where: { backup_space_id: dto.id } });
+                if (posts || memberships || children) {
+                    throw new ConflictException('Community has posts, members or child communities and cannot be deleted.');
+                }
+                await manager.remove(SpaceEntity, space);
+                return { deleted: true };
+            });
+        } catch (error) {
+            if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ER_ROW_IS_REFERENCED_2') {
+                throw new ConflictException('Community is still referenced and cannot be deleted.');
+            }
+            throw error;
         }
-        const result = await this.spaceRepository.delete(dto.id);
-        return { deleted: (result.affected ?? 0) > 0 };
     }
-
 }

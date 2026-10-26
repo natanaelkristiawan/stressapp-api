@@ -1,147 +1,108 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
-import { IsDate, IsNotEmpty, IsNumber, IsOptional, IsPositive, IsString, IsIn, IsBoolean } from "class-validator";
+import { PartialType } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUrl, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 
 export class AdminSpaceListDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  page: number = 1;
 
-    @ApiProperty({description: "Page", example: 1})
-    @Type(() => Number)
-    @IsNumber()
-    @IsNotEmpty()
-    page: number;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number = 10;
 
-    @ApiProperty({description: "Limit", example: 10})
-    @Type(() => Number)
-    @IsNumber()
-    @IsNotEmpty()
-    limit: number;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(200)
+  search?: string;
 
-    // set optional 
-    @ApiPropertyOptional({description: "Search", example: ""})
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    search: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['created_at'])
+  sort?: 'created_at';
 
-    @ApiPropertyOptional({
-        description: "Sort",
-        example: "",
-        enum: ["created_at"],
-        default: ""
-    })
-    @IsOptional()
-    @IsString()
-    @IsIn(["created_at"])
-    sort?: "created_at";
-
-    @ApiPropertyOptional({
-        description: "Order",
-        example: "asc",
-        enum: ["asc", "desc"],
-        default: "asc"
-    })
-    @IsOptional()
-    @IsString()
-    @IsIn(["asc", "desc"])
-    order?: "asc" | "desc";
-    
-    
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc';
 }
-
 
 export class AdminSpaceCreateDto {
+  @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name: string;
 
-    @ApiPropertyOptional({description: "Image", example: "https://yes.sgp1.digitaloceanspaces.com/images/1745898969793-9eaddcd6-39c8-414a-84a9-2ae54dfb8ae7-xforce.png"})
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    image: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
 
-    @ApiPropertyOptional({description: "Banner", example: "https://yes.sgp1.digitaloceanspaces.com/images/banner.png"})
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    banner: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(2048)
+  @ValidateIf((_object, value) => value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  image?: string;
 
-    @ApiProperty({description: "Space Name", example: "Sample Space"})
-    @Type(() => String)
-    @IsString()
-    @IsNotEmpty()
-    name: string;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(2048)
+  @ValidateIf((_object, value) => value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  banner?: string;
 
-    @ApiPropertyOptional({description: "Description", example: "Deskripsi komunitas"})
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    description?: string;
-
-    @ApiPropertyOptional({
-        description: "Is Dealer",
-        example: false,
-        default: false
-    })
-    @IsOptional()
-    @IsBoolean()
-    is_dealer?: boolean;
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  is_dealer?: boolean;
 }
 
-// DTO for viewing a single space (response)
+export class ForumVersionDto {
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  version: string;
+}
+
+export class AdminSpacePatchDto extends PartialType(AdminSpaceCreateDto, { skipNullProperties: false }) {
+  @IsString()
+  @Matches(/^[a-f0-9]{64}$/)
+  version: string;
+}
+
+export class AdminSpaceUpdateDto extends AdminSpacePatchDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  id: number;
+}
+
+export class AdminSpaceIdDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  id: number;
+}
+
+export class AdminSpaceDeleteDto extends ForumVersionDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  id: number;
+}
+
 export class AdminSpaceViewDto {
-    id: number;
-    name: string;
-    description?: string;
-    image: string;
-    banner: string;
-    membersCount: number;
-    postsCount: number;
-    backup_space_id: number;
-    is_dealer?: boolean;
-    created_at: Date;
-}
-
-// DTO for updating a space
-export class AdminSpaceUpdateDto {
-    @ApiProperty({ description: 'Space ID', example: 1 })
-    @Type(() => Number)
-    @IsNumber()
-    @IsNotEmpty()
-    id: number;
-
-    @ApiPropertyOptional({ description: 'Space Name', example: 'Updated Space' })
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    name?: string;
-
-    @ApiPropertyOptional({ description: 'Description', example: 'Updated description' })
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    description?: string;
-
-    @ApiPropertyOptional({ description: 'Image URL', example: 'https://example.com/image.png' })
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    image?: string;
-
-    @ApiPropertyOptional({ description: 'Banner URL', example: 'https://example.com/banner.png' })
-    @Type(() => String)
-    @IsString()
-    @IsOptional()
-    banner?: string;
-
-    @ApiPropertyOptional({ description: 'Is Dealer', example: false })
-    @IsOptional()
-    @IsBoolean()
-    is_dealer?: boolean;
-}
-
-// DTO for deleting a space
-export class AdminSpaceDeleteDto {
-    @ApiProperty({ description: 'Space ID', example: 1 })
-    @Type(() => Number)
-    @IsNumber()
-    @IsNotEmpty()
-    id: number;
+  id: number;
+  version: string;
+  name: string;
+  description?: string;
+  image: string;
+  banner: string;
+  membersCount: number;
+  postsCount: number;
+  backup_space_id: number;
+  is_dealer?: boolean;
+  created_at: Date;
 }
