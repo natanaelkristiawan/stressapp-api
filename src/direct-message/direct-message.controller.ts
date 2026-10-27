@@ -36,7 +36,6 @@ import {
 } from './interfaces/direct-message.interface';
 import { GlobalResponse } from 'src/interfaces/global.interface';
 import { DmSearchDto } from './dto/dm-search.dto';
-import { QueueService } from 'src/queue/queue.service';
 import {
   MemberAuthGuard,
   MemberRequest,
@@ -46,10 +45,7 @@ import { MemberAuthService } from 'src/member-auth/member-auth.service';
 @ApiTags('DIRECT MESSAGE')
 @ApiBearerAuth('access-token')
 export class DirectMessageController {
-  constructor(
-    private readonly messageService: DirectMessageService,
-    private readonly queueService: QueueService,
-  ) {}
+  constructor(private readonly messageService: DirectMessageService) {}
 
   @Post('find-or-create/:memberId')
   @ApiOperation({
@@ -237,15 +233,8 @@ export class DirectMessageController {
       conversationId,
       userId,
       content,
+      sendMessageDto.requestId,
     );
-
-    // send notification to member
-    await this.queueService.addJob('send-notification', {
-      type: 'direct-message-notification',
-      send_to: [response.sender.id],
-      actor_name: response.sender.name,
-      message: content,
-    });
 
     return {
       message: 'Success get data',
@@ -411,7 +400,7 @@ export class MemberChatsController {
     await this.memberAuth.limit(
       'chats-room',
       String(request.member.id),
-      600,
+      900,
       3600,
     );
     const data = await this.messageService.getMemberChatRoom(
@@ -444,6 +433,7 @@ export class MemberChatsController {
       request.member.id,
       params.conversationId,
       dto.content,
+      dto.requestId,
     );
     return {
       message: 'Pesan berhasil dikirim.',

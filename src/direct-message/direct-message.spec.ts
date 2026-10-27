@@ -1,6 +1,9 @@
 import 'reflect-metadata';
 import {
   BadRequestException,
+  ConflictException,
+  HttpException,
+  ServiceUnavailableException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -290,6 +293,11 @@ function createDirectMessageHarness() {
   }
 
   const messageRepository = {
+    create: (data: Partial<Message>) => Object.assign(new Message(), data),
+    findOne: async (options: { where: { requestKey: string } }) =>
+      messages.find(
+        (message) => message.requestKey === options.where.requestKey,
+      ) ?? null,
     createQueryBuilder: () => createMessageQueryBuilder(),
     save: async (msg: Message) => {
       if (!msg.id) {
@@ -346,23 +354,46 @@ function createDirectMessageHarness() {
       if (entity === Conversation) {
         return conversationRepository;
       }
+      if (entity === Message) {
+        return messageRepository;
+      }
       return null;
     },
   };
 
   const userMimateRepository = {
     manager: {
-      transaction: async <T>(cb: (em: typeof manager) => Promise<T>) =>
-        cb(manager),
+      transaction: async <T>(cb: (em: typeof manager) => Promise<T>) => {
+        const messageCount = messages.length;
+        const conversationTimes = conversations.map((row) => row.updatedAt);
+        try {
+          return await cb(manager);
+        } catch (error) {
+          messages.splice(messageCount);
+          conversations.forEach((row, index) => {
+            row.updatedAt = conversationTimes[index];
+          });
+          throw error;
+        }
+      },
     },
   };
 
+  Object.assign(conversationRepository, {
+    manager: userMimateRepository.manager,
+  });
+  const moderation = {
+    assertChatPublishable: jest
+      .fn<Promise<void>, [string, number]>()
+      .mockResolvedValue(undefined),
+  };
   const service = new DirectMessageService(
     messageRepository as never,
     conversationRepository as never,
     userMimateRepository as never,
     followRepository as never,
     new DateHelper(),
+    moderation as never,
   );
 
   /** Marks two members as accepted mutual friends in the test store. */
@@ -377,6 +408,8 @@ function createDirectMessageHarness() {
 
   return {
     service,
+    moderation,
+    conversationRepository,
     members,
     follows,
     conversations,
@@ -410,6 +443,7 @@ describe('DirectMessage DTO validation', () => {
 
   it('trims SendMessageDto content and rejects blank or oversized messages', async () => {
     const validMsg = plainToInstance(SendMessageDto, {
+      requestId: 'test-message-request-1',
       content: '  Halo apa kabar?  ',
     });
     expect(await validate(validMsg)).toHaveLength(0);
@@ -427,6 +461,12 @@ describe('DirectMessage DTO validation', () => {
   });
 
   it('trims DmSearchDto and enforces maximum length', async () => {
+    for (const search of [42, true, ['Sarah'], { name: 'Sarah' }]) {
+      expect(
+        (await validate(plainToInstance(DmSearchDto, { search }))).length,
+      ).toBeGreaterThan(0);
+    }
+
     const validSearch = plainToInstance(DmSearchDto, {
       search: '  Sarah  ',
     });
@@ -526,5 +566,154 @@ describe('DirectMessageService (1-on-1 Chat)', () => {
     await expect(service.getMemberChatRoom(1, 9999)).rejects.toThrow(
       NotFoundException,
     );
+  });
+});
+
+describe('Chat moderation and retry boundaries', () => {
+  const requestId = 'test-message-request-1';
+
+  it('requires a bounded retry identity on HTTP input', async () => {
+    for (const requestId of [undefined, '', 'short', 'bad key'.repeat(20)]) {
+      const input = plainToInstance(SendMessageDto, {
+        content: 'Halo',
+        requestId,
+      });
+      expect((await validate(input)).length).toBeGreaterThan(0);
+    }
+  });
+
+  it.each([422, 503])(
+    'does not save rejected/unavailable AI decisions (%s)',
+    async (status) => {
+      const harness = createDirectMessageHarness();
+      harness.addAcceptedFriendship(1, 2);
+      const room = await harness.service.openMemberChatWithFriend(1, 2);
+      harness.moderation.assertChatPublishable.mockRejectedValueOnce(
+        status === 422
+          ? new HttpException('Rejected', 422)
+          : new ServiceUnavailableException(),
+      );
+      await expect(
+        harness.service.sendMemberChatMessage(
+          1,
+          room.conversationId,
+          'synthetic text',
+          requestId,
+        ),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(harness.messages).toHaveLength(0);
+      expect(harness.moderation.assertChatPublishable).toHaveBeenCalledWith(
+        'synthetic text',
+        1,
+      );
+    },
+  );
+
+  it('replays one saved message, rejects changed text and scopes identities to the sender', async () => {
+    const harness = createDirectMessageHarness();
+    harness.addAcceptedFriendship(1, 2);
+    const room = await harness.service.openMemberChatWithFriend(1, 2);
+    const first = await harness.service.sendMemberChatMessage(
+      1,
+      room.conversationId,
+      'Halo',
+      requestId,
+    );
+    const replay = await harness.service.sendMemberChatMessage(
+      1,
+      room.conversationId,
+      'Halo',
+      requestId,
+    );
+    expect(replay.messageId).toBe(first.messageId);
+    expect(harness.messages).toHaveLength(1);
+    expect(harness.moderation.assertChatPublishable).toHaveBeenCalledTimes(1);
+    await expect(
+      harness.service.sendMemberChatMessage(
+        1,
+        room.conversationId,
+        'Changed',
+        requestId,
+      ),
+    ).rejects.toThrow(ConflictException);
+    await harness.service.sendMemberChatMessage(
+      2,
+      room.conversationId,
+      'Halo',
+      requestId,
+    );
+    expect(harness.messages).toHaveLength(2);
+  });
+
+  it('does not send unauthorized text to AI and rechecks friendship after AI latency', async () => {
+    const harness = createDirectMessageHarness();
+    harness.addAcceptedFriendship(1, 2);
+    const room = await harness.service.openMemberChatWithFriend(1, 2);
+    await expect(
+      harness.service.sendMemberChatMessage(
+        3,
+        room.conversationId,
+        'Halo',
+        requestId,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(harness.moderation.assertChatPublishable).not.toHaveBeenCalled();
+    harness.moderation.assertChatPublishable.mockImplementationOnce(
+      async () => {
+        harness.follows.splice(0);
+      },
+    );
+    await expect(
+      harness.service.sendMemberChatMessage(
+        1,
+        room.conversationId,
+        'Halo',
+        requestId,
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(harness.messages).toHaveLength(0);
+  });
+
+  it('authorizes the shared read mutation before touching read receipts', async () => {
+    const harness = createDirectMessageHarness();
+    harness.addAcceptedFriendship(1, 2);
+    const room = await harness.service.openMemberChatWithFriend(1, 2);
+    await harness.service.sendMemberChatMessage(
+      1,
+      room.conversationId,
+      'Halo',
+      requestId,
+    );
+    await expect(
+      harness.service.markMessagesAsRead(room.conversationId, 3),
+    ).rejects.toThrow(ForbiddenException);
+    expect(harness.messages[0].readBy).toHaveLength(0);
+  });
+});
+
+describe('Chat commit failures', () => {
+  it('rolls back a message if the conversation update fails, then permits a safe retry', async () => {
+    const harness = createDirectMessageHarness();
+    harness.addAcceptedFriendship(1, 2);
+    const room = await harness.service.openMemberChatWithFriend(1, 2);
+    jest
+      .spyOn(harness.conversationRepository, 'update')
+      .mockRejectedValueOnce(new Error('Synthetic update failure'));
+    await expect(
+      harness.service.sendMemberChatMessage(
+        1,
+        room.conversationId,
+        'Halo',
+        'transaction-retry-id',
+      ),
+    ).rejects.toThrow('Synthetic update failure');
+    expect(harness.messages).toHaveLength(0);
+    await harness.service.sendMemberChatMessage(
+      1,
+      room.conversationId,
+      'Halo',
+      'transaction-retry-id',
+    );
+    expect(harness.messages).toHaveLength(1);
   });
 });

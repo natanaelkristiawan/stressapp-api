@@ -91,6 +91,41 @@ describe('ContentModerationService', () => {
     completionCreate.mockResolvedValue(completion());
   });
 
+  it('checks private text without a cache entry, queue payload, or conversation history', async () => {
+    await service.assertChatPublishable('Halo teman', 1);
+    expect(completionCreate).toHaveBeenCalledTimes(1);
+    expect(completionCreate.mock.calls[0][1].messages[1]).toEqual({
+      role: 'user',
+      content: JSON.stringify(['Halo teman']),
+    });
+    expect(queue.add).not.toHaveBeenCalled();
+    expect(redis.get).not.toHaveBeenCalled();
+    expect(redis.set).not.toHaveBeenCalled();
+  });
+
+  it.each(['sara', 'profanity'])(
+    'blocks private %s text before delivery',
+    async (category) => {
+      completionCreate.mockResolvedValueOnce(completion([category]));
+      await expect(
+        service.assertChatPublishable('Synthetic policy fixture', 1),
+      ).rejects.toMatchObject({ status: 422 });
+      expect(queue.add).not.toHaveBeenCalled();
+    },
+  );
+
+  it('fails closed for uncertain or unavailable private-message moderation', async () => {
+    completionCreate.mockResolvedValueOnce(completion([], true));
+    await expect(
+      service.assertChatPublishable('Synthetic fixture', 1),
+    ).rejects.toMatchObject({ status: 503 });
+    completionCreate.mockRejectedValueOnce(new Error('Synthetic outage'));
+    await expect(
+      service.assertChatPublishable('Synthetic fixture', 1),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['Saya senang hari ini', []],
     ['Have a good day', []],

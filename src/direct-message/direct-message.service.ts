@@ -1,5 +1,8 @@
+import { createHash, randomUUID } from 'crypto';
+import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -83,6 +86,7 @@ export class DirectMessageService {
     private readonly followRepository: Repository<UserFollowEntity>,
 
     private readonly dateHelper: DateHelper,
+    private readonly moderation: ContentModerationService,
   ) {}
 
   /** Formats a member display name with fallback when name is empty.
@@ -417,52 +421,65 @@ export class DirectMessageService {
     conversationId: number,
     senderId: number,
     content: string,
+    requestId: string = randomUUID(),
   ): Promise<GetMessage> {
     const trimmedContent = typeof content === 'string' ? content.trim() : '';
-    if (!trimmedContent) {
-      throw new BadRequestException('Pesan tidak boleh kosong.');
+    if (!trimmedContent || trimmedContent.length > 2000) {
+      throw new BadRequestException('Pesan harus berisi 1–2000 karakter.');
     }
-
-    const conversation = await this.conversationRepository.findOne({
-      where: { id: conversationId },
-      relations: ['participants'],
+    if (
+      typeof requestId !== 'string' ||
+      !/^[A-Za-z0-9_-]{16,100}$/.test(requestId)
+    ) {
+      throw new BadRequestException('Identitas pesan tidak valid.');
+    }
+    const requestKey = createHash('sha256')
+      .update(`${conversationId}:${senderId}:${requestId}`)
+      .digest('hex');
+    const { sender } = await this.getSendContext(conversationId, senderId);
+    const existing = await this.messageRepository.findOne({
+      where: { requestKey },
     });
-    if (!conversation) {
-      throw new NotFoundException('Percakapan tidak ditemukan.');
-    }
-
-    const sender = conversation.participants?.find(
-      (participant) => participant.id === senderId,
-    );
-    if (!sender) {
-      throw new ForbiddenException('Anda bukan peserta dalam percakapan ini.');
-    }
-
-    const recipient = conversation.participants?.find(
-      (participant) => participant.id !== senderId,
-    );
-    if (!recipient || recipient.deleted_at || recipient.is_suspended) {
-      throw new ForbiddenException('Penerima pesan tidak tersedia.');
-    }
-
-    const areFriends = await this.hasAcceptedFriendship(senderId, recipient.id);
-    if (!areFriends) {
-      throw new ForbiddenException(
-        'Anda hanya dapat mengirim pesan kepada teman yang sudah terkoneksi.',
+    if (existing && existing.content !== trimmedContent) {
+      throw new ConflictException(
+        'Identitas pesan sudah dipakai untuk teks lain.',
       );
     }
+    if (!existing) {
+      await this.moderation.assertChatPublishable(trimmedContent, senderId);
+    }
 
-    const now = new Date();
-    const message = new Message();
-    message.conversation = conversation;
-    message.sender = sender;
-    message.content = trimmedContent;
-    message.createdAt = now;
-
-    const response = await this.messageRepository.save(message);
-    await this.conversationRepository.update(
-      { id: conversationId },
-      { updatedAt: now },
+    // Recheck authorization after AI/network latency; serialize sends, reads and deletion.
+    const response = await this.conversationRepository.manager.transaction(
+      async (manager) => {
+        const { conversation, sender: currentSender } =
+          await this.getSendContext(conversationId, senderId, manager);
+        const messageRepository = manager.getRepository(Message);
+        const replay = await messageRepository.findOne({
+          where: { requestKey },
+        });
+        if (replay) {
+          if (replay.content !== trimmedContent) {
+            throw new ConflictException(
+              'Identitas pesan sudah dipakai untuk teks lain.',
+            );
+          }
+          return replay;
+        }
+        const now = new Date();
+        const message = messageRepository.create({
+          conversation,
+          sender: currentSender,
+          content: trimmedContent,
+          requestKey,
+          createdAt: now,
+        });
+        const saved = await messageRepository.save(message);
+        await manager
+          .getRepository(Conversation)
+          .update({ id: conversationId }, { updatedAt: now });
+        return saved;
+      },
     );
 
     const messageTime = new Date(response.createdAt);
@@ -482,6 +499,45 @@ export class DirectMessageService {
         isOwner: true,
       },
     };
+  }
+
+  /** Authorizes sending before moderation and again inside the short commit transaction. */
+  private async getSendContext(
+    conversationId: number,
+    senderId: number,
+    manager?: EntityManager,
+  ): Promise<{ conversation: Conversation; sender: UserMimateEntity }> {
+    const repository = manager
+      ? manager.getRepository(Conversation)
+      : this.conversationRepository;
+    const conversation = await repository.findOne({
+      where: { id: conversationId },
+      relations: ['participants'],
+      ...(manager ? { lock: { mode: 'pessimistic_write' as const } } : {}),
+    });
+    if (!conversation) {
+      throw new NotFoundException('Percakapan tidak ditemukan.');
+    }
+    const sender = conversation.participants.find(
+      (member) => member.id === senderId,
+    );
+    const recipient = conversation.participants.find(
+      (member) => member.id !== senderId,
+    );
+    if (!sender || sender.deleted_at || sender.is_suspended) {
+      throw new ForbiddenException(
+        'Anda bukan peserta aktif dalam percakapan ini.',
+      );
+    }
+    if (!recipient || recipient.deleted_at || recipient.is_suspended) {
+      throw new ForbiddenException('Penerima pesan tidak tersedia.');
+    }
+    if (!(await this.hasAcceptedFriendship(senderId, recipient.id, manager))) {
+      throw new ForbiddenException(
+        'Anda hanya dapat mengirim pesan kepada teman yang sudah terkoneksi.',
+      );
+    }
+    return { conversation, sender };
   }
 
   /** Loads grouped message history for a conversation after verifying participant membership.
@@ -955,8 +1011,14 @@ export class DirectMessageService {
     userId: number,
     conversationId: number,
     content: string,
+    requestId: string = randomUUID(),
   ): Promise<ChatMessageItemInterface> {
-    const saved = await this.sendMessage(conversationId, userId, content);
+    const saved = await this.sendMessage(
+      conversationId,
+      userId,
+      content,
+      requestId,
+    );
     const createdAtDate = new Date(saved.createdAt);
     return {
       id: String(saved.id),
@@ -976,27 +1038,30 @@ export class DirectMessageService {
     conversationId: number,
     userId: number,
   ): Promise<void> {
-    const conversation = await this.conversationRepository.findOne({
-      where: { id: conversationId },
-      relations: ['participants'],
+    await this.conversationRepository.manager.transaction(async (manager) => {
+      const conversation = await manager.getRepository(Conversation).findOne({
+        where: { id: conversationId },
+        relations: ['participants'],
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!conversation) {
+        throw new NotFoundException(
+          `Conversation with ID ${conversationId} not found`,
+        );
+      }
+
+      const isParticipant = conversation.participants.some(
+        (user) => user.id === userId,
+      );
+      if (!isParticipant) {
+        throw new ForbiddenException(
+          'You are not a participant of this conversation',
+        );
+      }
+
+      await manager.getRepository(Conversation).softDelete(conversationId);
     });
-
-    if (!conversation) {
-      throw new NotFoundException(
-        `Conversation with ID ${conversationId} not found`,
-      );
-    }
-
-    const isParticipant = conversation.participants.some(
-      (user) => user.id === userId,
-    );
-    if (!isParticipant) {
-      throw new ForbiddenException(
-        'You are not a participant of this conversation',
-      );
-    }
-
-    await this.conversationRepository.softDelete(conversationId);
   }
 
   /** Counts unread messages sent by partnerId to userId in a conversation.
@@ -1032,32 +1097,49 @@ export class DirectMessageService {
     conversationId: number,
     userId: number,
   ): Promise<void> {
-    const messages = await this.messageRepository
-      .createQueryBuilder('message')
-      .leftJoin('message.readBy', 'reader')
-      .where('message.conversationId = :conversationId', { conversationId })
-      .andWhere('message.senderId != :userId', { userId })
-      .andWhere((qb) => {
-        const subQuery = qb
-          .subQuery()
-          .select('message_reads.message_id')
-          .from('message_reads', 'message_reads')
-          .where('message_reads.user_id = :userId')
-          .getQuery();
-        return 'message.id NOT IN ' + subQuery;
-      })
-      .setParameter('userId', userId)
-      .getMany();
-
-    if (messages.length > 0) {
-      for (const message of messages) {
-        await this.messageRepository
-          .createQueryBuilder()
-          .relation(Message, 'readBy')
-          .of(message)
-          .add(userId);
+    await this.conversationRepository.manager.transaction(async (manager) => {
+      const conversation = await manager.getRepository(Conversation).findOne({
+        where: { id: conversationId },
+        relations: ['participants'],
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!conversation) {
+        throw new NotFoundException('Percakapan tidak ditemukan.');
       }
-    }
+      if (!conversation.participants.some((member) => member.id === userId)) {
+        throw new ForbiddenException(
+          'Anda bukan peserta dalam percakapan ini.',
+        );
+      }
+      const messages = await manager
+        .getRepository(Message)
+        .createQueryBuilder('message')
+        .leftJoin('message.readBy', 'reader')
+        .where('message.conversationId = :conversationId', { conversationId })
+        .andWhere('message.senderId != :userId', { userId })
+        .andWhere((qb) => {
+          const subQuery = qb
+            .subQuery()
+            .select('message_reads.message_id')
+            .from('message_reads', 'message_reads')
+            .where('message_reads.user_id = :userId')
+            .getQuery();
+          return 'message.id NOT IN ' + subQuery;
+        })
+        .setParameter('userId', userId)
+        .getMany();
+
+      if (messages.length > 0) {
+        for (const message of messages) {
+          await manager
+            .getRepository(Message)
+            .createQueryBuilder()
+            .relation(Message, 'readBy')
+            .of(message)
+            .add(userId);
+        }
+      }
+    });
   }
 
   /** Counts unread messages in a conversation for userId.

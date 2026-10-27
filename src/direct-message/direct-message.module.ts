@@ -1,3 +1,4 @@
+import { ContentModerationModule } from '../content-moderation/content-moderation.module';
 import { Module } from '@nestjs/common';
 import { DirectMessageService } from './direct-message.service';
 import {
@@ -16,6 +17,7 @@ import { MemberAuthModule } from 'src/member-auth/member-auth.module';
 @Module({
   imports: [
     MemberAuthModule,
+    ContentModerationModule,
     TypeOrmModule.forFeature(
       [UserMimateEntity, Conversation, Message, UserFollowEntity],
       'mimate',

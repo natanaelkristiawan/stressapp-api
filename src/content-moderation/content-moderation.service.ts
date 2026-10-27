@@ -287,6 +287,28 @@ export class ContentModerationService {
     return result;
   }
 
+  /** Checks only this outgoing private message; never caches text or queues private retries. */
+  async assertChatPublishable(content: string, actorId: number): Promise<void> {
+    if (
+      typeof content !== 'string' ||
+      !content.trim() ||
+      content.length > 2000 ||
+      !Number.isSafeInteger(actorId) ||
+      actorId < 1
+    ) {
+      throw new BadRequestException('Pesan tidak valid.');
+    }
+    const result = await this.classify(JSON.stringify([content]));
+    if (result.action === 'reject') {
+      throw new HttpException(await this.messages.forResult(result), 422);
+    }
+    if (result.action !== 'publish') {
+      throw new ServiceUnavailableException(
+        'Pesan belum dikirim. Pemeriksaan AI belum tersedia atau belum pasti. Coba lagi nanti.',
+      );
+    }
+  }
+
   /** One bounded OpenCode request, compact schema, no history, tools or content logging. */
   async classify(
     text: string,
