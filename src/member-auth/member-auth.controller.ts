@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Headers,
+  Header,
   HttpCode,
   Post,
   Req,
@@ -163,8 +164,10 @@ export class MemberAuthController {
   /** Resolves the authenticated member from the access JWT.
    * @returns The public member identity.
    */
-  @Get('me') me(@Headers('authorization') header?: string) {
-    return this.auth.authenticate(this.token(header));
+  @Header('Cache-Control', 'private, no-store')
+  @Get('me')
+  me(@Headers('authorization') header?: string) {
+    return this.auth.me(this.token(header));
   }
   /** Revokes the session identified by the supplied access JWT.
    * @returns A logout confirmation.

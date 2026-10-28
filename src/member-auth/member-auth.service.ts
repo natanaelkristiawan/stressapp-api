@@ -1,3 +1,4 @@
+import { MemberNotification } from '../entity/member-notification.entity';
 import { JwtService } from '@nestjs/jwt';
 import {
   BadRequestException,
@@ -7,7 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, IsNull } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { OtpEmailJob, OTP_EMAIL_QUEUE } from './member-auth.email.processor';
@@ -565,9 +566,18 @@ export class MemberAuthService {
       return this.issue(member, session, next);
     });
   }
-  /** Checks the access JWT and live database session/account on every request.
-   * @returns Public member identity; expired or revoked access throws 401.
-   */
+  /** Returns live member identity with the retained unread notification count. */
+  async me(token: string) {
+    const member = await this.authenticate(token);
+    const unreadNotificationCount = await this.db
+      .getRepository(MemberNotification)
+      .count({
+        where: { memberId: member.id, readAt: IsNull(), deletedAt: IsNull() },
+      });
+    return { ...member, unreadNotificationCount };
+  }
+
+  /** Resolves live identity without inbox queries for internal authentication. */
   async authenticate(token: string) {
     return (await this.authenticateSession(token)).member;
   }
