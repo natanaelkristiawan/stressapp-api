@@ -7,6 +7,9 @@ import { UserAdmin } from "./user-admin.entity";
 import { QuestPoint } from "./quest-point.entity";
 @Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "members"})
 export class Member {
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    notificationTimeZone: string | null;
+
     @Column({ length: 60, nullable: true, select: false })
     passwordHash: string | null;
 

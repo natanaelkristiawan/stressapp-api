@@ -1,3 +1,5 @@
+import { recordNotificationEvent } from '../notification-events/record-notification-event';
+import { NotificationType } from '../entity/member-notification.entity';
 import { createHash, randomUUID } from 'crypto';
 import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import {
@@ -475,6 +477,11 @@ export class DirectMessageService {
           createdAt: now,
         });
         const saved = await messageRepository.save(message);
+        await recordNotificationEvent(
+          manager,
+          NotificationType.Message,
+          saved.id,
+        );
         await manager
           .getRepository(Conversation)
           .update({ id: conversationId }, { updatedAt: now });

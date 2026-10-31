@@ -1,3 +1,5 @@
+import { recordNotificationEvent } from '../notification-events/record-notification-event';
+import { NotificationType } from '../entity/member-notification.entity';
 import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import { ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -800,7 +802,13 @@ export class PostService {
         }
 
         // save post to get IDs
-        let post = await this.postRepository.save(paramSend)
+        const post = await this.postRepository.manager.transaction(async (manager) => {
+            const saved = await manager.save(PostEntity, paramSend);
+            if (!authorizedCmsAdmin) {
+                await recordNotificationEvent(manager, NotificationType.Forum, saved.id);
+            }
+            return saved;
+        });
 
         // update tags post
         for (let index = 0; index < tempTags.length; index++) {

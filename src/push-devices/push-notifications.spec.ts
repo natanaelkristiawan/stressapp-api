@@ -145,6 +145,50 @@ describe('CMS push notification test', () => {
     expect(result.headers['cache-control']).toBe('private, no-store');
   });
 
+  it('sends a saved activity snapshot without chat content or destinations in push data', async () => {
+    const result = await sender.sendNotification(
+      12,
+      'Pesan baru',
+      'Ada pesan baru untuk Anda.',
+      42,
+      'message',
+    );
+    expect(result).toMatchObject({ attempted: 2, accepted: 2, skipped: 1 });
+    expect(firebase.sendEachForMulticast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notification: {
+          title: 'Pesan baru',
+          body: 'Ada pesan baru untuk Anda.',
+        },
+        data: {
+          type: 'member-notification',
+          notificationId: '42',
+          category: 'message',
+        },
+      }),
+    );
+    expect(auth.limit).not.toHaveBeenCalled();
+  });
+
+  it('keeps activity history useful when no live FCM devices exist', async () => {
+    registrations.recipients.mockResolvedValueOnce([device('apns')]);
+    const result = await sender.sendNotification(
+      12,
+      'Forum',
+      'Aktivitas baru.',
+      42,
+      'forum',
+    );
+    expect(result).toEqual({
+      attempted: 0,
+      accepted: 0,
+      failed: 0,
+      skipped: 1,
+      failures: [],
+    });
+    expect(firebase.sendEachForMulticast).not.toHaveBeenCalled();
+  });
+
   it('rejects non-admin identities and rechecks disabled admins', async () => {
     await request(app.getHttpServer())
       .post('/cms-settings/push/test')

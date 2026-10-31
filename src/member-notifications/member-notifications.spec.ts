@@ -1,3 +1,6 @@
+import { SuccessInterceptor } from '../common/interceptors/success.interceptor';
+import { NullToEmptyInterceptor } from '../common/interceptors/null-to-empty.interceptor';
+import { Member } from '../entity/user-mimate.entity';
 import 'reflect-metadata';
 import {
   INestApplication,
@@ -28,7 +31,29 @@ describe('Member notification inbox', () => {
     update: jest.fn(),
     count: jest.fn(),
   };
-  const db = { getRepository: jest.fn(() => repository) };
+  const settingsMember = { id: 7, notificationTimeZone: null as string | null };
+  const memberRepository = {
+    findOne: jest.fn(async ({ where }: { where: { id: number } }) =>
+      where.id === 7 ? { ...settingsMember } : null,
+    ),
+    update: jest.fn(
+      async (
+        where: { id: number },
+        patch: { notificationTimeZone: string },
+      ) => {
+        if (where.id !== 7) {
+          return { affected: 0 };
+        }
+        Object.assign(settingsMember, patch);
+        return { affected: 1 };
+      },
+    ),
+  };
+  const db = {
+    getRepository: jest.fn((entity: unknown) =>
+      entity === Member ? memberRepository : repository,
+    ),
+  };
   const auth = Object.create(MemberAuthService.prototype) as MemberAuthService;
   const identity = { id: 7, email: 'synthetic@example.test' };
 
@@ -62,6 +87,10 @@ describe('Member notification inbox', () => {
       ],
     }).compile();
     app = module.createNestApplication();
+    app.useGlobalInterceptors(
+      new SuccessInterceptor(),
+      new NullToEmptyInterceptor(),
+    );
     app.useGlobalPipes(
       new ValidationPipe({
         transform: true,
@@ -73,6 +102,7 @@ describe('Member notification inbox', () => {
   });
 
   beforeEach(() => {
+    settingsMember.notificationTimeZone = null;
     records = [
       {
         id: 1,
@@ -184,6 +214,7 @@ describe('Member notification inbox', () => {
       .auth('synthetic', { type: 'bearer' })
       .expect(200);
     expect(next.body.data.items[0].id).toBe(1);
+    expect(next.body.data.items[0].readAt).toBeNull();
   });
 
   it('preserves first read time on repeated reads and updates the unread count', async () => {
@@ -253,7 +284,10 @@ describe('Member notification inbox', () => {
       .auth('synthetic', { type: 'bearer' })
       .expect(200);
     expect(result.headers['cache-control']).toBe('private, no-store');
-    expect(result.body).toEqual({ ...identity, unreadNotificationCount: 2 });
+    expect(result.body.data).toEqual({
+      ...identity,
+      unreadNotificationCount: 2,
+    });
     await request(app.getHttpServer()).get('/member-auth/me').expect(401);
   });
 
@@ -285,6 +319,50 @@ describe('Member notification inbox', () => {
       ...identity,
       unreadNotificationCount: 0,
     });
+  });
+
+  it('keeps one owned IANA timezone for the fixed 20:00 reminder', async () => {
+    const initial = await request(app.getHttpServer())
+      .get('/me/notifications/settings')
+      .auth('synthetic', { type: 'bearer' })
+      .expect(200);
+    expect(initial.body.data).toEqual({
+      timeZone: null,
+      moodReminderLocalTime: '20:00',
+    });
+    const updated = await request(app.getHttpServer())
+      .patch('/me/notifications/settings')
+      .auth('synthetic', { type: 'bearer' })
+      .send({ timeZone: 'America/New_York' })
+      .expect(200);
+    expect(updated.body.data).toEqual({
+      timeZone: 'America/New_York',
+      moodReminderLocalTime: '20:00',
+    });
+    expect(memberRepository.update).toHaveBeenCalledWith(
+      { id: 7 },
+      { notificationTimeZone: 'America/New_York' },
+    );
+    await request(app.getHttpServer())
+      .patch('/me/notifications/settings')
+      .send({ timeZone: 'UTC' })
+      .expect(401);
+  });
+
+  it.each([
+    { timeZone: 'Invalid/Zone' },
+    { timeZone: null },
+    { timeZone: 8 },
+    {},
+    { timeZone: 'UTC', memberId: 8 },
+    { timeZone: 'UTC', moodReminderLocalTime: '09:00' },
+  ])('rejects invalid or unauthorized reminder settings %j', async (body) => {
+    await request(app.getHttpServer())
+      .patch('/me/notifications/settings')
+      .auth('synthetic', { type: 'bearer' })
+      .send(body)
+      .expect(400);
+    expect(settingsMember.notificationTimeZone).toBeNull();
   });
 
   it('propagates database failure instead of reporting a false zero', async () => {

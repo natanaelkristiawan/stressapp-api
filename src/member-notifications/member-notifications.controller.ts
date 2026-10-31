@@ -1,4 +1,6 @@
+import { MoodTimeZoneDto } from '../mood-tracker/mood-tracker.dto';
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -22,6 +24,26 @@ import { MemberNotificationsService } from './member-notifications.service';
 @Controller('me/notifications')
 export class MemberNotificationsController {
   constructor(private readonly notifications: MemberNotificationsService) {}
+
+  /** Returns the member-owned timezone used for the fixed 20:00 mood reminder. */
+  @Get('settings')
+  async settings(@Req() request: MemberRequest) {
+    return { data: await this.notifications.settings(request.member.id) };
+  }
+
+  /** Saves a validated IANA timezone; clients synchronize it when the device timezone changes. */
+  @Patch('settings')
+  async saveSettings(
+    @Req() request: MemberRequest,
+    @Body() input: MoodTimeZoneDto,
+  ) {
+    return {
+      data: await this.notifications.saveSettings(
+        request.member.id,
+        input.timeZone,
+      ),
+    };
+  }
 
   /** Returns a paginated category; there is no combined all-category list. */
   @Get()

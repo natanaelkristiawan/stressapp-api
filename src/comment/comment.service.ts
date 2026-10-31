@@ -1,3 +1,5 @@
+import { recordNotificationEvent } from '../notification-events/record-notification-event';
+import { NotificationType } from '../entity/member-notification.entity';
 import { ContentModerationService } from '../content-moderation/content-moderation.service';
 import { assertPostInteractionsVisible } from '../post/post-visibility';
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
@@ -324,9 +326,6 @@ export class CommentService {
             if (!parent) {
                 throw new HttpException('Parent comment not found', HttpStatus.NOT_FOUND);
             }
-            // append repliesCount
-            parent.repliesCount = parent.repliesCount + 1
-            await this.commentRepository.save(parent)
 
         }
 
@@ -356,7 +355,19 @@ export class CommentService {
         }
 
         
-        let save =  await this.commentRepository.save(insert)
+        const save = await this.commentRepository.manager.transaction(async (manager) => {
+            if (parent) {
+                // Keep the counter and reply atomic, including concurrent replies.
+                await manager.update(CommentEntity, { id: parent.id }, {
+                    repliesCount: () => 'COALESCE(repliesCount, 0) + 1',
+                });
+            }
+            const saved = await manager.save(CommentEntity, insert);
+            if (!authorizedCmsAdmin && !post.isPsychoeducation) {
+                await recordNotificationEvent(manager, NotificationType.CommentReply, saved.id);
+            }
+            return saved;
+        });
 
 
         // update total_comment in member

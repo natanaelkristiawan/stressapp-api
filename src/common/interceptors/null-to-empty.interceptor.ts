@@ -19,6 +19,9 @@ export class NullToEmptyInterceptor implements NestInterceptor {
     // Mood chart gaps and public media expiry are deliberate nulls.
     if (
       [
+        'MemberNotificationsController',
+        'CmsLogsController',
+        'NotificationTemplatesController',
         'MoodTrackerController',
         'AssessmentController',
         'CmsAssessmentController',

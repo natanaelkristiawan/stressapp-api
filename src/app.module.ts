@@ -1,3 +1,6 @@
+import { CmsLogsModule } from './cms-logs/cms-logs.module';
+import { NotificationEventsModule } from './notification-events/notification-events.module';
+import { NotificationEvent } from './entity/notification-event.entity';
 import { NotificationTemplatesModule } from './notification-templates/notification-templates.module';
 import { NotificationTemplate } from './entity/notification-template.entity';
 import { MemberNotificationsModule } from './member-notifications/member-notifications.module';
@@ -122,7 +125,7 @@ import { CronModule } from './cron/cron.module';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE_MIMATE,
-      entities: [NotificationTemplate, MemberNotification, Interest, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
+      entities: [NotificationEvent, NotificationTemplate, MemberNotification, Interest, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
         CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner], // Your entities
       synchronize: true, // User-approved development schema synchronization
@@ -171,6 +174,8 @@ import { CronModule } from './cron/cron.module';
     PushDevicesModule,
     MemberNotificationsModule,
     NotificationTemplatesModule,
+    NotificationEventsModule,
+    CmsLogsModule,
     AssessmentModule,
     MemberAuthModule,
     MoodTrackerModule,
@@ -313,6 +318,8 @@ export class AppModule {
     consumer.apply(ActivityMiddleware).exclude(
       { path: 'cms-notification-templates', method: RequestMethod.ALL },
       { path: 'cms-notification-templates/(.*)', method: RequestMethod.ALL },
+      { path: 'cms-logs', method: RequestMethod.ALL },
+      { path: 'cms-logs/(.*)', method: RequestMethod.ALL },
       { path: 'cms-interests', method: RequestMethod.ALL },
       { path: 'cms-interests/(.*)', method: RequestMethod.ALL },
       { path: 'cms-psychologists', method: RequestMethod.ALL },

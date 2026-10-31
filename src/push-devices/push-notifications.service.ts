@@ -155,7 +155,44 @@ export class PushNotificationsService {
       );
     }
 
-    const messaging = this.messaging();
+    return this.sendToDevices(
+      recipients,
+      {
+        title: 'Temu Sobat — Tes notifikasi',
+        body: 'Ini adalah notifikasi uji coba dari CMS Temu Sobat.',
+      },
+      { type: 'test-notification' },
+    );
+  }
+
+  /** Sends a saved activity snapshot to eligible live installations, without automatic retries. */
+  async sendNotification(
+    memberId: number,
+    title: string,
+    body: string,
+    notificationId: number,
+    category: string,
+  ) {
+    const recipients = await this.devices.recipients(memberId);
+    return this.sendToDevices(
+      recipients,
+      { title, body },
+      {
+        type: 'member-notification',
+        notificationId: String(notificationId),
+        category,
+      },
+    );
+  }
+
+  /** Shares bounded multicast delivery and safe diagnostic aggregation with the CMS test. */
+  private async sendToDevices(
+    recipients: Awaited<ReturnType<PushDevicesService['recipients']>>,
+    notification: { title: string; body: string },
+    data: Record<string, string>,
+  ) {
+    const fcmDevices = recipients.filter((device) => device.provider === 'fcm');
+    const messaging = fcmDevices.length ? this.messaging() : null;
     let accepted = 0;
     let failed = 0;
     const failures = new Map<string, number>();
@@ -166,11 +203,8 @@ export class PushNotificationsService {
       try {
         const result = await messaging.sendEachForMulticast({
           tokens: batch.map((device) => device.token),
-          notification: {
-            title: 'Temu Sobat — Tes notifikasi',
-            body: 'Ini adalah notifikasi uji coba dari CMS Temu Sobat.',
-          },
-          data: { type: 'test-notification' },
+          notification,
+          data,
           android: { notification: { channelId: 'default' } },
         });
         accepted += result.successCount;

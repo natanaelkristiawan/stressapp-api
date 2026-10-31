@@ -11,6 +11,6 @@ import { PushDevicesService } from './push-devices.service';
   imports: [MemberAuthModule, AdminAuthModule],
   controllers: [PushDevicesController, CmsPushSettingsController],
   providers: [PushDevicesService, PushNotificationsService, CmsMembersGuard],
-  exports: [PushDevicesService],
+  exports: [PushDevicesService, PushNotificationsService],
 })
 export class PushDevicesModule {}

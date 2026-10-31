@@ -1,3 +1,4 @@
+import { NotificationEvent } from '../entity/notification-event.entity';
 import 'reflect-metadata';
 import {
   BadRequestException,
@@ -74,6 +75,7 @@ function createDirectMessageHarness() {
   const follows: UserFollowEntity[] = [];
   const conversations: Conversation[] = [];
   const messages: Message[] = [];
+  const notificationEvents: Partial<NotificationEvent>[] = [];
   let nextConversationId = 1;
   let nextMessageId = 1;
 
@@ -329,6 +331,12 @@ function createDirectMessageHarness() {
   };
 
   const manager = {
+    insert: jest.fn(
+      async (entity: unknown, values: Partial<NotificationEvent>) => {
+        expect(entity).toBe(NotificationEvent);
+        notificationEvents.push(values);
+      },
+    ),
     createQueryBuilder: () => {
       let lockedIds: number[] = [];
       const qb = {
@@ -365,11 +373,13 @@ function createDirectMessageHarness() {
     manager: {
       transaction: async <T>(cb: (em: typeof manager) => Promise<T>) => {
         const messageCount = messages.length;
+        const eventCount = notificationEvents.length;
         const conversationTimes = conversations.map((row) => row.updatedAt);
         try {
           return await cb(manager);
         } catch (error) {
           messages.splice(messageCount);
+          notificationEvents.splice(eventCount);
           conversations.forEach((row, index) => {
             row.updatedAt = conversationTimes[index];
           });
@@ -408,6 +418,8 @@ function createDirectMessageHarness() {
 
   return {
     service,
+    manager,
+    notificationEvents,
     moderation,
     conversationRepository,
     members,
@@ -627,6 +639,12 @@ describe('Chat moderation and retry boundaries', () => {
     );
     expect(replay.messageId).toBe(first.messageId);
     expect(harness.messages).toHaveLength(1);
+    expect(harness.notificationEvents).toHaveLength(1);
+    expect(harness.notificationEvents[0]).toMatchObject({
+      type: 'message',
+      sourceId: first.messageId,
+    });
+    expect(JSON.stringify(harness.notificationEvents)).not.toContain('Halo');
     expect(harness.moderation.assertChatPublishable).toHaveBeenCalledTimes(1);
     await expect(
       harness.service.sendMemberChatMessage(
@@ -692,6 +710,31 @@ describe('Chat moderation and retry boundaries', () => {
 });
 
 describe('Chat commit failures', () => {
+  it('rolls back the message if durable notification recording fails', async () => {
+    const harness = createDirectMessageHarness();
+    harness.addAcceptedFriendship(1, 2);
+    const room = await harness.service.openMemberChatWithFriend(1, 2);
+    harness.manager.insert.mockRejectedValueOnce(
+      new Error('Synthetic outbox failure'),
+    );
+    await expect(
+      harness.service.sendMemberChatMessage(
+        1,
+        room.conversationId,
+        'Halo',
+        'outbox-failure-test',
+      ),
+    ).rejects.toThrow('Synthetic outbox failure');
+    expect(harness.messages).toHaveLength(0);
+    expect(harness.notificationEvents).toHaveLength(0);
+    await harness.service.sendMemberChatMessage(
+      1,
+      room.conversationId,
+      'Halo',
+      'outbox-failure-test',
+    );
+    expect(harness.notificationEvents).toHaveLength(1);
+  });
   it('rolls back a message if the conversation update fails, then permits a safe retry', async () => {
     const harness = createDirectMessageHarness();
     harness.addAcceptedFriendship(1, 2);

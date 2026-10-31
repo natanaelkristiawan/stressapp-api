@@ -127,6 +127,16 @@ async function main() {
     )
     .compile();
   const app = module.createNestApplication();
+  const {
+    SuccessInterceptor,
+  } = require('../src/common/interceptors/success.interceptor');
+  const {
+    NullToEmptyInterceptor,
+  } = require('../src/common/interceptors/null-to-empty.interceptor');
+  app.useGlobalInterceptors(
+    new SuccessInterceptor(),
+    new NullToEmptyInterceptor(),
+  );
   app.useLogger(false);
   const jwt = new JwtService({ secret: 'synthetic-notification-test-key' });
   const claims = {
@@ -411,7 +421,7 @@ async function main() {
       'utf8',
     );
     assert(source.includes('NotificationTemplatesModule,'));
-    assert(source.includes('entities: [NotificationTemplate,'));
+    assert(/entities: \[[\s\S]*?\bNotificationTemplate\b/.test(source));
     assert(
       source.includes(
         "{ path: 'cms-notification-templates/(.*)', method: RequestMethod.ALL }",

@@ -25,6 +25,7 @@ export class LoggingInterceptor implements NestInterceptor {
         'PushDevicesController',
         'CmsPushSettingsController',
         'NotificationTemplatesController',
+        'CmsLogsController',
         'CmsModerationSettingsController',
         'AdminAuthController',
         'CmsMembersController',

@@ -1,3 +1,4 @@
+import { Member } from '../entity/user-mimate.entity';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, IsNull } from 'typeorm';
@@ -7,6 +8,32 @@ import { NotificationListDto } from './member-notifications.dto';
 @Injectable()
 export class MemberNotificationsService {
   constructor(@InjectDataSource('mimate') private readonly db: DataSource) {}
+
+  /** Returns only notification scheduling settings, never unrelated profile data. */
+  async settings(memberId: number) {
+    const member = await this.db.getRepository(Member).findOne({
+      where: { id: memberId },
+      select: { id: true, notificationTimeZone: true },
+    });
+    if (!member) {
+      throw new NotFoundException('Anggota tidak ditemukan.');
+    }
+    return {
+      timeZone: member.notificationTimeZone,
+      moodReminderLocalTime: '20:00',
+    };
+  }
+
+  /** Stores one account-owned timezone shared by its logged-in installations. */
+  async saveSettings(memberId: number, timeZone: string) {
+    const result = await this.db
+      .getRepository(Member)
+      .update({ id: memberId }, { notificationTimeZone: timeZone });
+    if (!result.affected) {
+      throw new NotFoundException('Anggota tidak ditemukan.');
+    }
+    return { timeZone, moodReminderLocalTime: '20:00' };
+  }
 
   /** Lists one category of the member's retained notifications, newest first. */
   async list(memberId: number, input: NotificationListDto) {
