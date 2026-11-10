@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { GameLevel } from '../entity/game-level.entity';
 import { Game } from '../entity/game.entity';
@@ -29,14 +29,15 @@ import {
 @Injectable()
 export class AdminGameService {
   constructor(
-    @InjectRepository(GameLevel)
+    @InjectRepository(GameLevel, 'mimate')
     private readonly gameLevelRepo: Repository<GameLevel>,
-    @InjectRepository(Game)
+    @InjectRepository(Game, 'mimate')
     private readonly gameRepo: Repository<Game>,
-    @InjectRepository(GameStep)
+    @InjectRepository(GameStep, 'mimate')
     private readonly gameStepRepo: Repository<GameStep>,
-    @InjectRepository(MemberGameSubmission)
+    @InjectRepository(MemberGameSubmission, 'mimate')
     private readonly submissionRepo: Repository<MemberGameSubmission>,
+    @InjectDataSource('mimate')
     private readonly dataSource: DataSource,
   ) {}
 

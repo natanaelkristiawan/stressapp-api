@@ -11,12 +11,10 @@ import { AdminGameService } from './admin-game.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      GameLevel,
-      Game,
-      GameStep,
-      MemberGameSubmission,
-    ]),
+    TypeOrmModule.forFeature(
+      [GameLevel, Game, GameStep, MemberGameSubmission],
+      'mimate',
+    ),
     AdminAuthModule,
   ],
   controllers: [AdminGameController],
