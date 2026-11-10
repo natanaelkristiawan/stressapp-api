@@ -25,5 +25,5 @@ export const AppDataSource = new DataSource({
   ],
   migrations: [join(__dirname, 'migrations/*{.ts,.js}')],
   migrationsTableName: 'typeorm_migrations',
-  synchronize: true,
+  synchronize: false,
 });

@@ -17,6 +17,11 @@ import {
   import { QuestPointDetail } from './quest-point-detail.entity';
   
   @Index('idx_created_at', ['created_at'])
+  @Index('idx_comments_post_parent', [
+    'backup_post_with_attribute_id',
+    'backup_comment_id',
+    'created_at',
+  ])
   @Entity({
     engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',
     name: 'backup_comments',
@@ -58,6 +63,9 @@ import {
     @DeleteDateColumn()
     deleted_at?: Date;
 
+
+    @Column({ nullable: true })
+    backup_post_with_attribute_id?: number;
 
     @Column({ nullable: true })
     backup_comment_id?: number;
