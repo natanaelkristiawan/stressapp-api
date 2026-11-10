@@ -1,3 +1,5 @@
+import { MemberGameModule } from './member-game/member-game.module';
+import { AdminGameModule } from './admin-game/admin-game.module';
 import { CmsLogsModule } from './cms-logs/cms-logs.module';
 import { NotificationEventsModule } from './notification-events/notification-events.module';
 import { NotificationEvent } from './entity/notification-event.entity';
@@ -105,6 +107,11 @@ import { SettingEntity } from './entity/setting.entity';
 import { LogLastActiveManual } from './entity/log-last-active-manual.entity';
 import { HofList } from './entity/hof-list.entity';
 import { CampaignWinner } from './entity/campaign-winner.entity';
+import { GameLevel } from './entity/game-level.entity';
+import { Game } from './entity/game.entity';
+import { GameStep } from './entity/game-step.entity';
+import { MemberGameProgress } from './entity/member-game-progress.entity';
+import { MemberGameSubmission } from './entity/member-game-submission.entity';
 import { WinnerModule } from './winner/winner.module';
 import { HofModule } from './hof/hof.module';
 import { CronModule } from './cron/cron.module';
@@ -127,7 +134,8 @@ import { CronModule } from './cron/cron.module';
       database: process.env.DB_DATABASE_MIMATE,
       entities: [NotificationEvent, NotificationTemplate, MemberNotification, Interest, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
-        CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner], // Your entities
+        CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner,
+        GameLevel, Game, GameStep, MemberGameProgress, MemberGameSubmission], // Your entities
       synchronize: true, // User-approved development schema synchronization
 
     }),
@@ -201,6 +209,8 @@ import { CronModule } from './cron/cron.module';
     CmsMoodParticipationModule,
     RequestLogModule,
     AdminQuestModule,
+    AdminGameModule,
+    MemberGameModule,
     QuestModule,
     AdminAuthModule,
     AdminPostModule,
@@ -322,6 +332,8 @@ export class AppModule {
       { path: 'cms-logs/(.*)', method: RequestMethod.ALL },
       { path: 'cms-interests', method: RequestMethod.ALL },
       { path: 'cms-interests/(.*)', method: RequestMethod.ALL },
+      { path: 'admin-games', method: RequestMethod.ALL },
+      { path: 'admin-games/(.*)', method: RequestMethod.ALL },
       { path: 'cms-psychologists', method: RequestMethod.ALL },
       { path: 'cms-psychologists/(.*)', method: RequestMethod.ALL },
       { path: 'cms-breathing/(.*)', method: RequestMethod.ALL },

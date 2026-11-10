@@ -633,18 +633,6 @@ export class CardRevisionService {
       'getMessages', // message dm
     ];
 
-    // Total events (current window)
-    const { total: count_1_str } = await this.requestLogEntity
-      .createQueryBuilder('log')
-      .select('COUNT(log.backup_member_id)', 'total')
-      .where('log.handler IN (:...handlers)', { handlers })
-      .andWhere('log.backup_member_id IS NOT NULL')
-      .andWhere('log.createdAt BETWEEN :start AND :end', {
-        start: startUtc,
-        end: endUtc,
-      })
-      .getRawOne<{ total: string }>();
-
     // Daily breakdown by UTC calendar day
     const detailRows = await this.requestLogEntity
       .createQueryBuilder('log')
@@ -665,6 +653,9 @@ export class CardRevisionService {
       count: parseInt(r.count, 10) || 0, // number
     }));
 
+    // Total events (current window): same WHERE as the daily rows, so no second scan is needed
+    const count_1 = detailCount.reduce((sum, day) => sum + day.count, 0);
+
     // Total events (previous window)
     const { total: count_2_str } = await this.requestLogEntity
       .createQueryBuilder('log')
@@ -677,7 +668,6 @@ export class CardRevisionService {
       })
       .getRawOne<{ total: string }>();
 
-    const count_1 = parseInt(count_1_str ?? '0', 10);
     const count_2 = parseInt(count_2_str ?? '0', 10);
 
     let percentage: number;
@@ -727,15 +717,26 @@ export class CardRevisionService {
     return parseInt(result.count, 10);
   }
 
+  // Only the three totals are used here, so the daily breakdown and the
+  // previous-window count from the cardNew* methods are not recomputed.
   async cardActivityMembers() {
+    const startUtc = new Date(this.dateStart.getTime());
+    const endUtc = new Date(this.dateEnd.getTime());
+
     // new post
-    const { total: new_post } = await this.cardNewPosts();
+    const new_post = await this.postRepository.count({
+      where: { published_at: Between(startUtc, endUtc) },
+    });
 
     // new reply
-    const { total: new_reply } = await this.cardNewReplies();
+    const new_reply = await this.commentRepository.count({
+      where: { created_at: Between(startUtc, endUtc) },
+    });
 
     // new reaction
-    const { total: new_reaction } = await this.cardNewReactions();
+    const new_reaction = await this.reactionRepository.count({
+      where: { created_at: Between(startUtc, endUtc) },
+    });
 
     return { new_post, new_reply, new_reaction };
   }
@@ -951,6 +952,11 @@ export class CardRevisionService {
       start_date,
       end_date,
     );
+
+    if (type === 'view' && date_start && date_end) {
+      return this.topPostByViewsInRange(date_start, date_end);
+    }
+
     const qb = this.postRepository.createQueryBuilder('post');
 
     if (type === 'view') {
@@ -1032,6 +1038,36 @@ export class CardRevisionService {
     const result = await qb.getRawMany();
 
     return result.map((row) => ({
+      id: row.id,
+      title: row.title,
+      image: row.image,
+      count: Number(row.count),
+    }));
+  }
+
+  // Counts views per post on the index first, then joins only those posts.
+  // The date filter makes the LEFT JOIN in topPost() behave as an inner join,
+  // so this returns the same rows without joining every view to a post.
+  private async topPostByViewsInRange(start: Date, end: Date): Promise<TopPost[]> {
+    const rows = await this.dataSource.query(
+      `
+      SELECT post.id AS id, post.title AS title, post.image_path AS image, views.count AS count
+      FROM (
+        SELECT activity.postId, COUNT(*) AS count
+        FROM activity_logs activity
+        WHERE activity.action = 'view'
+          AND activity.targetType = 'post'
+          AND activity.createdAt BETWEEN ? AND ?
+        GROUP BY activity.postId
+      ) views
+      JOIN backup_post_with_attributes post ON post.id = views.postId AND post.deleted_at IS NULL
+      ORDER BY views.count DESC
+      LIMIT 10
+      `,
+      [start, end],
+    );
+
+    return rows.map((row) => ({
       id: row.id,
       title: row.title,
       image: row.image,

@@ -139,7 +139,13 @@ export class PostService {
         } else {
             after = uuidv1()
         }
-        if (countingTotalPost) {
+        // Only the default/latest feed uses this full-table count. The scoped modes
+        // (member/space/highlight/following) immediately recount their own scope below,
+        // so running this full-table COUNT for them was a wasted scan every first page.
+        if (
+            countingTotalPost &&
+            !['member', 'space', 'highlight', 'following'].includes(mode)
+        ) {
             totalData = await this.postRepository.count(
                 skipHiddenFilter
                     ? { where: { isPsychoeducation: false } }
@@ -285,6 +291,7 @@ export class PostService {
         postQuery = await this.postRepository.find(config)
 
         let posts: Post[] = []
+        const viewActivities: any[] = []
         for (let index = 0; index < postQuery.length; index++) {
             const element = postQuery[index];
 
@@ -455,8 +462,8 @@ export class PostService {
 
 
             if (mode != 'highlight') {
-                // add action activity
-                await this.activityService.createActivity({
+                // collect view activity; written off the request's critical path below
+                viewActivities.push({
                     userId: userId,
                     action: 'view',
                     postId: element.id,
@@ -466,6 +473,15 @@ export class PostService {
                 })
             }
             posts.push(post)
+        }
+
+        // Fire the 'view' writes concurrently, off the response path (was one awaited
+        // INSERT + 2 SELECTs per post inside the loop). Errors are swallowed: a missed
+        // view activity must never fail or slow down the feed request itself.
+        if (viewActivities.length) {
+            Promise.all(
+                viewActivities.map((a) => this.activityService.createActivity(a)),
+            ).catch(() => undefined)
         }
 
         // save in redis

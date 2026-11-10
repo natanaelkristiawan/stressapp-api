@@ -1,3 +1,4 @@
+import { MemberGameModule } from './member-game/member-game.module';
 import { PushDevicesModule } from './push-devices/push-devices.module';
 import { AssessmentModule } from './assessment/assessment.module';
 import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
@@ -28,6 +29,7 @@ import { NullToEmptyInterceptor } from './common/interceptors/null-to-empty.inte
 import { CommentReactionModule } from './comment-reaction/comment-reaction.module';
 import { AdminUserModule } from './admin-user/admin-user.module';
 import { AdminQuestModule } from './admin-quest/admin-quest.module';
+import { AdminGameModule } from './admin-game/admin-game.module';
 import { QuestModule } from './quest/quest.module';
 import { AdminStaffModule } from './admin-staff/admin-staff.module';
 import { AdminAuthModule } from './admin-auth/admin-auth.module';
@@ -115,6 +117,7 @@ async function bootstrap() {
       HighlightModule,
       TagModule,
       WinnerModule,
+      MemberGameModule,
       AppModule
     ]
   });
@@ -139,6 +142,7 @@ async function bootstrap() {
       AdminDashboardModule, 
       AdminUserModule, 
       AdminQuestModule, 
+      AdminGameModule,
       AdminStaffModule, 
       AdminAuthModule,
       AdminPostModule,

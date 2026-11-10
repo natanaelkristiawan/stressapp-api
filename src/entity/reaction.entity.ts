@@ -3,6 +3,7 @@ import { PostEntity } from "./post.entity";
 import { UserMimateEntity } from "./user-mimate.entity";
 import { QuestPointDetail } from "./quest-point-detail.entity";
 
+@Index('idx_created_at', ['created_at'])
 @Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "backup_reactions"})
 export class ReactionEntity {
     @PrimaryGeneratedColumn()

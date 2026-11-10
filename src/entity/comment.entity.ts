@@ -4,6 +4,7 @@ import {
     CreateDateColumn,
     DeleteDateColumn,
     Entity,
+    Index,
     JoinColumn,
     ManyToOne,
     OneToMany,
@@ -15,6 +16,7 @@ import {
   import { CommentReactionEntity } from './comment-reaction.entity';
   import { QuestPointDetail } from './quest-point-detail.entity';
   
+  @Index('idx_created_at', ['created_at'])
   @Entity({
     engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',
     name: 'backup_comments',

@@ -23,5 +23,7 @@ export const AppDataSource = new DataSource({
       )
       .map((file) => join(__dirname, '../entity', file)),
   ],
+  migrations: [join(__dirname, 'migrations/*{.ts,.js}')],
+  migrationsTableName: 'typeorm_migrations',
   synchronize: true,
 });

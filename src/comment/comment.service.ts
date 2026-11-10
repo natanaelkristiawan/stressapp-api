@@ -116,43 +116,127 @@ export class CommentService {
         const query = await this.commentRepository.find({
           where,
           order: { created_at: 'DESC' },
-          relations: ['member', 'post'],
+          relations: ['member'],
           take: limit,
           skip: offset,
         });
     
         totalData = await this.commentRepository.count({ where });
-    
+
+        // Replies: all for this post in ONE query (was a recursive per-comment N+1).
+        const allReplies = await this.commentRepository.find({
+          where: {
+            post: { id: post_id },
+            backup_comment_id: Not(IsNull()),
+            moderationStatus: 'approved',
+          },
+          relations: ['member'],
+          order: { created_at: 'DESC' },
+        });
+
+        // Reaction count + "reacted" for every comment/reply in ONE grouped query
+        // (was one SELECT-all-reaction-rows per comment/reply).
+        const commentIds = [
+          ...query.map((c) => c.id),
+          ...allReplies.map((r) => r.id),
+        ];
+        const reactionMap = new Map<number, CommentReactionInterface>();
+        if (commentIds.length) {
+          const reactionRows = await this.commentReactionRepository
+            .createQueryBuilder('r')
+            .select('r.backup_comment_id', 'cid')
+            .addSelect('COUNT(*)', 'cnt')
+            .addSelect(
+              'SUM(CASE WHEN r.backup_member_id = :uid THEN 1 ELSE 0 END)',
+              'reacted',
+            )
+            .where('r.backup_comment_id IN (:...ids)', { ids: commentIds })
+            .setParameter('uid', userId)
+            .groupBy('r.backup_comment_id')
+            .getRawMany();
+          for (const row of reactionRows) {
+            reactionMap.set(Number(row.cid), {
+              reaction: '+1',
+              count: Number(row.cnt),
+              reacted: Number(row.reacted) > 0,
+            });
+          }
+        }
+        const reactionsOf = (id: number): CommentReactionInterface =>
+          reactionMap.get(id) || { reaction: '+1', count: 0, reacted: false };
+
+        // parent id -> direct children (already created_at DESC from the query above)
+        const childrenMap = new Map<number, CommentEntity[]>();
+        for (const r of allReplies) {
+          const pid = r.backup_comment_id;
+          if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+          childrenMap.get(pid).push(r);
+        }
+
+        // pre-order DFS flatten: identical shape/order to the old recursive walk.
+        const flattenReplies = (parentId: number): CommentInterface[] => {
+          const out: CommentInterface[] = [];
+          for (const reply of childrenMap.get(parentId) || []) {
+            if (!reply.member) {
+              continue;
+            }
+            out.push({
+              id: reply.id,
+              title: reply.title,
+              description: reply.description,
+              parent_id: reply.backup_comment_id || null,
+              post_id: post_id,
+              member: {
+                id: reply.member.id,
+                name: this.getMemberName(
+                  reply.member.name,
+                  reply.member.mmid_fullname,
+                  reply.member.id,
+                ),
+                profilePictureUrl: reply.member.profilePictureUrl,
+                userId: reply.member.userId,
+              },
+              comments: [],
+              published_at: reply.created_at,
+              published_at_title: this.dateHelper.getDateRange(
+                reply.created_at,
+                new Date(),
+              ),
+              repliesCount: reply.repliesCount,
+              reactions: reactionsOf(reply.id),
+            });
+            out.push(...flattenReplies(reply.id));
+          }
+          return out;
+        };
+
         const response: CommentInterface[] = [];
     
         for (const comment of query) {
-          const reactions = await this.getReactions(comment.id, userId);
-          const replies = await this.getAllRepliesFlat(comment.id, userId);
-         
-            //   if member is null skip
-            if(!comment.member) {
-                continue
-            }
+          //   if member is null skip
+          if(!comment.member) {
+            continue;
+          }
 
-          let name = this.getMemberName(comment.member.name, comment.member.mmid_fullname, comment.member.id)
+          let name = this.getMemberName(comment.member.name, comment.member.mmid_fullname, comment.member.id);
 
           response.push({
             id: comment.id,
             title: comment.title,
             description: comment.description,
             parent_id: null,
-            post_id: comment.post.id,
+            post_id: post_id,
             member: {
               id: comment.member.id,
               name: name,
               profilePictureUrl: comment.member.profilePictureUrl,
               userId: comment.member.userId,
             },
-            comments: replies,
+            comments: flattenReplies(comment.id),
             published_at: comment.created_at,
             published_at_title: this.dateHelper.getDateRange(comment.created_at, new Date()),
             repliesCount: comment.repliesCount,
-            reactions,
+            reactions: reactionsOf(comment.id),
           });
         }
     
@@ -176,72 +260,6 @@ export class CommentService {
           offset,
           after,
           data: response,
-        };
-      }
-    
-      private async getAllRepliesFlat(commentId: number, userId: number): Promise<CommentInterface[]> {
-        const replies = await this.commentRepository.find({
-          where: {
-            parent: { id: commentId },
-            moderationStatus: 'approved',
-          },
-          relations: ['member', 'post'],
-          order: { created_at: 'DESC' },
-        });
-    
-        let flatReplies: CommentInterface[] = [];
-    
-        for (const reply of replies) {
-          const reactions = await this.getReactions(reply.id, userId);
-          const childReplies = await this.getAllRepliesFlat(reply.id, userId);
-    
-          let name = this.getMemberName(reply.member.name, reply.member.mmid_fullname, reply.member.id)
-
-          flatReplies.push({
-            id: reply.id,
-            title: reply.title,
-            description: reply.description,
-            parent_id: reply.backup_comment_id || null,
-            post_id: reply.post.id,
-            member: {
-              id: reply.member.id,
-              name: name,
-              profilePictureUrl: reply.member.profilePictureUrl,
-              userId: reply.member.userId,
-            },
-            comments: [],
-            published_at: reply.created_at,
-            published_at_title: this.dateHelper.getDateRange(reply.created_at, new Date()),
-            repliesCount: reply.repliesCount,
-            reactions,
-          });
-    
-          flatReplies = flatReplies.concat(childReplies);
-        }
-    
-        return flatReplies;
-      }
-    
-      private async getReactions(commentId: number, userId: number): Promise<CommentReactionInterface> {
-        const reactions = await this.commentReactionRepository.find({
-          where: { comment: { id: commentId } },
-          relations: ['member'],
-        });
-
-        let reacted:boolean= false
-
-        for (let index = 0; index < reactions.length; index++) {
-            const element = reactions[index];
-            if(element.member.id == userId) {
-                reacted = true
-            }
-            
-        }
-    
-        return {
-          reaction: '+1',
-          count: reactions.length,
-          reacted: reacted,
         };
       }
 

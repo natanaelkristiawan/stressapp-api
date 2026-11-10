@@ -15,6 +15,12 @@ export enum PostType {
   Vote = 'vote',
 }
 
+@Index('idx_hidden_deleted', ['isHidden', 'deleted_at'])
+@Index('idx_published_at', ['published_at'])
+@Index('idx_created_at', ['created_at'])
+@Index('idx_hidden_published', ['isHidden', 'published_at'])
+@Index('idx_member_published', ['backup_member_id', 'published_at'])
+@Index('idx_highlight_hidden_order', ['is_highlight', 'isHidden', 'order'])
 @Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "backup_post_with_attributes"})
 export class PostEntity {
     @Index()

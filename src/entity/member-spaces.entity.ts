@@ -1,7 +1,8 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { UserMimateEntity } from "./user-mimate.entity";
 import { SpaceEntity } from "./space.entity";
 
+@Index('idx_created_space', ['created_at', 'backup_space_id'])
 @Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "backup_member_space"})
 export class MemberSpaceEntity {
     @PrimaryGeneratedColumn()

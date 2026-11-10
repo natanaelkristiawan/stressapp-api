@@ -5,6 +5,7 @@ import { Quest } from "./quest.entity";
 import { QuestPointDetail } from "./quest-point-detail.entity";
 import { UserAdmin } from "./user-admin.entity";
 import { QuestPoint } from "./quest-point.entity";
+@Index('idx_activated_deleted', ['activated_at', 'deleted_at'])
 @Entity({engine: 'InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin',name: "members"})
 export class Member {
     @Column({ type: 'varchar', length: 100, nullable: true })

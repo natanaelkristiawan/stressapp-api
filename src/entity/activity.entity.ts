@@ -13,6 +13,9 @@ import { PostEntity } from './post.entity';
 import { CommentEntity } from './comment.entity';
 import { ReactionEntity } from './reaction.entity';
 import { UserMimateEntity } from './user-mimate.entity';
+@Index('idx_action_created_cover', ['action', 'createdAt', 'userId', 'targetType', 'postId'])
+@Index('idx_user_action_created', ['userId', 'action', 'createdAt'])
+@Index('idx_created_user', ['createdAt', 'userId'])
 @Entity('activity_logs')
 export class Activity {
   @PrimaryGeneratedColumn()

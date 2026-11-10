@@ -1,6 +1,7 @@
 // src/request-log/request-log.entity.ts
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 'typeorm';
 
+@Index('idx_created_handler_member', ['createdAt', 'handler', 'backup_member_id'])
 @Entity('endpoint_logs')
 export class RequestLogEntity {
   @PrimaryGeneratedColumn()

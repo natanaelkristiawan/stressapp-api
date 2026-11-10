@@ -131,54 +131,50 @@ export class ExportRevisionService {
     const startUtc = new Date(startDay.getTime());
     const endUtc = new Date(endDay.getTime());
 
-    // Query active members within the UTC bounds
-    const activeUsers = await this.activityRepository
-      .createQueryBuilder('activity')
-      .innerJoin('members', 'member', 'member.id = activity.userId')
-      .select([
-        'member.id AS id',
-        'member.name AS name',
-        'member.email AS email',
-        'member.created_at AS created_at',
-        'member.updated_at AS updated_at',
-        'member.username AS username',
-        'member.status AS status',
-        'member.member_role AS member_role',
-        'member.dob AS dob',
-        'member.gender AS gender',
-        'member.total_posts AS total_posts',
-        'member.total_comments AS total_comments',
-        'member.total_likes AS total_likes',
-        'member.total_shares AS total_shares',
-        'member.last_seen_at AS last_seen_at',
-      ])
-      .where('activity.createdAt BETWEEN :start AND :end', {
-        start: startUtc,
-        end: endUtc,
-      })
-      .andWhere('member.memberAuthEnabled = :enabled', { enabled: true })
-      .andWhere(
-        'NOT EXISTS (SELECT 1 FROM users staff WHERE staff.backup_member_id = member.id)',
-      )
-      .groupBy('member.id')
-      .orderBy('member.last_seen_at', 'DESC')
-      .getRawMany<{
-        id: number;
-        name: string;
-        email: string;
-        created_at: Date;
-        updated_at: Date;
-        username: string;
-        status: string;
-        member_role: string;
-        dob: Date | null;
-        gender: string | null;
-        total_posts: number;
-        total_comments: number;
-        total_likes: number;
-        total_shares: number;
-        last_seen_at: Date | null;
-      }>();
+    // Query active members within the UTC bounds.
+    //
+    // Rewritten: find the DISTINCT active member ids first, then join members.
+    // The old query joined every activity_logs row in the window to members
+    // and GROUP BY'd, which forced a scan + temp table + filesort. This form lets
+    // activity_logs(createdAt, userId) (idx_created_user) range-seek the window and
+    // cover the join.
+    // The member.id tie-breaker below makes the export deterministic without changing
+    // which rows are returned.
+    const activeUsers = (await this.dataSource.query(
+      `SELECT member.id AS id, member.name AS name, member.email AS email,
+              member.created_at AS created_at, member.updated_at AS updated_at,
+              member.username AS username, member.status AS status,
+              member.member_role AS member_role, member.dob AS dob, member.gender AS gender,
+              member.total_posts AS total_posts, member.total_comments AS total_comments,
+              member.total_likes AS total_likes, member.total_shares AS total_shares,
+              member.last_seen_at AS last_seen_at
+       FROM members member
+       JOIN (
+         SELECT DISTINCT al.userId
+         FROM activity_logs al
+         WHERE al.createdAt BETWEEN ? AND ? AND al.userId IS NOT NULL
+       ) active ON active.userId = member.id
+       WHERE member.memberAuthEnabled = 1
+         AND NOT EXISTS (SELECT 1 FROM users staff WHERE staff.backup_member_id = member.id)
+       ORDER BY member.last_seen_at DESC, member.id DESC`,
+      [startUtc, endUtc],
+    )) as Array<{
+      id: number;
+      name: string;
+      email: string;
+      created_at: Date;
+      updated_at: Date;
+      username: string;
+      status: string;
+      member_role: string;
+      dob: Date | null;
+      gender: string | null;
+      total_posts: number;
+      total_comments: number;
+      total_likes: number;
+      total_shares: number;
+      last_seen_at: Date | null;
+    }>;
 
     // Map to export shape in UTC
 
