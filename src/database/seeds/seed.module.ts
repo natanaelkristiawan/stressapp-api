@@ -4,13 +4,14 @@ import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SeedService } from './seed.service';
 import { Quest } from 'src/entity/quest.entity';
+import { NotificationTemplate } from 'src/entity/notification-template.entity';
 
 @Module({
     imports: [
         ConfigModule.forRoot({ envFilePath: ['.env'], isGlobal: true }),
         // Standalone seed command shares the local datasource entity filtering.
         TypeOrmModule.forRoot({ ...AppDataSource.options, name: 'mimate', synchronize: true }),
-        TypeOrmModule.forFeature([Quest], 'mimate'),
+        TypeOrmModule.forFeature([Quest, NotificationTemplate], 'mimate'),
     ],
     providers: [SeedService],
 })

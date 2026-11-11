@@ -672,7 +672,7 @@ export class PostService {
             post_type: element.post_type,
             votes: votes,
             my_vote_id: my_vote_id,
-            is_post_owner: element.member.id === userId,
+            is_post_owner: element.member ? element.member.id === userId : false,
             vote_start: element.vote_start ? this.formatDate(new Date(element.vote_start)) : null,
             vote_end: element.vote_end ? this.formatDate(new Date(element.vote_end)) : null,
             total_vote: element.total_vote,
@@ -854,7 +854,7 @@ export class PostService {
         }
 
         // update total_post in member and space
-        await this.updateTotalPost(memberId, spaceId)
+        await this.updateTotalPost(memberId, space?.id);
 
 
         return await this.detailPost(post.id, userId)
@@ -862,16 +862,18 @@ export class PostService {
 
 
     // wrap as function 
-    async updateTotalPost(memberId: number, spaceId: number) {
+    async updateTotalPost(memberId: number, spaceId?: number) {
         // calculating total_post in member, first get post who user upload, count and updte in table member
         let postMember = await this.postRepository.find({ where: { member: { id: memberId }, isPsychoeducation: false } })
         let totalPost = postMember.length
         await this.userMimateRepository.update({ id: memberId }, { total_posts: totalPost })
 
         // calculating total_post in space, first get post who space, count and updte in table space
-        let postSpace = await this.postRepository.find({ where: { space: { id: spaceId } } })
-        let totalPostSpace = postSpace.length
-        await this.spaceRepository.update({ id: spaceId }, { postsCount: totalPostSpace })
+        if (spaceId) {
+            let postSpace = await this.postRepository.find({ where: { space: { id: spaceId } } })
+            let totalPostSpace = postSpace.length
+            await this.spaceRepository.update({ id: spaceId }, { postsCount: totalPostSpace })
+        }
     }
 
 
@@ -1055,7 +1057,7 @@ export class PostService {
         await this.postRepository.softRemove(existingPost);
 
         // delete in member total_post
-        await this.updateTotalPost(existingPost.member.id, existingPost.space.id)
+        await this.updateTotalPost(existingPost.member.id, existingPost.space?.id)
 
         return true
     }

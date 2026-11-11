@@ -2,12 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Quest } from 'src/entity/quest.entity';
+import { NotificationTemplate } from 'src/entity/notification-template.entity';
+import { DEFAULT_NOTIFICATION_TEMPLATES } from './notification-template.seed';
 
 @Injectable()
 export class SeedService {
     constructor(
         @InjectRepository(Quest, 'mimate')
         private readonly questRepo: Repository<Quest>,
+        @InjectRepository(NotificationTemplate, 'mimate')
+        private readonly templateRepo: Repository<NotificationTemplate>,
     ) { }
 
     async run() {
@@ -68,6 +72,28 @@ export class SeedService {
                 console.log(`[+] Seeded quest: ${data.title} (${data.action})`);
             } else {
                 console.log(`[-] Quest already exists, skipped: ${data.action}`);
+            }
+        }
+
+        // Seed automatic notification templates idempotently
+        for (const item of DEFAULT_NOTIFICATION_TEMPLATES) {
+            const existing = await this.templateRepo.findOne({ where: { type: item.type } });
+            if (!existing) {
+                await this.templateRepo.save(this.templateRepo.create({
+                    type: item.type,
+                    title: item.title,
+                    body: item.body,
+                    revision: 1,
+                }));
+                console.log(`[+] Seeded notification template: ${item.type}`);
+            } else if (!existing.title?.trim() || !existing.body?.trim()) {
+                existing.title = item.title;
+                existing.body = item.body;
+                existing.revision = (existing.revision || 0) + 1;
+                await this.templateRepo.save(existing);
+                console.log(`[*] Updated empty notification template: ${item.type}`);
+            } else {
+                console.log(`[-] Notification template already configured: ${item.type}`);
             }
         }
 
