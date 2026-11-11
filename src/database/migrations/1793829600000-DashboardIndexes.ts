@@ -12,6 +12,7 @@ export class DashboardIndexes1793829600000 implements MigrationInterface {
     [table: string, name: string, columns: string]
   > = [
     ['members', 'idx_activated_deleted', 'activated_at, deleted_at'],
+    ['backup_members', 'idx_activated_deleted', 'activated_at, deleted_at'],
     ['backup_member_space', 'idx_created_space', 'created_at, backup_space_id'],
     [
       'backup_post_with_attributes',
@@ -35,11 +36,23 @@ export class DashboardIndexes1793829600000 implements MigrationInterface {
     ],
   ];
 
+  private async tableExists(
+    queryRunner: QueryRunner,
+    table: string,
+  ): Promise<boolean> {
+    const result = await queryRunner.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '${table}' LIMIT 1`,
+    );
+    return Array.isArray(result) && result.length > 0;
+  }
+
   private async indexExists(
     queryRunner: QueryRunner,
     table: string,
     indexName: string,
   ): Promise<boolean> {
+    const hasTable = await this.tableExists(queryRunner, table);
+    if (!hasTable) return false;
     const result = await queryRunner.query(
       `SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = '${table}' AND index_name = '${indexName}' LIMIT 1`,
     );
@@ -48,6 +61,8 @@ export class DashboardIndexes1793829600000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     for (const [table, name, columns] of this.indexes) {
+      const hasTable = await this.tableExists(queryRunner, table);
+      if (!hasTable) continue;
       const exists = await this.indexExists(queryRunner, table, name);
       if (!exists) {
         await queryRunner.query(
@@ -59,6 +74,8 @@ export class DashboardIndexes1793829600000 implements MigrationInterface {
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     for (const [table, name] of [...this.indexes].reverse()) {
+      const hasTable = await this.tableExists(queryRunner, table);
+      if (!hasTable) continue;
       const exists = await this.indexExists(queryRunner, table, name);
       if (exists) {
         await queryRunner.query(

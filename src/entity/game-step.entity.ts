@@ -52,6 +52,23 @@ export class GameStep {
   @Column({ name: 'video_url', type: 'varchar', length: 2048, nullable: true })
   videoUrl: string | null;
 
+  @Column({
+    name: 'video_source',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+    default: 'youtube',
+  })
+  videoSource: 'self' | 'youtube' | null;
+
+  @Column({
+    name: 'thumbnail_url',
+    type: 'varchar',
+    length: 2048,
+    nullable: true,
+  })
+  thumbnailUrl: string | null;
+
   @Column({ name: 'reflective_title', length: 150, nullable: true })
   reflectiveTitle: string | null;
 

@@ -246,6 +246,10 @@ export class MemberGameService {
       descriptionExtra: s.descriptionExtra,
       instruction: s.instruction,
       videoUrl: s.videoUrl,
+      videoSource:
+        s.videoSource ??
+        (s.layout === 'post-with-video' ? 'youtube' : null),
+      thumbnailUrl: s.thumbnailUrl ?? null,
       reflectiveTitle: s.reflectiveTitle,
       reflectiveQuestion: s.reflectiveQuestion,
     }));

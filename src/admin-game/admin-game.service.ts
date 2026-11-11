@@ -212,6 +212,10 @@ export class AdminGameService {
         descriptionExtra: step.descriptionExtra,
         instruction: step.instruction,
         videoUrl: step.videoUrl,
+        videoSource:
+          step.videoSource ??
+          (step.layout === 'post-with-video' ? 'youtube' : null),
+        thumbnailUrl: step.thumbnailUrl ?? null,
         reflectiveTitle: step.reflectiveTitle,
         reflectiveQuestion: step.reflectiveQuestion,
       })),
@@ -276,6 +280,10 @@ export class AdminGameService {
           descriptionExtra: s.descriptionExtra ?? null,
           instruction: s.instruction ?? null,
           videoUrl: s.videoUrl ?? null,
+          videoSource:
+            s.videoSource ??
+            (s.layout === 'post-with-video' ? 'youtube' : null),
+          thumbnailUrl: s.thumbnailUrl ?? null,
           reflectiveTitle: s.reflectiveTitle ?? null,
           reflectiveQuestion: s.reflectiveQuestion ?? null,
         }),
@@ -358,6 +366,10 @@ export class AdminGameService {
             descriptionExtra: s.descriptionExtra ?? null,
             instruction: s.instruction ?? null,
             videoUrl: s.videoUrl ?? null,
+            videoSource:
+              s.videoSource ??
+              (s.layout === 'post-with-video' ? 'youtube' : null),
+            thumbnailUrl: s.thumbnailUrl ?? null,
             reflectiveTitle: s.reflectiveTitle ?? null,
             reflectiveQuestion: s.reflectiveQuestion ?? null,
           }),

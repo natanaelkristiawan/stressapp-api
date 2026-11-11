@@ -22,6 +22,8 @@ export interface AdminGameStepItem {
   descriptionExtra: string | null;
   instruction: string | null;
   videoUrl: string | null;
+  videoSource?: 'self' | 'youtube' | null;
+  thumbnailUrl?: string | null;
   reflectiveTitle: string | null;
   reflectiveQuestion: string | null;
 }

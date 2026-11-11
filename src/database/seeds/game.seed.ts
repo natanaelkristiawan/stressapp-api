@@ -445,6 +445,10 @@ export async function seedGames(db: DataSource): Promise<void> {
             descriptionExtra: (stepData as any).descriptionExtra || null,
             instruction: stepData.instruction || null,
             videoUrl: (stepData as any).videoUrl || null,
+            videoSource:
+              (stepData as any).videoSource ||
+              (stepData.layout === 'post-with-video' ? 'youtube' : null),
+            thumbnailUrl: (stepData as any).thumbnailUrl || null,
             reflectiveTitle: (stepData as any).reflectiveTitle || null,
             reflectiveQuestion: (stepData as any).reflectiveQuestion || null,
           });
@@ -455,6 +459,10 @@ export async function seedGames(db: DataSource): Promise<void> {
           step.descriptionExtra = (stepData as any).descriptionExtra || null;
           step.instruction = stepData.instruction || null;
           step.videoUrl = (stepData as any).videoUrl || null;
+          step.videoSource =
+            (stepData as any).videoSource ||
+            (stepData.layout === 'post-with-video' ? 'youtube' : null);
+          step.thumbnailUrl = (stepData as any).thumbnailUrl || null;
           step.reflectiveTitle = (stepData as any).reflectiveTitle || null;
           step.reflectiveQuestion = (stepData as any).reflectiveQuestion || null;
         }

@@ -137,6 +137,24 @@ export class CreateGameStepDto {
   videoUrl?: string;
 
   @ApiPropertyOptional({
+    description: 'Format sumber video: youtube atau self',
+    enum: ['self', 'youtube'],
+    example: 'youtube',
+  })
+  @IsOptional()
+  @IsIn(['self', 'youtube'])
+  videoSource?: 'self' | 'youtube';
+
+  @ApiPropertyOptional({
+    description: 'URL custom thumbnail untuk video edukasi',
+    example: 'https://cdn.example.com/thumbnails/game-video-thumb.jpg',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  thumbnailUrl?: string;
+
+  @ApiPropertyOptional({
     description: 'Judul popup modal reflektif',
     example: 'Pertanyaan Reflektif',
   })
