@@ -35,6 +35,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
           ? exception.name
           : 'UnknownError';
       this.logger.error(`Shared upload failed: name=${name} code=${safeCode}`);
+    } else if (status === 500) {
+      const name =
+        exception instanceof Error &&
+        /^[A-Za-z0-9_]{1,64}$/.test(exception.name)
+          ? exception.name
+          : 'UnknownError';
+      const errorMessage =
+        exception instanceof Error ? exception.message : String(exception);
+      this.logger.error(
+        `[${request.method} ${request.originalUrl}] 500 Internal Server Error: ${name} - ${errorMessage}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
     }
 
     let message: string | string[] = 'Something went wrong';

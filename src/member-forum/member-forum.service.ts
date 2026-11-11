@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -97,6 +98,8 @@ function parseReportReason(input: string): ReportReason {
 
 @Injectable()
 export class MemberForumService {
+  private readonly logger = new Logger(MemberForumService.name);
+
   constructor(
     @InjectRepository(PostEntity, 'mimate')
     private readonly postRepository: Repository<PostEntity>,
@@ -113,6 +116,9 @@ export class MemberForumService {
 
   /** Formats raw post DTO from PostService into mobile forum schema contract. */
   private formatPost(post: PostDto, memberId: number): FormattedForumPost {
+    if (!post) {
+      throw new NotFoundException('Post data could not be retrieved');
+    }
     const isLiked = Boolean(post.reaction?.some((r) => r.reacted) || false);
 
     const hasPhoto = Boolean(
@@ -256,22 +262,30 @@ export class MemberForumService {
     dto: CreateMemberForumPostDto,
     memberId: number,
   ): Promise<FormattedForumPost> {
-    if (dto.spaceId) {
-      await this.requireCommunity(dto.spaceId);
-    }
-    const created = await this.postService.createPost(
-      {
-        title: dto.title.trim(),
-        content: dto.caption.trim(),
-        spaceId: dto.spaceId,
-        image: dto.image,
-        is_anonymous: Boolean(dto.anonymous),
-      },
-      memberId,
-      memberId,
-    );
+    try {
+      if (dto.spaceId) {
+        await this.requireCommunity(dto.spaceId);
+      }
+      const created = await this.postService.createPost(
+        {
+          title: dto.title.trim(),
+          content: dto.caption.trim(),
+          spaceId: dto.spaceId,
+          image: dto.image,
+          is_anonymous: Boolean(dto.anonymous),
+        },
+        memberId,
+        memberId,
+      );
 
-    return this.formatPost(created, memberId);
+      return this.formatPost(created, memberId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to create member forum post (memberId=${memberId}): ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
   }
 
   async updatePost(
