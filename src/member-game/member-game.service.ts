@@ -283,6 +283,27 @@ export class MemberGameService {
       throw new NotFoundException(`Game '${gameKey}' tidak ditemukan`);
     }
 
+    // Validasi server: pengiriman tidak boleh hanya berupa spasi atau string kosong
+    const noteTrimmed = body.note?.trim() || '';
+    const reflectiveTrimmed = body.reflectiveAnswer?.trim() || '';
+    const hasAttachments =
+      Array.isArray(body.attachments) && body.attachments.length > 0;
+    const cleanListAnswers = Array.isArray(body.listAnswers)
+      ? body.listAnswers
+          .map((a) => (typeof a === 'string' ? a.trim() : ''))
+          .filter((a) => a.length > 0)
+      : null;
+
+    if (body.listAnswers && (!cleanListAnswers || cleanListAnswers.length === 0)) {
+      throw new BadRequestException('Kolom input jawaban tidak boleh kosong.');
+    }
+
+    if (!noteTrimmed && !hasAttachments && !cleanListAnswers && !reflectiveTrimmed) {
+      throw new BadRequestException(
+        'Pengiriman refleksi atau jawaban misi tidak boleh kosong.',
+      );
+    }
+
     const now = new Date();
     let earnedPoints = 0;
     let nextMissionKey: string | null = null;
@@ -292,11 +313,14 @@ export class MemberGameService {
       const submission = manager.create(MemberGameSubmission, {
         memberId,
         gameId: game.id,
-        note: body.note || null,
-        attachments: body.attachments && body.attachments.length ? body.attachments : null,
-        confidenceScore: typeof body.confidenceScore === 'number' ? body.confidenceScore : null,
-        listAnswers: body.listAnswers && body.listAnswers.length ? body.listAnswers : null,
-        reflectiveAnswer: body.reflectiveAnswer || null,
+        note: noteTrimmed || null,
+        attachments: hasAttachments ? body.attachments : null,
+        confidenceScore:
+          typeof body.confidenceScore === 'number'
+            ? body.confidenceScore
+            : null,
+        listAnswers: cleanListAnswers,
+        reflectiveAnswer: reflectiveTrimmed || null,
       });
       await manager.save(MemberGameSubmission, submission);
 

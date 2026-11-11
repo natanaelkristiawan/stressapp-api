@@ -105,5 +105,30 @@ describe('MemberGameService - Overview and Leaderboard', () => {
     expect(result.leaderboard[1].isOwner).toBe(false);
     expect(result.myStats.points).toBe(150);
   });
+
+  it('should reject submission if note or listAnswers are completely blank', async () => {
+    const gameRepo = (service as any).gameRepository;
+    gameRepo.findOne = jest.fn().mockResolvedValue({
+      id: 1,
+      key: 'test-mission',
+      name: 'Test',
+      isPublished: true,
+      level: { levelNumber: 1 },
+    });
+
+    await expect(
+      service.submitMission(1, 'test-mission', {
+        note: '   ',
+        listAnswers: ['   ', ''],
+      })
+    ).rejects.toThrow('Kolom input jawaban tidak boleh kosong.');
+
+    await expect(
+      service.submitMission(1, 'test-mission', {
+        note: '   ',
+      })
+    ).rejects.toThrow('Pengiriman refleksi atau jawaban misi tidak boleh kosong.');
+  });
 });
+
 
