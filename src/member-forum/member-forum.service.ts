@@ -281,7 +281,9 @@ export class MemberForumService {
       return this.formatPost(created, memberId);
     } catch (error) {
       this.logger.error(
-        `Failed to create member forum post (memberId=${memberId}): ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to create member forum post (memberId=${memberId}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
         error instanceof Error ? error.stack : undefined,
       );
       throw error;
