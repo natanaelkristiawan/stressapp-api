@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -23,6 +24,7 @@ import {
 } from '../member-auth/member-auth.guard';
 import {
   GameKeyParamDto,
+  LeaderboardQueryDto,
   LevelNumberParamDto,
   SubmitGameMissionDto,
 } from './dtos/member-game.dto';
@@ -30,7 +32,9 @@ import {
   MemberGameDetailResponse,
   MemberGameItem,
   MemberGameLevelItem,
+  MemberGameOverviewResponse,
   MemberGameSubmitResponse,
+  MemberLeaderboardResponse,
 } from './interfaces/member-game.interface';
 import { MemberGameService } from './member-game.service';
 
@@ -56,6 +60,43 @@ export class MemberGameController {
       data,
     };
   }
+
+  @Get('overview')
+  @Header('Cache-Control', 'private, no-cache')
+  @ApiOperation({
+    summary: 'Ringkasan level aktif, total poin XP, dan peringkat member',
+  })
+  @ApiResponse({ status: 200, description: 'Berhasil memuat ringkasan game member' })
+  async getOverview(
+    @Req() req: MemberRequest,
+  ): Promise<GlobalResponse<MemberGameOverviewResponse>> {
+    const data = await this.memberGameService.getOverview(req.member.id);
+    return {
+      message: 'Berhasil memuat ringkasan game member',
+      data,
+    };
+  }
+
+  @Get('leaderboard')
+  @Header('Cache-Control', 'private, no-cache')
+  @ApiOperation({
+    summary: 'Peringkat leaderboard member beserta info top player hari ini',
+  })
+  @ApiResponse({ status: 200, description: 'Berhasil memuat leaderboard' })
+  async getLeaderboard(
+    @Req() req: MemberRequest,
+    @Query() query: LeaderboardQueryDto,
+  ): Promise<GlobalResponse<MemberLeaderboardResponse>> {
+    const data = await this.memberGameService.getLeaderboard(
+      req.member.id,
+      query.limit,
+    );
+    return {
+      message: 'Berhasil memuat leaderboard',
+      data,
+    };
+  }
+
 
   @Get('levels/:level/missions')
   @Header('Cache-Control', 'private, no-cache')

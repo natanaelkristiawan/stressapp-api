@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, MoreThan, Repository } from 'typeorm';
 import { GameLevel } from '../entity/game-level.entity';
 import { Game } from '../entity/game.entity';
 import { GameStep } from '../entity/game-step.entity';
@@ -24,8 +24,11 @@ import {
   MemberGameDetailResponse,
   MemberGameItem,
   MemberGameLevelItem,
+  MemberGameOverviewResponse,
   MemberGameStepItem,
   MemberGameSubmitResponse,
+  MemberLeaderboardItem,
+  MemberLeaderboardResponse,
 } from './interfaces/member-game.interface';
 
 @Injectable()
@@ -477,5 +480,82 @@ export class MemberGameService {
 
     return finishes === prevGames.length;
   }
+
+  /**
+   * Mengambil ringkasan status level dan poin member saat ini.
+   */
+  async getOverview(memberId: number): Promise<MemberGameOverviewResponse> {
+    const levels = await this.getLevels(memberId);
+    let currentLevel = 1;
+    for (const lvl of levels) {
+      if (lvl.isUnlocked) {
+        currentLevel = lvl.levelNumber;
+      }
+    }
+
+    const questPoint = await this.questPointRepository.findOne({
+      where: { memberId },
+    });
+    const totalPoints = questPoint?.totalPoints ?? 0;
+
+    let rank = 0;
+    if (totalPoints > 0) {
+      const higherCount = await this.questPointRepository.count({
+        where: { totalPoints: MoreThan(totalPoints) },
+      });
+      rank = higherCount + 1;
+    }
+
+    return {
+      currentLevel,
+      totalPoints,
+      rank,
+    };
+  }
+
+  /**
+   * Mengambil leaderboard member beserta info top player dan ranking member yang memanggil.
+   */
+  async getLeaderboard(
+    memberId: number,
+    limit: number = 10,
+  ): Promise<MemberLeaderboardResponse> {
+    const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+    const pointEntries = await this.questPointRepository.find({
+      where: { totalPoints: MoreThan(0) },
+      order: { totalPoints: 'DESC' },
+      take: safeLimit,
+      relations: ['member'],
+    });
+
+    const leaderboard: MemberLeaderboardItem[] = pointEntries.map(
+      (entry, idx) => ({
+        rank: idx + 1,
+        memberId: entry.memberId || 0,
+        name: entry.member?.name || 'Player',
+        points: entry.totalPoints,
+        avatarUrl:
+          entry.member?.profilePictureUrl ||
+          entry.member?.image_path ||
+          null,
+        isOwner: entry.memberId === memberId,
+      }),
+    );
+
+    const topPlayer = leaderboard.length > 0 ? leaderboard[0] : null;
+    const overview = await this.getOverview(memberId);
+
+    return {
+      topPlayer,
+      leaderboard,
+      myStats: {
+        rank: overview.rank,
+        points: overview.totalPoints,
+        currentLevel: overview.currentLevel,
+      },
+    };
+  }
 }
+
 

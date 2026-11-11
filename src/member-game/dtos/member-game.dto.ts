@@ -108,3 +108,18 @@ export class SubmitGameMissionDto {
   reflectiveAnswer?: string;
 }
 
+export class LeaderboardQueryDto {
+  @ApiPropertyOptional({
+    description: 'Jumlah baris leaderboard yang diambil',
+    example: 10,
+    default: 10,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
+}
+
+

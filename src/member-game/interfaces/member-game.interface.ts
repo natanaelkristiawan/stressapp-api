@@ -59,3 +59,29 @@ export interface MemberGameSubmitResponse {
   nextMissionKey: string | null;
 }
 
+export interface MemberGameOverviewResponse {
+  currentLevel: number;
+  totalPoints: number;
+  rank: number;
+}
+
+export interface MemberLeaderboardItem {
+  rank: number;
+  memberId: number;
+  name: string;
+  points: number;
+  avatarUrl: string | null;
+  isOwner: boolean;
+}
+
+export interface MemberLeaderboardResponse {
+  topPlayer: MemberLeaderboardItem | null;
+  leaderboard: MemberLeaderboardItem[];
+  myStats: {
+    rank: number;
+    points: number;
+    currentLevel: number;
+  };
+}
+
+
