@@ -388,7 +388,7 @@ export class PostService {
 
             // check if the post is owner
             let is_post_owner = false
-            if (element.member.id == userId) {
+            if (element.member && element.member.id == userId) {
                 is_post_owner = true
             }
 
@@ -396,7 +396,7 @@ export class PostService {
 
             let name = element.createdBy === 'Anonim'
             ? 'Anonim'
-            : this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id)
+            : (element.member ? this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id) : (element.createdBy || 'Anonim'))
 
             let votes: { id: number; vote: string; total_vote?: number; percentage?: number }[] = [];
             let my_vote_id = 0
@@ -421,22 +421,22 @@ export class PostService {
                 tags: tags,
                 repliesCount: element.totalRepliesCount,
                 reactionCount: reactionCount,
-                member: {
+                member: element.member ? {
                     id: element.member.id,
                     name: name,
                     email: element.member.email,
                     profilePictureUrl: element.member.profilePictureUrl,
                     is_dealer: element.member.is_dealer
-                },
-                space: {
+                } : null,
+                space: element.space ? {
                     id: element.space.id,
                     name: element.space.name,
                     description: element.space.description,
                     postsCount: element.space.postsCount,
                     membersCount: element.space.membersCount
-                },
+                } : null,
                 medias: medias,
-                mmidUserId: element.member.userId || 0,
+                mmidUserId: element.member?.userId || 0,
                 totalRepliesCount: element.totalRepliesCount,
                 created_at: this.formatDate(element.created_at),
                 published_at: this.formatDate(element.updated_at),
@@ -455,7 +455,7 @@ export class PostService {
 
 
             if (mode == 'highlight' && limit >= 5) {
-                post.image = element.member.profilePictureUrl
+                post.image = element.member?.profilePictureUrl || ''
                 post.type = 'image'
             }
 
@@ -622,7 +622,7 @@ export class PostService {
 
         let name = element.createdBy === 'Anonim'
             ? 'Anonim'
-            : this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id)
+            : (element.member ? this.getMemberName(element.member.name, element.member.mmid_fullname, element.member.id) : (element.createdBy || 'Anonim'))
 
 
         let votes: { id: number; vote: string; total_vote?: number; percentage?: number }[] = [];
@@ -648,22 +648,22 @@ export class PostService {
             tags: tags,
             repliesCount: element.totalRepliesCount,
             reactionCount: reactionCount,
-            member: {
+            member: element.member ? {
                 id: element.member.id,
                 name: name,
                 email: element.member.email,
                 profilePictureUrl: element.member.profilePictureUrl,
                 is_dealer: element.member.is_dealer
-            },
-            space: {
+            } : null,
+            space: element.space ? {
                 id: element.space.id,
                 name: element.space.name,
                 description: element.space.description,
                 postsCount: element.space.postsCount,
                 membersCount: element.space.membersCount
-            },
+            } : null,
             medias: medias,
-            mmidUserId: element.member.userId,
+            mmidUserId: element.member?.userId ?? 0,
             totalRepliesCount: element.totalRepliesCount,
             created_at: this.formatDate(element.created_at),
             published_at: this.formatDate(element.updated_at),

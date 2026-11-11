@@ -18,11 +18,11 @@ export interface Post {
     repliesCount:number
     tags?: Tag[]
     reaction?: Reaction[]
-    member:Member
-    mmidUserId:number
-    medias:Media[]
-    space:Space
-    created_at:string
+    member?: Member | null
+    mmidUserId?: number
+    medias: Media[]
+    space?: Space | null
+    created_at: string
     published_at:string
     totalRepliesCount:number
     type:string
