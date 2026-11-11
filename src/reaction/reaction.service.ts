@@ -84,13 +84,15 @@ export class ReactionService {
         // find reaction by post_id and member_id
         let reaction = await this.reactionRepository.findOne({
             where: {
-                post: post,
+                post: {
+                    id: post_id,
+                },
                 member: {
-                    id: member_id
-                }
+                    id: member_id,
+                },
             },
-            relations: ['member']
-        })
+            relations: ['member'],
+        });
 
         let name = this.getMemberName(member.name, member.mmid_fullname, member.id)
 
@@ -141,9 +143,9 @@ export class ReactionService {
                 name: name,
                 profilePictureUrl: query.member.profilePictureUrl
             },
-            post_id:post_id,
-            post_member_id : post.member.id,
-            post_member: post.member.userId
+            post_id: post_id,
+            post_member_id: post.member?.id ?? 0,
+            post_member: post.member?.userId ?? 0,
         }
     }
 
@@ -162,7 +164,7 @@ export class ReactionService {
 
         assertPostInteractionsVisible(reaction?.post);
         // compare member_id with reaction.member.id
-        if (reaction.member.id !== member_id) {
+        if (reaction.member?.id !== member_id) {
             throw new ForbiddenException('You are not allowed to delete this reaction')
         }
 
@@ -176,7 +178,7 @@ export class ReactionService {
         })
 
 
-        let query = await this.reactionRepository.softDelete({  id: reaction.id, member:{id:member_id} })
+        let query = await this.reactionRepository.softDelete(reaction.id)
 
         // calcult total reaction in post
         let totalReaction = await this.getTotalReactionInPost(reaction.post.id)
@@ -185,7 +187,7 @@ export class ReactionService {
             reactionsCount: totalReaction
         })
 
-        if(reaction.member.total_likes > 0) {
+        if(reaction.member?.total_likes && reaction.member.total_likes > 0) {
             // update total_like in member
             await this.memberRepository.update({id:member_id}, {total_likes: () => 'total_likes - 1'})  
         }

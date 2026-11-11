@@ -327,28 +327,36 @@ export class MemberForumService {
     memberId: number,
     reactionType = 'heart',
   ): Promise<{ reacted: boolean; likes: number }> {
-    await this.requireVisiblePost(postId);
-    const existing = await this.reactionRepository.findOne({
-      where: {
-        post: { id: postId },
-        member: { id: memberId },
-      },
-    });
+    try {
+      await this.requireVisiblePost(postId);
+      const existing = await this.reactionRepository.findOne({
+        where: {
+          post: { id: postId },
+          member: { id: memberId },
+        },
+      });
 
-    if (existing) {
-      await this.reactionService.deleteReaction(memberId, postId);
-    } else {
-      await this.reactionService.createReaction(postId, reactionType, memberId);
+      if (existing) {
+        await this.reactionService.deleteReaction(memberId, postId);
+      } else {
+        await this.reactionService.createReaction(postId, reactionType, memberId);
+      }
+
+      const updatedPost = await this.postRepository.findOne({
+        where: { id: postId },
+      });
+
+      return {
+        reacted: !existing,
+        likes: updatedPost?.reactionsCount ?? 0,
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to toggle reaction on post ${postId} for member ${memberId}: ${error?.message || error}`,
+        error?.stack,
+      );
+      throw error;
     }
-
-    const updatedPost = await this.postRepository.findOne({
-      where: { id: postId },
-    });
-
-    return {
-      reacted: !existing,
-      likes: updatedPost?.reactionsCount ?? 0,
-    };
   }
 
   /** Loads top-level and nested comments for a forum post. */

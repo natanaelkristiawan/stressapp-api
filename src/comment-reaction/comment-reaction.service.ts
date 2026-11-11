@@ -53,7 +53,7 @@ export class CommentReactionService {
         // find reaction by comment_id and member_id
         let reaction = await this.commentReactionRepository.findOne({
             where: {
-                comment: comment,
+                comment: { id: comment_id },
                 member: {
                     id: member_id
                 }
@@ -126,7 +126,7 @@ export class CommentReactionService {
 
         assertPostInteractionsVisible(reaction?.comment?.post);
         // compare member_id with reaction.member.id
-        if (reaction.member.id !== member_id) {
+        if (reaction.member?.id !== member_id) {
             throw new ForbiddenException('You are not allowed to delete this reaction')
         }
 
@@ -135,12 +135,12 @@ export class CommentReactionService {
             userId: member_id,
             action: 'reaction-delete',
             reactionId: reaction.id,
-            commentId: reaction.comment.id,
+            commentId: reaction.comment?.id ?? 0,
             targetType: 'comment'
         })
 
         
-        let query = await this.commentReactionRepository.softDelete({  id: reaction.id, member:{id:member_id} })
+        let query = await this.commentReactionRepository.softDelete(reaction.id)
 
         if (query.affected === 0) {
             throw new NotFoundException('Reaction not found')

@@ -47,6 +47,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `[${request.method} ${request.originalUrl}] 500 Internal Server Error: ${name} - ${errorMessage}`,
         exception instanceof Error ? exception.stack : undefined,
       );
+      if (exception?.query) {
+        this.logger.error(
+          `[AllExceptionsFilter] Failed SQL: ${exception.query} | parameters: ${JSON.stringify(exception.parameters ?? [])}`,
+        );
+      }
     }
 
     let message: string | string[] = 'Something went wrong';

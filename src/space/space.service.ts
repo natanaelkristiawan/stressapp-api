@@ -287,7 +287,7 @@ export class SpaceService {
         await this.memberSpaceRepository.save(existing)
 
         // get total member in space
-        let totalMember = await this.memberSpaceRepository.count({where: {space:space, follow:true}})
+        let totalMember = await this.memberSpaceRepository.count({where: {backup_space_id: spaceId, follow:true}})
         await this.spaceRepository.update({id:spaceId}, {membersCount:totalMember})
 
         
@@ -313,7 +313,7 @@ export class SpaceService {
         }
 
         // check sudah follow
-        let existing = await this.memberSpaceRepository.findOneBy({member: member, space:space})
+        let existing = await this.memberSpaceRepository.findOneBy({backup_member_id: memberId, backup_space_id: spaceId})
 
         if(existing) {
             if(existing.follow == false) {
@@ -336,7 +336,7 @@ export class SpaceService {
         await this.memberSpaceRepository.save(existing)
 
         // get total member in space
-        let totalMember = await this.memberSpaceRepository.count({where: {space:space, follow:true}})
+        let totalMember = await this.memberSpaceRepository.count({where: {backup_space_id: spaceId, follow:true}})
         await this.spaceRepository.update({id:spaceId}, {membersCount:totalMember})
 
         return 'Success unfollow space'
@@ -356,7 +356,7 @@ export class SpaceService {
         
 
         // check sudah follow
-        let existing = await this.memberSpaceRepository.findOneBy({member: member, space:space})
+        let existing = await this.memberSpaceRepository.findOneBy({backup_member_id: memberId, backup_space_id: spaceId})
 
         if (!existing) {
             
