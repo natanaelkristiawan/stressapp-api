@@ -8,5 +8,6 @@ import { InterestsService } from './interests.service';
   imports: [AdminAuthModule],
   controllers: [InterestsController],
   providers: [InterestsService, CmsMembersGuard],
+  exports: [InterestsService],
 })
 export class InterestsModule {}

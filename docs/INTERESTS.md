@@ -3,13 +3,20 @@
 Catalog-only implementation (26 October 2026). CMS: **Forum → Interests / Preferences**,
 `/forum/interests`, `/forum/interests/new`, `/forum/interests/:id`.
 Existing member JSON preferences, forum hashtags and educational categories are unchanged.
-No mobile selection, user/post joins, automatic seed, or data conversion in this step.
+No user/post joins, automatic seed, or data conversion in this step.
 
-All endpoints use existing CMS JWT middleware and live `CmsMembersGuard` checks.
-Member tokens do not grant access. Responses use the existing success envelope with `data`.
+Member read access added 19 November 2026 for forum onboarding: the mobile list now
+loads active catalog names from `GET /me/interests` and falls back to the built-in
+list when the request fails or the catalog is empty. Selection is still stored
+locally; saving preferences to the member profile remains a separate step.
+
+All CMS endpoints use existing CMS JWT middleware and live `CmsMembersGuard` checks.
+Member tokens do not grant access to `/cms-interests`. Responses use the existing
+success envelope with `data`.
 
 | Method | Path | Input / result |
 | --- | --- | --- |
+| GET | `/me/interests` | Member session; active records only, ordered by `sortOrder` then `id`; returns `{id,name,description,sortOrder}[]` |
 | GET | `/cms-interests` | `search`, `status`, `sortBy`, `sortOrder`, `page`, `pageSize`; returns `{items,total,page,pageSize}` |
 | GET | `/cms-interests/:id` | Returns an active or inactive record |
 | POST | `/cms-interests` | Required `name`, `description`, `sortOrder`, `isActive`; returns created record (201) |

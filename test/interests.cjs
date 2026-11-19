@@ -9,6 +9,10 @@ const { InterestsService } = require('../src/interests/interests.service');
 const {
   InterestsController,
 } = require('../src/interests/interests.controller');
+const {
+  MemberInterestsController,
+} = require('../src/interests/member-interests.controller');
+const { MemberAuthGuard } = require('../src/member-auth/member-auth.guard');
 const { CmsMembersGuard } = require('../src/cms-members/cms-members.guard');
 const { AdminAuthService } = require('../src/admin-auth/admin-auth.service');
 const { Interest } = require('../src/entity/interest.entity');
@@ -32,6 +36,10 @@ const db = {
   options: { type: 'mysql' },
   getRepository: () => ({
     findOneBy: async ({ id }) => rows.find((row) => row.id === id),
+    find: async (options) => {
+      calls.push(['find', options]);
+      return rows;
+    },
     createQueryBuilder: () => builder,
   }),
   async transaction(callback) {
@@ -237,6 +245,25 @@ async function main() {
           call[1] === 'interest.isActive = :active' && call[2].active === false,
       ),
     );
+    assert(
+      Reflect.getMetadata('__guards__', MemberInterestsController).includes(
+        MemberAuthGuard,
+      ),
+    );
+    assert.equal(
+      Reflect.getMetadata('path', MemberInterestsController),
+      'me/interests',
+    );
+    calls.length = 0;
+    const memberOptions = await service.listActive();
+    assert.deepEqual(calls[0], [
+      'find',
+      { where: { isActive: true }, order: { sortOrder: 'ASC', id: 'ASC' } },
+    ]);
+    assert.equal(memberOptions.length, rows.length);
+    assert.equal(memberOptions[0].id, rows[0].id);
+    assert.equal(memberOptions[0].revision, undefined);
+    assert.equal(memberOptions[0].createdAt, undefined);
   } finally {
     await module.close();
   }

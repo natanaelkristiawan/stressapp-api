@@ -9,6 +9,7 @@ import { MemberNotificationsModule } from './member-notifications/member-notific
 import { MemberNotification } from './entity/member-notification.entity';
 import { Interest } from './entity/interest.entity';
 import { InterestsModule } from './interests/interests.module';
+import { MemberInterestsModule } from './interests/member-interests.module';
 import { PsychologistLocation } from './entity/psychologist-location.entity';
 import { PsychologistsModule } from './psychologists/psychologists.module';
 import { BreathingExercise } from './entity/breathing-exercise.entity';
@@ -206,6 +207,7 @@ import { CronModule } from './cron/cron.module';
     AdminUserModule,
     CmsMembersModule,
     InterestsModule,
+    MemberInterestsModule,
     CmsMoodParticipationModule,
     RequestLogModule,
     AdminQuestModule,
@@ -306,6 +308,7 @@ export class AppModule {
         { path: 'me/forum/(.*)', method: RequestMethod.ALL },
         { path: 'me/games', method: RequestMethod.ALL },
         { path: 'me/games/(.*)', method: RequestMethod.ALL },
+        { path: 'me/interests', method: RequestMethod.ALL },
         { path: 'is-live', method: RequestMethod.GET },
         { path: 'admin-auth/login', method: RequestMethod.ALL },
         { path: 'admin-auth/login/(.*)', method: RequestMethod.ALL },

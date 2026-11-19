@@ -70,6 +70,20 @@ export class InterestsService {
     };
   }
 
+  /** Returns active catalog entries in display order for member selection. */
+  async listActive() {
+    const rows = await this.db.getRepository(Interest).find({
+      where: { isActive: true },
+      order: { sortOrder: 'ASC', id: 'ASC' },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      sortOrder: row.sortOrder,
+    }));
+  }
+
   /** Loads active or inactive records for direct CMS links. */
   async detail(id: number) {
     const row = await this.db.getRepository(Interest).findOneBy({ id });
