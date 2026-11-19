@@ -185,7 +185,7 @@ export class PushNotificationsService {
     );
   }
 
-  /** Shares bounded multicast delivery and safe diagnostic aggregation with the CMS test. */
+  /** Shares bounded batch delivery and safe diagnostic aggregation with the CMS test. */
   private async sendToDevices(
     recipients: Awaited<ReturnType<PushDevicesService['recipients']>>,
     notification: { title: string; body: string },
@@ -197,16 +197,18 @@ export class PushNotificationsService {
     let failed = 0;
     const failures = new Map<string, number>();
 
-    // Firebase permits up to 500 recipients per multicast call.
+    // Firebase permits up to 500 messages per sendEach call.
     for (let offset = 0; offset < fcmDevices.length; offset += 500) {
       const batch = fcmDevices.slice(offset, offset + 500);
       try {
-        const result = await messaging.sendEachForMulticast({
-          tokens: batch.map((device) => device.token),
-          notification,
-          data,
-          android: { notification: { channelId: 'default' } },
-        });
+        const result = await messaging.sendEach(
+          batch.map((device) => ({
+            token: device.token,
+            notification,
+            data,
+            android: { notification: { channelId: 'default' } },
+          })),
+        );
         accepted += result.successCount;
         failed += result.failureCount;
         for (const response of result.responses) {

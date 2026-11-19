@@ -50,7 +50,7 @@ describe('CMS push notification test', () => {
   const repository = { findOneBy: jest.fn() };
   const registrations = { recipients: jest.fn() };
   const auth = { limit: jest.fn() };
-  const firebase = { sendEachForMulticast: jest.fn() };
+  const firebase = { sendEach: jest.fn() };
   const admin = { currentAdmin: jest.fn() };
 
   beforeAll(async () => {
@@ -105,10 +105,10 @@ describe('CMS push notification test', () => {
       device(),
       device('apns'),
     ]);
-    firebase.sendEachForMulticast.mockImplementation(async (message) => ({
-      successCount: message.tokens.length,
+    firebase.sendEach.mockImplementation(async (messages) => ({
+      successCount: messages.length,
       failureCount: 0,
-      responses: message.tokens.map(() => ({ success: true })),
+      responses: messages.map(() => ({ success: true })),
     }));
     (getApps as jest.Mock).mockReturnValue([]);
     (getMessaging as jest.Mock).mockReturnValue(firebase);
@@ -134,13 +134,14 @@ describe('CMS push notification test', () => {
     });
     expect(auth.limit).toHaveBeenCalledWith('push-test-admin', '7', 5, 60);
     expect(registrations.recipients).toHaveBeenCalledWith(12);
-    expect(firebase.sendEachForMulticast).toHaveBeenCalledWith(
+    expect(firebase.sendEach).toHaveBeenCalledWith([
       expect.objectContaining({
-        tokens: ['synthetic-fcm-token', 'synthetic-fcm-token'],
+        token: 'synthetic-fcm-token',
         android: { notification: { channelId: 'default' } },
         data: { type: 'test-notification' },
       }),
-    );
+      expect.objectContaining({ token: 'synthetic-fcm-token' }),
+    ]);
     expect(JSON.stringify(result.body)).not.toContain('synthetic-fcm-token');
     expect(result.headers['cache-control']).toBe('private, no-store');
   });
@@ -154,7 +155,7 @@ describe('CMS push notification test', () => {
       'message',
     );
     expect(result).toMatchObject({ attempted: 2, accepted: 2, skipped: 1 });
-    expect(firebase.sendEachForMulticast).toHaveBeenCalledWith(
+    expect(firebase.sendEach).toHaveBeenCalledWith([
       expect.objectContaining({
         notification: {
           title: 'Pesan baru',
@@ -166,7 +167,8 @@ describe('CMS push notification test', () => {
           category: 'message',
         },
       }),
-    );
+      expect.objectContaining({ token: 'synthetic-fcm-token' }),
+    ]);
     expect(auth.limit).not.toHaveBeenCalled();
   });
 
@@ -186,7 +188,7 @@ describe('CMS push notification test', () => {
       skipped: 1,
       failures: [],
     });
-    expect(firebase.sendEachForMulticast).not.toHaveBeenCalled();
+    expect(firebase.sendEach).not.toHaveBeenCalled();
   });
 
   it('rejects non-admin identities and rechecks disabled admins', async () => {
@@ -206,7 +208,7 @@ describe('CMS push notification test', () => {
       .set('Authorization', 'Bearer synthetic-admin')
       .send({ email: 'test@example.test' })
       .expect(401);
-    expect(firebase.sendEachForMulticast).not.toHaveBeenCalled();
+    expect(firebase.sendEach).not.toHaveBeenCalled();
   });
 
   it('validates body fields and refuses unavailable members or unregistered devices', async () => {
@@ -236,7 +238,7 @@ describe('CMS push notification test', () => {
     await expect(sender.sendTest('test@example.test', 7)).rejects.toThrow(
       'no active Android/web',
     );
-    expect(firebase.sendEachForMulticast).not.toHaveBeenCalled();
+    expect(firebase.sendEach).not.toHaveBeenCalled();
   });
 
   it('reports configuration presence and fails safely when server credentials are absent', async () => {
@@ -259,7 +261,7 @@ describe('CMS push notification test', () => {
   });
 
   it('counts partial provider failure and masks unknown provider details', async () => {
-    firebase.sendEachForMulticast.mockResolvedValueOnce({
+    firebase.sendEach.mockResolvedValueOnce({
       successCount: 1,
       failureCount: 1,
       responses: [
@@ -283,17 +285,15 @@ describe('CMS push notification test', () => {
     registrations.recipients.mockResolvedValueOnce(
       Array.from({ length: 501 }, () => device()),
     );
-    firebase.sendEachForMulticast.mockRejectedValueOnce(
+    firebase.sendEach.mockRejectedValueOnce(
       new Error('Synthetic network failure'),
     );
     const result = await sender.sendTest('test@example.test', 7);
     expect(
-      firebase.sendEachForMulticast.mock.calls.map(
-        ([message]) => message.tokens.length,
-      ),
+      firebase.sendEach.mock.calls.map(([messages]) => messages.length),
     ).toEqual([500, 1]);
     expect(result).toMatchObject({ accepted: 1, failed: 500, attempted: 501 });
-    expect(firebase.sendEachForMulticast).toHaveBeenCalledTimes(2);
+    expect(firebase.sendEach).toHaveBeenCalledTimes(2);
   });
 
   it('preserves authentication codes and classifies only fixed safe Google error reasons', () => {
@@ -343,7 +343,7 @@ describe('CMS push notification test', () => {
   });
 
   it('reports a thrown credential error without resending the batch', async () => {
-    firebase.sendEachForMulticast.mockRejectedValueOnce({
+    firebase.sendEach.mockRejectedValueOnce({
       code: 'app/invalid-credential',
       message: 'private-key-details',
     });
@@ -351,7 +351,7 @@ describe('CMS push notification test', () => {
     expect(result.failures).toEqual([
       { code: 'app/invalid-credential', count: 2 },
     ]);
-    expect(firebase.sendEachForMulticast).toHaveBeenCalledTimes(1);
+    expect(firebase.sendEach).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result)).not.toContain('private-key-details');
   });
 
@@ -365,6 +365,6 @@ describe('CMS push notification test', () => {
       .send({ email: 'test@example.test' })
       .expect(429);
     expect(repository.findOneBy).not.toHaveBeenCalled();
-    expect(firebase.sendEachForMulticast).not.toHaveBeenCalled();
+    expect(firebase.sendEach).not.toHaveBeenCalled();
   });
 });

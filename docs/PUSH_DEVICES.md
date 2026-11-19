@@ -94,9 +94,9 @@ Admin-only routes, behind existing CMS JWT middleware and live CmsMembersGuard:
   existing data envelope. No member/device tokens or provider error messages.
 
 Redis limits: five test requests per admin per minute and five per target email
-per minute. Firebase batches are bounded to 500 recipients. Send requests are not
-replayed automatically; ambiguous errors count as unconfirmed failures because
-retries can produce duplicates. The UI prevents concurrent submits, retains input
+per minute. Firebase batches are bounded to 500 messages per `sendEach` call.
+Send requests are not replayed automatically; ambiguous errors count as
+unconfirmed failures because retries can produce duplicates. The UI prevents concurrent submits, retains input
 on failure, names the last recipient and shows accepted/failed/skipped counts.
 Accepted means Firebase accepted a message, not that a device displayed it.
 Invalid/expired registrations are reported without deleting database records.
