@@ -13,7 +13,7 @@ both friends' posts and posts in joined communities. CMS will manage automatic
 message templates only; no manual compose/send or broadcast facility is planned.
 The template renderer returns title/body snapshots saved into recipient history;
 editing templates never updates existing member_notifications rows. Daily mood
-reminders target 20:00 in each member's stored IANA timezone and skip completed
+reminders target 08:00 in each member's stored IANA timezone and skip completed
 local days (user confirmed 28 October 2026).
 
 ## Member contract
@@ -218,7 +218,7 @@ category/destination navigation awaits the mobile/web integration step.
 ### Mood reminder timezone setting
 
 - `GET /me/notifications/settings`: returns
-  `{ timeZone: null, moodReminderLocalTime: "20:00" }` before configuration.
+  `{ timeZone: null, moodReminderLocalTime: "08:00" }` before configuration.
 - `PATCH /me/notifications/settings`: requires `{ timeZone: "Asia/Makassar" }`
   or another valid IANA zone using the existing mood timezone validator. Unknown
   fields, nulls, wrong types and invalid zones return 400. The guard owns member
@@ -229,7 +229,7 @@ installations. The future client integration must synchronize the device's IANA
 zone on app opening/timezone changes. No timezone is guessed from server location,
 old mood history or IP; unset members receive no scheduled reminder yet.
 
-The scheduler checks local days/minutes, targets 20:00 and makes at most one daily
+The scheduler checks local days/minutes, targets 08:00 and makes at most one daily
 event per member/local calendar date. If processing starts late, it may catch up
 later that same day; it never sends a previous local day's reminder. A recorded
 `member_moods.dateString` suppresses scheduling; completion is rechecked before

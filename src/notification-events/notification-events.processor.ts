@@ -28,6 +28,7 @@ const FANOUT_PAGE_SIZE = 200;
 export class NotificationEventsProcessor {
   private running = false;
   private reminderMinute = -1;
+  private pushConfigWarned = false;
   private readonly logger = new Logger(NotificationEventsProcessor.name);
 
   constructor(
@@ -87,6 +88,12 @@ export class NotificationEventsProcessor {
         for (const notification of notifications) {
           await this.deliver(notification.id);
         }
+      } else if (!this.pushConfigWarned) {
+        // Pending pushes are retained; surface the missing server configuration once.
+        this.pushConfigWarned = true;
+        this.logger.warn(
+          'Push delivery disabled: FIREBASE_PROJECT_ID and GOOGLE_APPLICATION_CREDENTIALS are not configured.',
+        );
       }
     } catch {
       this.logger.error(

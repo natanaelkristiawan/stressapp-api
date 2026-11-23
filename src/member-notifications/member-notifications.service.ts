@@ -3,6 +3,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, IsNull } from 'typeorm';
 import { MemberNotification } from '../entity/member-notification.entity';
+import { MOOD_REMINDER_LOCAL_TIME } from '../notification-events/mood-reminder-clock';
 import { NotificationListDto } from './member-notifications.dto';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class MemberNotificationsService {
     }
     return {
       timeZone: member.notificationTimeZone,
-      moodReminderLocalTime: '20:00',
+      moodReminderLocalTime: MOOD_REMINDER_LOCAL_TIME,
     };
   }
 
@@ -32,7 +33,7 @@ export class MemberNotificationsService {
     if (!result.affected) {
       throw new NotFoundException('Anggota tidak ditemukan.');
     }
-    return { timeZone, moodReminderLocalTime: '20:00' };
+    return { timeZone, moodReminderLocalTime: MOOD_REMINDER_LOCAL_TIME };
   }
 
   /** Lists one category of the member's retained notifications, newest first. */

@@ -25,7 +25,7 @@ import { MemberNotificationsService } from './member-notifications.service';
 export class MemberNotificationsController {
   constructor(private readonly notifications: MemberNotificationsService) {}
 
-  /** Returns the member-owned timezone used for the fixed 20:00 mood reminder. */
+  /** Returns the member-owned timezone used for the fixed 08:00 mood reminder. */
   @Get('settings')
   async settings(@Req() request: MemberRequest) {
     return { data: await this.notifications.settings(request.member.id) };

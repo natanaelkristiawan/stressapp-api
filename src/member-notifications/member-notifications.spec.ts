@@ -321,14 +321,14 @@ describe('Member notification inbox', () => {
     });
   });
 
-  it('keeps one owned IANA timezone for the fixed 20:00 reminder', async () => {
+  it('keeps one owned IANA timezone for the fixed 08:00 reminder', async () => {
     const initial = await request(app.getHttpServer())
       .get('/me/notifications/settings')
       .auth('synthetic', { type: 'bearer' })
       .expect(200);
     expect(initial.body.data).toEqual({
       timeZone: null,
-      moodReminderLocalTime: '20:00',
+      moodReminderLocalTime: '08:00',
     });
     const updated = await request(app.getHttpServer())
       .patch('/me/notifications/settings')
@@ -337,7 +337,7 @@ describe('Member notification inbox', () => {
       .expect(200);
     expect(updated.body.data).toEqual({
       timeZone: 'America/New_York',
-      moodReminderLocalTime: '20:00',
+      moodReminderLocalTime: '08:00',
     });
     expect(memberRepository.update).toHaveBeenCalledWith(
       { id: 7 },
