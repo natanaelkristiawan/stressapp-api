@@ -146,13 +146,14 @@ describe('CMS push notification test', () => {
     expect(result.headers['cache-control']).toBe('private, no-store');
   });
 
-  it('sends a saved activity snapshot without chat content or destinations in push data', async () => {
+  it('sends a saved activity snapshot with its typed destination only', async () => {
     const result = await sender.sendNotification(
       12,
       'Pesan baru',
       'Ada pesan baru untuk Anda.',
       42,
       'message',
+      { kind: 'chat', id: '9' },
     );
     expect(result).toMatchObject({ attempted: 2, accepted: 2, skipped: 1 });
     expect(firebase.sendEach).toHaveBeenCalledWith([
@@ -165,11 +166,33 @@ describe('CMS push notification test', () => {
           type: 'member-notification',
           notificationId: '42',
           category: 'message',
+          destination: JSON.stringify({ kind: 'chat', id: '9' }),
         },
       }),
       expect.objectContaining({ token: 'synthetic-fcm-token' }),
     ]);
     expect(auth.limit).not.toHaveBeenCalled();
+  });
+
+  it('omits destination data when the notification has none', async () => {
+    await sender.sendNotification(
+      12,
+      'Forum',
+      'Aktivitas baru.',
+      42,
+      'forum',
+      null,
+    );
+    expect(firebase.sendEach).toHaveBeenCalledWith([
+      expect.objectContaining({
+        data: {
+          type: 'member-notification',
+          notificationId: '42',
+          category: 'forum',
+        },
+      }),
+      expect.objectContaining({ token: 'synthetic-fcm-token' }),
+    ]);
   });
 
   it('keeps activity history useful when no live FCM devices exist', async () => {
@@ -180,6 +203,7 @@ describe('CMS push notification test', () => {
       'Aktivitas baru.',
       42,
       'forum',
+      null,
     );
     expect(result).toEqual({
       attempted: 0,

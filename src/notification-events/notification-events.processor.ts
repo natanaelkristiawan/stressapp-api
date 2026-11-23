@@ -280,6 +280,7 @@ export class NotificationEventsProcessor {
         claimed.body,
         claimed.id,
         claimed.type,
+        claimed.destination,
       );
       let pushStatus: MemberNotification['pushStatus'] = 'failed';
       if (result.attempted === 0) {

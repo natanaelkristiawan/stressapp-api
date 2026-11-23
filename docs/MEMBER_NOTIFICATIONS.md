@@ -203,8 +203,14 @@ Pending rows are claimed as `sending` in a transaction before external Firebase
 I/O. Read/cleared/ineligible items are skipped. Delivery reuses live session-owned
 Android/web FCM devices and the existing sender; APNs-only devices are skipped.
 Push text is the saved template snapshot, never raw source content. Push data is
-`{ type: "member-notification", notificationId, category }`, with no private chat
-text or arbitrary URLs. Existing CMS test text/rate limits remain unchanged.
+`{ type: "member-notification", notificationId, category, destination? }`, where
+`destination` is the JSON-encoded typed destination (`chat`, `post`, `comment`,
+`mood-tracker` and its ids) and no private chat text or arbitrary URLs are
+included. Existing CMS test text/rate limits remain unchanged.
+Android taps open the stored destination (`/moodtracker`, `/obrolan`, or the post
+detail) through `PushNotificationNavigation`, including taps that cold-start the
+app. Existing web notification clicks still focus/open the app; web destination
+navigation is not part of the Android-only scope.
 
 Provider acceptance is not device display or read confirmation. Failed/ambiguous
 push attempts are not automatically replayed. A process crash after the claim can
@@ -212,8 +218,7 @@ leave `sending` with an unknown outcome; its durable inbox item remains availabl
 This is one application attempt, not an exactly-once device-display guarantee.
 When Firebase configuration is absent, pending pushes remain queued. Invalid
 credentials/provider rejections after an attempt are recorded without raw SDK
-messages/tokens. Existing web notification clicks still focus/open the app;
-category/destination navigation awaits the mobile/web integration step.
+messages/tokens.
 
 ### Mood reminder timezone setting
 

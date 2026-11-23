@@ -10,6 +10,7 @@ import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { DataSource } from 'typeorm';
 import { Member } from '../entity/user-mimate.entity';
+import { MemberNotification } from '../entity/member-notification.entity';
 import { MemberAuthService } from '../member-auth/member-auth.service';
 import { PushDevicesService } from './push-devices.service';
 
@@ -172,6 +173,7 @@ export class PushNotificationsService {
     body: string,
     notificationId: number,
     category: string,
+    destination: MemberNotification['destination'],
   ) {
     const recipients = await this.devices.recipients(memberId);
     return this.sendToDevices(
@@ -181,6 +183,7 @@ export class PushNotificationsService {
         type: 'member-notification',
         notificationId: String(notificationId),
         category,
+        ...(destination ? { destination: JSON.stringify(destination) } : {}),
       },
     );
   }
