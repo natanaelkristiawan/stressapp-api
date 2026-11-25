@@ -26,7 +26,7 @@ export class Interest {
   @Column({ length: 500, default: '' })
   description: string;
 
-  @Column({ type: 'int', unsigned: true, nullable: true, default: null })
+  @Column({ type: 'int', nullable: true, default: null })
   categoryId: number | null;
 
   @ManyToOne(() => InterestCategory, { nullable: true, onDelete: 'SET NULL' })
