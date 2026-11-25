@@ -2,9 +2,12 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { InterestCategory } from './interest-category.entity';
 
 @Entity({
   name: 'interests',
@@ -22,6 +25,13 @@ export class Interest {
 
   @Column({ length: 500, default: '' })
   description: string;
+
+  @Column({ type: 'int', unsigned: true, nullable: true, default: null })
+  categoryId: number | null;
+
+  @ManyToOne(() => InterestCategory, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'categoryId' })
+  category: InterestCategory | null;
 
   @Column({ type: 'int', unsigned: true, default: 0 })
   sortOrder: number;

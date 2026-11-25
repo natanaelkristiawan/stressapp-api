@@ -30,6 +30,13 @@ export class InterestInputDto {
   @MaxLength(500)
   description: string;
 
+  @ValidateIf((_object, value) => value !== undefined && value !== null)
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  categoryId: number | null = null;
+
   @IsInt()
   @Min(0)
   @Max(100000)
@@ -85,8 +92,17 @@ export class InterestListDto {
   @IsIn(['all', 'active', 'inactive'])
   status: 'all' | 'active' | 'inactive' = 'all';
 
-  @IsIn(['name', 'sortOrder', 'createdAt'])
-  sortBy: 'name' | 'sortOrder' | 'createdAt' = 'sortOrder';
+  @ValidateIf(
+    (_object, value) => value !== undefined && value !== null && value !== '',
+  )
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(2147483647)
+  categoryId?: number;
+
+  @IsIn(['name', 'category', 'sortOrder', 'createdAt'])
+  sortBy: 'name' | 'category' | 'sortOrder' | 'createdAt' = 'sortOrder';
 
   @IsIn(['asc', 'desc'])
   sortOrder: 'asc' | 'desc' = 'asc';

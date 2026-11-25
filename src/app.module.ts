@@ -8,8 +8,10 @@ import { NotificationTemplate } from './entity/notification-template.entity';
 import { MemberNotificationsModule } from './member-notifications/member-notifications.module';
 import { MemberNotification } from './entity/member-notification.entity';
 import { Interest } from './entity/interest.entity';
+import { InterestCategory } from './entity/interest-category.entity';
 import { InterestsModule } from './interests/interests.module';
 import { MemberInterestsModule } from './interests/member-interests.module';
+import { InterestCategoriesModule } from './interest-categories/interest-categories.module';
 import { PsychologistLocation } from './entity/psychologist-location.entity';
 import { PsychologistsModule } from './psychologists/psychologists.module';
 import { BreathingExercise } from './entity/breathing-exercise.entity';
@@ -133,7 +135,7 @@ import { CronModule } from './cron/cron.module';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE_MIMATE,
-      entities: [NotificationEvent, NotificationTemplate, MemberNotification, Interest, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
+      entities: [NotificationEvent, NotificationTemplate, MemberNotification, Interest, InterestCategory, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
         CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner,
         GameLevel, Game, GameStep, MemberGameProgress, MemberGameSubmission], // Your entities
@@ -208,6 +210,7 @@ import { CronModule } from './cron/cron.module';
     CmsMembersModule,
     InterestsModule,
     MemberInterestsModule,
+    InterestCategoriesModule,
     CmsMoodParticipationModule,
     RequestLogModule,
     AdminQuestModule,
@@ -337,6 +340,8 @@ export class AppModule {
       { path: 'cms-logs/(.*)', method: RequestMethod.ALL },
       { path: 'cms-interests', method: RequestMethod.ALL },
       { path: 'cms-interests/(.*)', method: RequestMethod.ALL },
+      { path: 'cms-interest-categories', method: RequestMethod.ALL },
+      { path: 'cms-interest-categories/(.*)', method: RequestMethod.ALL },
       { path: 'admin-games', method: RequestMethod.ALL },
       { path: 'admin-games/(.*)', method: RequestMethod.ALL },
       { path: 'cms-psychologists', method: RequestMethod.ALL },

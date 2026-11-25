@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -7,6 +8,7 @@ import { InjectDataSource } from '@nestjs/typeorm';
 import { createHash } from 'crypto';
 import { DataSource, EntityManager } from 'typeorm';
 import { Activity } from '../entity/activity.entity';
+import { InterestCategory } from '../entity/interest-category.entity';
 import { Interest } from '../entity/interest.entity';
 import {
   InterestInputDto,
@@ -21,6 +23,10 @@ export function interestView(row: Interest) {
     id: row.id,
     name: row.name,
     description: row.description,
+    categoryId: row.categoryId ?? null,
+    category: row.category
+      ? { id: row.category.id, name: row.category.name }
+      : null,
     sortOrder: row.sortOrder,
     isActive: row.isActive,
     revision: row.revision,
@@ -37,10 +43,16 @@ export class InterestsService {
   async list(query: InterestListDto) {
     const builder = this.db
       .getRepository(Interest)
-      .createQueryBuilder('interest');
+      .createQueryBuilder('interest')
+      .leftJoinAndSelect('interest.category', 'category');
     if (query.search) {
       builder.andWhere('LOCATE(:search, LOWER(interest.name)) > 0', {
         search: query.search.toLowerCase(),
+      });
+    }
+    if (query.categoryId) {
+      builder.andWhere('interest.categoryId = :categoryId', {
+        categoryId: query.categoryId,
       });
     }
     if (query.status !== 'all') {
@@ -50,6 +62,7 @@ export class InterestsService {
     }
     const columns = {
       name: 'interest.name',
+      category: 'category.sortOrder',
       sortOrder: 'interest.sortOrder',
       createdAt: 'interest.createdAt',
     };
@@ -58,6 +71,7 @@ export class InterestsService {
         columns[query.sortBy],
         query.sortOrder === 'desc' ? 'DESC' : 'ASC',
       )
+      .addOrderBy('interest.sortOrder', 'ASC')
       .addOrderBy('interest.id', 'ASC')
       .skip((query.page - 1) * query.pageSize)
       .take(query.pageSize)
@@ -70,23 +84,35 @@ export class InterestsService {
     };
   }
 
-  /** Returns active catalog entries in display order for member selection. */
+  /** Returns active catalog entries grouped by category for member selection. */
   async listActive() {
-    const rows = await this.db.getRepository(Interest).find({
-      where: { isActive: true },
-      order: { sortOrder: 'ASC', id: 'ASC' },
-    });
+    const rows = await this.db
+      .getRepository(Interest)
+      .createQueryBuilder('interest')
+      .leftJoinAndSelect('interest.category', 'category')
+      .where('interest.isActive = :active', { active: true })
+      .orderBy('category.sortOrder', 'ASC')
+      .addOrderBy('interest.sortOrder', 'ASC')
+      .addOrderBy('interest.id', 'ASC')
+      .getMany();
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
       description: row.description,
+      categoryId: row.categoryId ?? null,
+      category: row.category
+        ? { id: row.category.id, name: row.category.name }
+        : null,
       sortOrder: row.sortOrder,
     }));
   }
 
   /** Loads active or inactive records for direct CMS links. */
   async detail(id: number) {
-    const row = await this.db.getRepository(Interest).findOneBy({ id });
+    const row = await this.db.getRepository(Interest).findOne({
+      where: { id },
+      relations: { category: true },
+    });
     if (!row) {
       throw new NotFoundException('Interest not found.');
     }
@@ -138,15 +164,27 @@ export class InterestsService {
           const revision = 'revision' in input ? input.revision : 0;
           row = await this.editable(manager, id, revision);
         }
+        const category =
+          input.categoryId == null
+            ? null
+            : await manager.findOne(InterestCategory, {
+                where: { id: input.categoryId },
+              });
+        if (input.categoryId != null && !category) {
+          throw new BadRequestException('Selected category not found.');
+        }
         row.name = normalizeInterestName(input.name);
         row.nameKey = createHash('sha256')
           .update(row.name.toLowerCase())
           .digest('hex');
         row.description = input.description.trim();
+        row.categoryId = category ? category.id : null;
+        row.category = category;
         row.sortOrder = input.sortOrder;
         row.isActive = input.isActive;
         row.revision += 1;
         const saved = await manager.save(Interest, row);
+        saved.category = category;
         await this.audit(
           manager,
           saved,

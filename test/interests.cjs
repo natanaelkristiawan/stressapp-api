@@ -23,22 +23,30 @@ let rows = [],
   failAudit = false;
 const calls = [];
 const builder = {};
-for (const method of ['andWhere', 'orderBy', 'addOrderBy', 'skip', 'take']) {
+for (const method of [
+  'leftJoinAndSelect',
+  'where',
+  'andWhere',
+  'orderBy',
+  'addOrderBy',
+  'skip',
+  'take',
+]) {
   builder[method] = (...args) => {
     calls.push([method, ...args]);
     return builder;
   };
 }
 builder.getManyAndCount = async () => [rows, rows.length];
+builder.getMany = async () => rows;
 // A transaction double; real MySQL schema, locking and races need separate verification.
 const db = {
   entityMetadatas: [],
   options: { type: 'mysql' },
   getRepository: () => ({
-    findOneBy: async ({ id }) => rows.find((row) => row.id === id),
-    find: async (options) => {
-      calls.push(['find', options]);
-      return rows;
+    findOne: async (options) => {
+      calls.push(['findOne', options]);
+      return rows.find((row) => row.id === options.where.id);
     },
     createQueryBuilder: () => builder,
   }),
@@ -95,12 +103,14 @@ async function main() {
   const input = {
     name: '  Ｈiking   Club  ',
     description: ' Outdoors ',
+    categoryId: null,
     sortOrder: 0,
     isActive: true,
   };
   const clean = await validate(dto.InterestInputDto, input);
   assert.equal(clean.name, 'Hiking Club');
   assert.equal(clean.description, 'Outdoors');
+  assert.equal(clean.categoryId, null);
   for (const override of [
     { name: ' ' },
     { name: null },
@@ -257,9 +267,16 @@ async function main() {
     calls.length = 0;
     const memberOptions = await service.listActive();
     assert.deepEqual(calls[0], [
-      'find',
-      { where: { isActive: true }, order: { sortOrder: 'ASC', id: 'ASC' } },
+      'leftJoinAndSelect',
+      'interest.category',
+      'category',
     ]);
+    assert.deepEqual(calls[1], [
+      'where',
+      'interest.isActive = :active',
+      { active: true },
+    ]);
+    assert.deepEqual(calls[2], ['orderBy', 'category.sortOrder', 'ASC']);
     assert.equal(memberOptions.length, rows.length);
     assert.equal(memberOptions[0].id, rows[0].id);
     assert.equal(memberOptions[0].revision, undefined);
