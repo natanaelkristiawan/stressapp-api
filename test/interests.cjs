@@ -5,7 +5,10 @@ const { ValidationPipe, ForbiddenException } = require('@nestjs/common');
 const { Test } = require('@nestjs/testing');
 const { getDataSourceToken } = require('@nestjs/typeorm');
 const { InterestsModule } = require('../src/interests/interests.module');
-const { InterestsService } = require('../src/interests/interests.service');
+const {
+  InterestsService,
+  interestView,
+} = require('../src/interests/interests.service');
 const {
   InterestsController,
 } = require('../src/interests/interests.controller');
@@ -187,6 +190,17 @@ async function main() {
     assert.equal(created.name, 'Hiking Club');
     assert.equal(created.revision, 1);
     assert.equal(created.nameKey, undefined);
+    assert.equal(created.categoryId, null);
+    assert.equal(
+      interestView({
+        ...rows[0],
+        categoryId: 0,
+        category: null,
+        createdAt: new Date('2026-11-25T00:00:00.000Z'),
+        updatedAt: new Date('2026-11-25T00:00:00.000Z'),
+      }).categoryId,
+      null,
+    );
     assert.equal(audits[0].userId, 7);
     await assert.rejects(
       service.save({ ...clean, name: 'hiking club' }, 7),

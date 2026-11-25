@@ -17,13 +17,18 @@ import {
   UpdateInterestDto,
 } from './interests.dto';
 
+/** Treats legacy/ad-hoc `0` values as uncategorized instead of a real FK. */
+function linkedCategoryId(row: Interest): number | null {
+  return row.categoryId && row.categoryId > 0 ? row.categoryId : null;
+}
+
 /** Returns the catalog contract without internal uniqueness metadata. */
 export function interestView(row: Interest) {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    categoryId: row.categoryId ?? null,
+    categoryId: linkedCategoryId(row),
     category: row.category
       ? { id: row.category.id, name: row.category.name }
       : null,
@@ -99,7 +104,7 @@ export class InterestsService {
       id: row.id,
       name: row.name,
       description: row.description,
-      categoryId: row.categoryId ?? null,
+      categoryId: linkedCategoryId(row),
       category: row.category
         ? { id: row.category.id, name: row.category.name }
         : null,

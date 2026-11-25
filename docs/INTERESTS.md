@@ -65,19 +65,24 @@ behavior is unchanged.
 
 `Interest` and `InterestCategory` are registered in the existing `mimate` runtime
 datasource; standalone entity discovery also includes them. Production runs with
-synchronize disabled, so apply the hand-written migration
-`src/database/migrations/1793918000000-InterestCategories.ts` before deploying:
+synchronize disabled, so apply the hand-written migrations before deploying:
 
 ```bash
 npm run typeorm:ds -- migration:run
 ```
 
-It creates `interest_categories`, adds `interests.categoryId` as a **signed** `INT`
-(`ON DELETE SET NULL`) and adds the supporting index/foreign key. The column must be
-signed because `interests.id` is a signed `INT`; an `UNSIGNED` column fails MySQL's
-foreign-key compatibility check. The migration re-checks `information_schema`, so
-re-running after a partial failure is safe. Development `synchronize:true` creates the
-same schema automatically. No seed or data conversion was run.
+- `1793918000000-InterestCategories.ts` creates `interest_categories` and adds
+  `interests.categoryId` as a **signed** `INT` (`ON DELETE SET NULL`) with its
+  index/foreign key. The column must be signed because `interests.id` is a signed
+  `INT`; an `UNSIGNED` column fails MySQL's foreign-key compatibility check.
+- `1793918000001-NormalizeInterestCategoryId.ts` fixes environments where the
+  column already existed as `UNSIGNED` / `NOT NULL DEFAULT 0` and clears legacy
+  `categoryId = 0` rows to `NULL`. The API also maps non-positive IDs to `null`,
+  because zero is not a real category.
+
+Both migrations re-check `information_schema`, so re-running after a partial
+failure is safe. Development `synchronize:true` creates the same schema
+automatically. No seed or data conversion was run.
 
 Checks: API/CMS builds, scoped lint, `node test/interests.cjs` and
 `node test/interest-categories.cjs` in each repository, and CMS
