@@ -33,6 +33,9 @@ export class Member {
     @Column({ type: 'json', nullable: true })
     preferences: string[] | null;
 
+    @Column({ type: 'json', nullable: true })
+    interestIds: number[] | null;
+
     @PrimaryGeneratedColumn()
     id?: number;
 

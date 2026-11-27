@@ -23,7 +23,8 @@
     "typeorm:ds": "npm run typeorm -- -d src/database/data-source.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/run-admin-seed.ts",
     "seed:game": "ts-node -r tsconfig-paths/register src/database/seeds/run-game-seed.ts",
-    "seed:notification-templates": "ts-node -r tsconfig-paths/register src/database/seeds/run-notification-template-seed.ts"
+    "seed:notification-templates": "ts-node -r tsconfig-paths/register src/database/seeds/run-notification-template-seed.ts",
+    "seed:conversation-cards": "ts-node -r tsconfig-paths/register src/database/seeds/run-conversation-card-seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.782.0",

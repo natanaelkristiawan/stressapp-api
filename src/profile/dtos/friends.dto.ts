@@ -136,6 +136,33 @@ export class UpdateMemberProfileDto {
   @IsString({ each: true })
   @Length(1, 50, { each: true })
   preferences?: string[];
+
+  @ApiPropertyOptional({
+    example: [1, 2, 3],
+    description: 'List of selected catalog interest IDs (up to 20 items)',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!Array.isArray(value)) {
+      return value;
+    }
+    const unique: number[] = [];
+    for (const item of value) {
+      if (!Number.isInteger(item) || item <= 0) {
+        return value;
+      }
+      if (!unique.includes(item)) {
+        unique.push(item);
+      }
+    }
+    return unique;
+  })
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(2147483647, { each: true })
+  interestIds?: number[];
 }
 
 export class FriendDiscoverQueryDto {

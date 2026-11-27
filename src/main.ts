@@ -42,6 +42,7 @@ import { MemberVoteModule } from './member-vote/member-vote.module';
 import { AdminHighlightModule } from './admin-highlight/admin-highlight.module';
 import { AdminPostTrendingModule } from './admin-post-trending/admin-post-trending.module';
 import { AdminPostReportModule } from './admin-post-report/admin-post-report.module';
+import { ConversationCardsModule } from './conversation-cards/conversation-cards.module';
 import { WinnerModule } from './winner/winner.module';
 async function bootstrap() {
   process.env.TZ = 'UTC';
@@ -152,6 +153,7 @@ async function bootstrap() {
       AdminHighlightModule,
       AdminPostTrendingModule,
       AdminPostReportModule,
+      ConversationCardsModule,
       ActivityModule
     ]
   });

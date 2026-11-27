@@ -14,6 +14,8 @@ import { Conversation } from 'src/entity/convertation.entity';
 import { Message } from 'src/entity/message.entity';
 import { UserFollowEntity } from 'src/entity/user-follow.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
+import { ConversationCard } from 'src/entity/conversation-card.entity';
+import { Interest } from 'src/entity/interest.entity';
 import { EntityManager, In, Repository } from 'typeorm';
 import {
   ChatMessageItemInterface,
@@ -86,6 +88,12 @@ export class DirectMessageService {
 
     @InjectRepository(UserFollowEntity, 'mimate')
     private readonly followRepository: Repository<UserFollowEntity>,
+
+    @InjectRepository(ConversationCard, 'mimate')
+    private readonly cardRepository: Repository<ConversationCard>,
+
+    @InjectRepository(Interest, 'mimate')
+    private readonly interestRepository: Repository<Interest>,
 
     private readonly dateHelper: DateHelper,
     private readonly moderation: ContentModerationService,
@@ -174,41 +182,137 @@ export class DirectMessageService {
     };
   }
 
-  /** Builds conversation topic cards personalized with shared or partner preferences when present.
-   * @returns Array of ChatTopicCardInterface items.
+  /** Maps a CMS conversation card to the chat topic card contract.
+   * @returns ChatTopicCardInterface.
    */
-  private buildTopicsForParticipants(
+  private toTopicCard(card: ConversationCard): ChatTopicCardInterface {
+    return {
+      id: String(card.id),
+      title: card.title,
+      color: card.color,
+      textColor: card.textColor,
+      prompt: card.prompt,
+      subPrompt: card.subPrompt ?? undefined,
+      type: card.visual,
+    };
+  }
+
+  /** Resolves a member's selected interest IDs to distinct active category IDs.
+   * @returns Ordered unique category IDs; falls back to name-matched interests for legacy members.
+   */
+  private async resolveMemberCategoryIds(
+    member?: UserMimateEntity,
+  ): Promise<number[]> {
+    if (!member) {
+      return [];
+    }
+    let interestIds =
+      Array.isArray(member.interestIds) && member.interestIds.length > 0
+        ? member.interestIds
+        : null;
+    if (!interestIds) {
+      const names = this.extractPreferences(member);
+      if (names.length === 0) {
+        return [];
+      }
+      const matched = await this.interestRepository.find({
+        where: { isActive: true },
+      });
+      const idByLowerName = new Map(
+        matched.map((row) => [row.name.toLowerCase(), row.id]),
+      );
+      interestIds = names
+        .map((name) => idByLowerName.get(name.toLowerCase()))
+        .filter((id): id is number => id !== undefined);
+    }
+    if (interestIds.length === 0) {
+      return [];
+    }
+    const interests = await this.interestRepository.find({
+      where: { id: In(interestIds), isActive: true },
+    });
+    const seen = new Set<number>();
+    const categoryIds: number[] = [];
+    for (const interest of interests) {
+      const categoryId = interest.categoryId;
+      if (
+        typeof categoryId === 'number' &&
+        categoryId > 0 &&
+        !seen.has(categoryId)
+      ) {
+        seen.add(categoryId);
+        categoryIds.push(categoryId);
+      }
+    }
+    return categoryIds;
+  }
+
+  /** Selects active conversation cards ordered by shared, self, partner, then general categories.
+   * @returns ChatTopicCardInterface list; falls back to defaults when the catalog has no relevant cards.
+   */
+  private async buildTopicsForParticipants(
     selfMember: UserMimateEntity | undefined,
     partnerMember: UserMimateEntity,
-  ): ChatTopicCardInterface[] {
-    const selfPrefs = this.extractPreferences(selfMember);
-    const partnerPrefs = this.extractPreferences(partnerMember);
-    const sharedPrefs = partnerPrefs.filter((pref) =>
-      selfPrefs.some((own) => own.toLowerCase() === pref.toLowerCase()),
+  ): Promise<ChatTopicCardInterface[]> {
+    const selfCategoryIds = await this.resolveMemberCategoryIds(selfMember);
+    const partnerCategoryIds = await this.resolveMemberCategoryIds(
+      partnerMember,
     );
-    const highlightedPrefs =
-      sharedPrefs.length > 0 ? sharedPrefs : partnerPrefs;
-    const partnerFirstName = this.getMemberName(
-      partnerMember.name,
-      partnerMember.mmid_fullname,
-      partnerMember.id,
-    ).split(' ')[0];
+    const sharedCategoryIds = new Set(
+      selfCategoryIds.filter((id) => partnerCategoryIds.includes(id)),
+    );
+    const partnerCategorySet = new Set(partnerCategoryIds);
 
-    return DEFAULT_CHAT_TOPICS.map((topic) => {
-      if (topic.type === 'hobi' && highlightedPrefs.length > 0) {
-        const topList = highlightedPrefs.slice(0, 3).join(', ');
-        const prefix =
-          sharedPrefs.length > 0
-            ? `Kalian sama-sama suka ${topList}!`
-            : `${partnerFirstName} tertarik dengan ${topList}.`;
-        return {
-          ...topic,
-          prompt: `Ngobrol seputar hobi ${topList} yang seru untuk dibahas bareng.`,
-          subPrompt: `${prefix} Tanyakan pengalaman serunya!`,
-        };
-      }
-      return { ...topic };
+    const cards = await this.cardRepository.find({
+      where: { isActive: true },
     });
+    if (cards.length === 0) {
+      return DEFAULT_CHAT_TOPICS;
+    }
+
+    const relevant = cards.filter((card) => {
+      const categoryId =
+        typeof card.categoryId === 'number' && card.categoryId > 0
+          ? card.categoryId
+          : null;
+      if (categoryId === null) {
+        return true;
+      }
+      return (
+        selfCategoryIds.includes(categoryId) ||
+        partnerCategorySet.has(categoryId)
+      );
+    });
+    if (relevant.length === 0) {
+      return DEFAULT_CHAT_TOPICS;
+    }
+
+    const scored = relevant.map((card) => {
+      const categoryId =
+        typeof card.categoryId === 'number' && card.categoryId > 0
+          ? card.categoryId
+          : null;
+      let score: number;
+      if (categoryId === null) {
+        score = 3;
+      } else if (sharedCategoryIds.has(categoryId)) {
+        score = 0;
+      } else if (selfCategoryIds.includes(categoryId)) {
+        score = 1;
+      } else {
+        score = 2;
+      }
+      return { card, score };
+    });
+
+    scored.sort((a, b) => {
+      if (a.score !== b.score) {
+        return a.score - b.score;
+      }
+      return a.card.sortOrder - b.card.sortOrder;
+    });
+
+    return scored.map(({ card }) => this.toTopicCard(card));
   }
 
   /** Formats a UTC Date into HH:mm string.
@@ -1007,7 +1111,7 @@ export class DirectMessageService {
       isFriend:
         isFriend && !partnerMember.is_suspended && !partnerMember.deleted_at,
       messages: formattedMessages,
-      topics: this.buildTopicsForParticipants(selfMember, partnerMember),
+      topics: await this.buildTopicsForParticipants(selfMember, partnerMember),
     };
   }
 

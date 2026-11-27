@@ -10,6 +10,8 @@ import { Message } from 'src/entity/message.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 import { UserFollowEntity } from 'src/entity/user-follow.entity';
+import { ConversationCard } from 'src/entity/conversation-card.entity';
+import { Interest } from 'src/entity/interest.entity';
 import { ActivityModule } from 'src/activity/activity.module';
 import { QueueModule } from 'src/queue/queue.module';
 import { MemberAuthModule } from 'src/member-auth/member-auth.module';
@@ -19,7 +21,14 @@ import { MemberAuthModule } from 'src/member-auth/member-auth.module';
     MemberAuthModule,
     ContentModerationModule,
     TypeOrmModule.forFeature(
-      [UserMimateEntity, Conversation, Message, UserFollowEntity],
+      [
+        UserMimateEntity,
+        Conversation,
+        Message,
+        UserFollowEntity,
+        ConversationCard,
+        Interest,
+      ],
       'mimate',
     ),
     ActivityModule,

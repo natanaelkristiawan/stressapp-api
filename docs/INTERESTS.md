@@ -93,3 +93,29 @@ MySQL schema/concurrency and live CMS browser acceptance remain unverified.
 
 Next: verify against disposable MySQL, then implement the separately requested
 user/post relationships and selection integration after resolving relevant selection rules.
+
+## Member profile interest selection (27 November 2026)
+
+`GET /me/profile` now returns `interestIds: number[]` alongside the existing
+`preferences: string[]`. `PATCH /me/profile` accepts an optional `interestIds`
+array (up to 20 positive IDs). This is the member's category-aware selection of
+catalog interests.
+
+- `interestIds` is authoritative: when provided, the service validates every ID
+  against active `interests`, stores the IDs, and rewrites `preferences`/`hobby`
+  from the resolved interest names so the legacy free-text fields stay in sync.
+- When only `preferences` is provided (legacy client), the service stores the
+  tags as before and best-effort resolves them to catalog IDs by normalized name,
+  so existing free-text preferences migrate forward where they match.
+- `members.interestIds` is a nullable JSON column added by hand-written migration
+  `1793918000003-AddMemberInterestIds.ts` (production runs with synchronize
+  disabled). Apply it before deploying:
+
+  ```bash
+  npm run typeorm:ds -- migration:run
+  ```
+
+The mobile `PreferensiScreen` now loads `GET /me/interests` grouped by category
+and persists the chosen IDs through `PATCH /me/profile`. Legacy free-text tags
+that do not match the catalog remain only in `preferences` (read-only).
+

@@ -15,6 +15,7 @@ import {
 } from './dtos/friends.dto';
 import { UserFollowEntity } from 'src/entity/user-follow.entity';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
+import { Interest } from 'src/entity/interest.entity';
 
 /** Creates an in-memory UserMimateEntity fixture for unit tests.
  * @returns A populated UserMimateEntity test object.
@@ -76,6 +77,15 @@ function createFriendsHarness() {
 
   let nextFollowId = 1;
   const follows: UserFollowEntity[] = [];
+  const interests: Interest[] = [
+    Object.assign(new Interest(), { id: 1, name: 'Olahraga', isActive: true }),
+    Object.assign(new Interest(), { id: 2, name: 'Fotografi', isActive: true }),
+    Object.assign(new Interest(), {
+      id: 3,
+      name: 'Membaca Buku',
+      isActive: true,
+    }),
+  ];
 
   /** Matches a UserFollowEntity against a partial where clause.
    * @returns True when all specified fields match the row.
@@ -132,6 +142,13 @@ function createFriendsHarness() {
       };
     },
     find: async (_entity: unknown, options: { where: unknown }) => {
+      if (_entity === Interest) {
+        const where = options.where as { isActive?: boolean };
+        return interests.filter(
+          (row) =>
+            where.isActive === undefined || row.isActive === where.isActive,
+        );
+      }
       return findFollows(options.where);
     },
     findOne: async (_entity: unknown, options: { where: unknown }) => {
@@ -482,6 +499,7 @@ describe('Friends Connection Feature (ProfileService & DTOs)', () => {
       bio: 'Suka lari pagi dan fotografi.',
       avatarUrl: 'https://s3.temusobat.tech/temu-sobat/images/andi-new.jpg',
       preferences: ['Olahraga', 'Fotografi', 'Membaca Buku'],
+      interestIds: [1, 2, 3],
     });
 
     const publicView = await service.getFriendMemberProfile(2, 1);
@@ -506,5 +524,22 @@ describe('Friends Connection Feature (ProfileService & DTOs)', () => {
         }),
       ),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('resolves and stores catalog interest IDs with synced preference names', async () => {
+    const { service } = createFriendsHarness();
+    const updated = await service.updateSelfProfile(
+      1,
+      plainToInstance(UpdateMemberProfileDto, { interestIds: [1, 2] }),
+    );
+    expect(updated.interestIds).toEqual([1, 2]);
+    expect(updated.preferences).toEqual(['Olahraga', 'Fotografi']);
+
+    await expect(
+      service.updateSelfProfile(
+        1,
+        plainToInstance(UpdateMemberProfileDto, { interestIds: [1, 999] }),
+      ),
+    ).rejects.toThrow(BadRequestException);
   });
 });

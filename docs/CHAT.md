@@ -73,6 +73,21 @@ unpaginated. Deletion remains the existing global conversation soft delete; the
 30-minute reminder remains a mount-based soft reminder. Their product semantics
 are separate open decisions.
 
+## Topic cards (conversation cards)
+
+Room details return `topics` selected from the CMS `conversation_cards` catalog
+(see `docs/CONVERSATION_CARDS.md`), not the former hardcoded four-card list.
+
+- The member's selected catalog interests (`members.interestIds`, falling back to
+  legacy `preferences`/`hobby` name matches) resolve to interest category IDs.
+- Cards are filtered to the shared/self/partner categories plus uncategorized
+  (general) cards, and ordered: shared → self → partner → general.
+- When the catalog has no active or relevant cards, the previous four default
+  cards are returned so the picker is never empty.
+
+This replaces the earlier per-conversation "hobi" personalization; card copy is
+now CMS-authored.
+
 ## Deployment and validation
 
 Deploy API/schema before the updated app. TypeORM development synchronize policy

@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 import { EntityManager, In, IsNull, Not, Repository } from 'typeorm';
+import { Interest } from 'src/entity/interest.entity';
 import {
     FriendCardItemInterface,
     FriendConnectionsInterface,
@@ -524,6 +525,7 @@ export class ProfileService {
             bio: member.bio?.trim() || '',
             avatarUrl: member.profilePictureUrl?.trim() || '',
             preferences: this.getMemberPreferences(member),
+            interestIds: member.interestIds ?? [],
         };
     }
 
@@ -538,6 +540,47 @@ export class ProfileService {
             throw new NotFoundException('Profil pengguna tidak ditemukan.');
         }
         return this.toSelfProfile(member);
+    }
+
+    /** Resolves active catalog interest names for the given IDs, preserving input order.
+     * @returns Names array for valid active interests (shorter than IDs when any ID is missing/inactive).
+     */
+    private async resolveInterestNames(
+        manager: EntityManager,
+        ids: number[],
+    ): Promise<string[]> {
+        if (ids.length === 0) {
+            return [];
+        }
+        const rows = await manager.find(Interest, {
+            where: { id: In(ids), isActive: true },
+        });
+        const nameById = new Map(rows.map((row) => [row.id, row.name]));
+        return ids
+            .map((id) => nameById.get(id))
+            .filter((name): name is string => Boolean(name));
+    }
+
+    /** Best-effort maps legacy free-text preference names to active catalog IDs.
+     * @returns Resolved IDs, or null when none matched or the list is empty.
+     */
+    private async resolveInterestIdsByNames(
+        manager: EntityManager,
+        names: string[],
+    ): Promise<number[] | null> {
+        if (names.length === 0) {
+            return null;
+        }
+        const rows = await manager.find(Interest, {
+            where: { isActive: true },
+        });
+        const idByLowerName = new Map(
+            rows.map((row) => [row.name.toLowerCase(), row.id]),
+        );
+        const resolved = names
+            .map((name) => idByLowerName.get(name.toLowerCase()))
+            .filter((id): id is number => id !== undefined);
+        return resolved.length > 0 ? resolved : null;
     }
 
     /** Updates the authenticated member's profile fields and preferences inside a transaction.
@@ -609,12 +652,30 @@ export class ProfileService {
                                 ? normalizedAvatar
                                 : null;
                     }
-                    if (input.preferences !== undefined) {
+                    if (input.interestIds !== undefined) {
+                        const names = await this.resolveInterestNames(
+                            manager,
+                            input.interestIds,
+                        );
+                        if (names.length !== input.interestIds.length) {
+                            throw new BadRequestException(
+                                'Salah satu preferensi tidak valid atau sudah tidak aktif.',
+                            );
+                        }
+                        member.interestIds = input.interestIds;
+                        member.preferences = names;
+                        member.hobby =
+                            names.length > 0 ? names.join(', ') : null;
+                    } else if (input.preferences !== undefined) {
                         member.preferences = input.preferences;
                         member.hobby =
                             input.preferences.length > 0
                                 ? input.preferences.join(', ')
                                 : null;
+                        member.interestIds = await this.resolveInterestIdsByNames(
+                            manager,
+                            input.preferences,
+                        );
                     }
 
                     await manager.save(UserMimateEntity, member);

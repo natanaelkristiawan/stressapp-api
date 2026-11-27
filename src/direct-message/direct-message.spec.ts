@@ -21,6 +21,8 @@ import { UserMimateEntity } from 'src/entity/user-mimate.entity';
 import { Conversation } from 'src/entity/convertation.entity';
 import { Message } from 'src/entity/message.entity';
 import { UserFollowEntity } from 'src/entity/user-follow.entity';
+import { ConversationCard } from 'src/entity/conversation-card.entity';
+import { Interest } from 'src/entity/interest.entity';
 import { DateHelper } from 'src/common/helpers/date.helper';
 
 /** Creates an in-memory UserMimateEntity fixture for direct-message unit tests.
@@ -76,6 +78,76 @@ function createDirectMessageHarness() {
   const conversations: Conversation[] = [];
   const messages: Message[] = [];
   const notificationEvents: Partial<NotificationEvent>[] = [];
+  const interests: Interest[] = [
+    Object.assign(new Interest(), {
+      id: 1,
+      name: 'Musik',
+      categoryId: 10,
+      isActive: true,
+    }),
+    Object.assign(new Interest(), {
+      id: 2,
+      name: 'Olahraga',
+      categoryId: 20,
+      isActive: true,
+    }),
+    Object.assign(new Interest(), {
+      id: 3,
+      name: 'Membaca',
+      categoryId: 10,
+      isActive: true,
+    }),
+  ];
+  const cards: ConversationCard[] = [
+    Object.assign(new ConversationCard(), {
+      id: 1,
+      title: 'Kuliner',
+      prompt: 'Bahas kuliner.',
+      subPrompt: 'Kafe favoritmu?',
+      color: '#111111',
+      textColor: '#ffffff',
+      visual: 'kuliner',
+      categoryId: null,
+      sortOrder: 0,
+      isActive: true,
+    }),
+    Object.assign(new ConversationCard(), {
+      id: 2,
+      title: 'Hobi & Minat',
+      prompt: 'Ceritakan hobimu.',
+      subPrompt: 'Lagi suka apa?',
+      color: '#222222',
+      textColor: '#ffffff',
+      visual: 'hobi',
+      categoryId: 10,
+      sortOrder: 1,
+      isActive: true,
+    }),
+    Object.assign(new ConversationCard(), {
+      id: 3,
+      title: 'Olahraga',
+      prompt: 'Bahas olahraga.',
+      subPrompt: null,
+      color: '#333333',
+      textColor: '#ffffff',
+      visual: 'keseharian',
+      categoryId: 20,
+      sortOrder: 2,
+      isActive: true,
+    }),
+    Object.assign(new ConversationCard(), {
+      id: 4,
+      title: 'Film & Serial',
+      prompt: 'Bahas film.',
+      subPrompt: 'Tontonan terakhir?',
+      color: '#444444',
+      textColor: '#ffffff',
+      visual: 'film',
+      categoryId: null,
+      sortOrder: 3,
+      isActive: true,
+    }),
+  ];
   let nextConversationId = 1;
   let nextMessageId = 1;
 
@@ -330,6 +402,37 @@ function createDirectMessageHarness() {
       findFollows(options.where)[0] ?? null,
   };
 
+  const interestRepository = {
+    find: async (options: Record<string, unknown>) => {
+      const where = (options?.where ?? {}) as {
+        id?: { _value?: number[] };
+        isActive?: boolean;
+      };
+      return interests.filter((row) => {
+        if (where.isActive !== undefined && row.isActive !== where.isActive) {
+          return false;
+        }
+        if (where.id !== undefined) {
+          const ids = Array.isArray(where.id._value) ? where.id._value : [];
+          if (!ids.includes(row.id)) {
+            return false;
+          }
+        }
+        return true;
+      });
+    },
+  };
+
+  const cardRepository = {
+    find: async (options: Record<string, unknown>) => {
+      const where = (options?.where ?? {}) as { isActive?: boolean };
+      return cards.filter(
+        (row) =>
+          where.isActive === undefined || row.isActive === where.isActive,
+      );
+    },
+  };
+
   const manager = {
     insert: jest.fn(
       async (entity: unknown, values: Partial<NotificationEvent>) => {
@@ -402,6 +505,8 @@ function createDirectMessageHarness() {
     conversationRepository as never,
     userMimateRepository as never,
     followRepository as never,
+    cardRepository as never,
+    interestRepository as never,
     new DateHelper(),
     moderation as never,
   );
@@ -426,6 +531,8 @@ function createDirectMessageHarness() {
     follows,
     conversations,
     messages,
+    interests,
+    cards,
     addAcceptedFriendship,
   };
 }
@@ -519,9 +626,72 @@ describe('DirectMessageService (1-on-1 Chat)', () => {
     expect(conversations).toHaveLength(1);
     expect(firstOpen.partner.id).toBe(2);
     expect(firstOpen.partner.name).toBe('Sarah Kim');
-    expect(firstOpen.topics.length).toBeGreaterThanOrEqual(4);
-    const hobiTopic = firstOpen.topics.find((item) => item.type === 'hobi');
-    expect(hobiTopic?.subPrompt).toContain('Musik');
+    expect(firstOpen.topics.map((item) => item.title)).toEqual([
+      'Hobi & Minat',
+      'Olahraga',
+      'Kuliner',
+      'Film & Serial',
+    ]);
+  });
+
+  it('orders topic cards by shared, self, partner, then general categories', async () => {
+    const { service, addAcceptedFriendship, members } =
+      createDirectMessageHarness();
+    addAcceptedFriendship(1, 2);
+    // Member 1 selects interests in categories 10 and 20; member 2 only category 10.
+    const member1 = members.get(1);
+    const member2 = members.get(2);
+    if (member1) {
+      member1.interestIds = [1, 2];
+    }
+    if (member2) {
+      member2.interestIds = [3, 1];
+    }
+
+    const room = await service.openMemberChatWithFriend(1, 2);
+    expect(room.topics.map((item) => item.title)).toEqual([
+      'Hobi & Minat', // shared (category 10)
+      'Olahraga', // self-only (category 20)
+      'Kuliner', // general
+      'Film & Serial', // general
+    ]);
+  });
+
+  it('shows only general cards when neither member has matching categories', async () => {
+    const { service, addAcceptedFriendship, members } =
+      createDirectMessageHarness();
+    addAcceptedFriendship(1, 2);
+    const member1 = members.get(1);
+    const member2 = members.get(2);
+    if (member1) {
+      member1.interestIds = null;
+      member1.hobby = null;
+    }
+    if (member2) {
+      member2.interestIds = null;
+      member2.hobby = null;
+    }
+
+    const room = await service.openMemberChatWithFriend(1, 2);
+    expect(room.topics.map((item) => item.title)).toEqual([
+      'Kuliner',
+      'Film & Serial',
+    ]);
+  });
+
+  it('falls back to default topics when the card catalog is empty', async () => {
+    const { service, addAcceptedFriendship, cards } =
+      createDirectMessageHarness();
+    addAcceptedFriendship(1, 2);
+    cards.length = 0;
+
+    const room = await service.openMemberChatWithFriend(1, 2);
+    expect(room.topics.map((item) => item.title)).toEqual([
+      'Kuliner',
+      'Hobi & Minat',
+      'Film & Serial',
+      'Keseharian',
+    ]);
   });
 
   it('sends messages, updates thread list unread count, and marks messages read on room open', async () => {

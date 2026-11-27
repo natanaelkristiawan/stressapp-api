@@ -119,4 +119,5 @@ export interface MemberSelfProfileInterface {
   bio: string;
   avatarUrl: string;
   preferences: string[];
+  interestIds: number[];
 }
