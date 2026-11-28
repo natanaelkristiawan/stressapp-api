@@ -523,7 +523,7 @@ export class ProfileService {
             location:
                 member.location?.trim() || member.address?.trim() || '',
             bio: member.bio?.trim() || '',
-            avatarUrl: member.profilePictureUrl?.trim() || '',
+            avatarUrl: this.getMemberAvatarUrl(member),
             preferences: this.getMemberPreferences(member),
             interestIds: member.interestIds ?? [],
         };

@@ -98,6 +98,19 @@ export class MemberAuthService {
   /** Builds the public member identity without credentials or private columns.
    * @returns The member ID, email, display name, verification status, and profile details.
    */
+  /** Returns a usable http(s) avatar URL, excluding the sample placeholder. */
+  private avatarUrlOf(value?: string | null): string {
+    const trimmed = typeof value === 'string' ? value.trim() : '';
+    if (
+      trimmed &&
+      /^https?:\/\//i.test(trimmed) &&
+      !trimmed.endsWith('/sample-friend.jpg')
+    ) {
+      return trimmed;
+    }
+    return '';
+  }
+
   private view(member: Member) {
     const rawPreferences = Array.isArray(member.preferences)
       ? member.preferences.filter(
@@ -117,7 +130,7 @@ export class MemberAuthService {
       username: member.username || '',
       location: member.location?.trim() || member.address?.trim() || '',
       bio: member.bio || '',
-      avatarUrl: member.profilePictureUrl || '',
+      avatarUrl: this.avatarUrlOf(member.profilePictureUrl),
       preferences: rawPreferences,
     };
   }
