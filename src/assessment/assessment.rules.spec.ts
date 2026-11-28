@@ -1,5 +1,6 @@
 import { AssessmentDefinitionDto } from './assessment.dto';
 import {
+  followUpSchedule,
   sameAnswers,
   scoreAssessment,
   validateDefinition,
@@ -114,5 +115,48 @@ describe('assessment scoring boundaries', () => {
       mutate(instrument);
       expect(() => validateDefinition(instrument)).toThrow();
     }
+  });
+
+  it('schedules the 2-week and 4-week follow-ups from the baseline', () => {
+    const baseline = new Date('2026-01-01T00:00:00Z');
+    // Before the baseline, no follow-up is scheduled.
+    expect(followUpSchedule(null, 0, baseline)).toMatchObject({
+      completedCount: 0,
+      total: 2,
+      due: false,
+      nextIndex: null,
+    });
+    // Baseline done: follow-up 1 due at day 14.
+    const beforeDue = new Date('2026-01-14T23:59:59Z');
+    expect(followUpSchedule(baseline, 0, beforeDue)).toMatchObject({
+      completedCount: 0,
+      due: false,
+      nextIndex: 1,
+      nextDueAt: '2026-01-15T00:00:00.000Z',
+    });
+    const due = new Date('2026-01-15T00:00:00Z');
+    expect(followUpSchedule(baseline, 0, due)).toMatchObject({
+      due: true,
+      nextIndex: 1,
+    });
+    // Follow-up 1 done: follow-up 2 due at day 28.
+    expect(
+      followUpSchedule(baseline, 1, new Date('2026-01-28T23:00:00Z')),
+    ).toMatchObject({
+      completedCount: 1,
+      due: false,
+      nextIndex: 2,
+      nextDueAt: '2026-01-29T00:00:00.000Z',
+    });
+    expect(
+      followUpSchedule(baseline, 1, new Date('2026-01-30T00:00:00Z')),
+    ).toMatchObject({ due: true, nextIndex: 2 });
+    // Both follow-ups done: no more scheduling.
+    expect(followUpSchedule(baseline, 2, due)).toMatchObject({
+      completedCount: 2,
+      due: false,
+      nextIndex: null,
+      nextDueAt: null,
+    });
   });
 });

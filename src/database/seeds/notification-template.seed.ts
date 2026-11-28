@@ -28,6 +28,11 @@ export const DEFAULT_NOTIFICATION_TEMPLATES: Array<{
     title: 'Pengingat Mood Tracker',
     body: 'Yuk, luangkan waktu sejenak untuk mencatat perasaan dan mood Anda hari ini.',
   },
+  {
+    type: NotificationType.AssessmentReminder,
+    title: 'Saatnya Asesmen Kesepian',
+    body: 'Sudah waktunya mengisi asesmen kesepian ulang. Yuk, isi UCLA Loneliness Scale dan pantau perasaanmu.',
+  },
 ];
 
 export async function seedNotificationTemplates(
@@ -69,4 +74,3 @@ export async function seedNotificationTemplates(
 
   return { created, updated, skipped };
 }
-

@@ -14,6 +14,7 @@ export enum NotificationType {
   Forum = 'forum',
   MoodReminder = 'mood-reminder',
   CommentReply = 'comment-reply',
+  AssessmentReminder = 'assessment-reminder',
 }
 
 @Entity('member_notifications')

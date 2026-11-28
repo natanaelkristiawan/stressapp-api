@@ -99,6 +99,8 @@ export class AssessmentAnswerDto {
 
 export class SubmitAssessmentDto {
   @IsInt() @Min(1) @Max(2147483647) versionId: number;
+  // Present only for the 2-week/4-week follow-ups; omitted for the baseline.
+  @IsOptional() @IsInt() @Min(1) @Max(2) followUpIndex?: number;
   @IsArray()
   @ArrayMinSize(6)
   @ArrayMaxSize(6)

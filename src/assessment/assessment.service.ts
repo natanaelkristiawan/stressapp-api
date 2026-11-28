@@ -11,6 +11,7 @@ import { DataSource, EntityManager } from 'typeorm';
 import { AssessmentVersion } from '../entity/assessment-version.entity';
 import { AssessmentSettings } from '../entity/assessment-settings.entity';
 import { MemberAssessment } from '../entity/member-assessment.entity';
+import { MemberAssessmentFollowUp } from '../entity/member-assessment-followup.entity';
 import { Member } from '../entity/user-mimate.entity';
 import {
   AssessmentDefinitionDto,
@@ -22,6 +23,7 @@ import {
   SubmitAssessmentDto,
 } from './assessment.dto';
 import {
+  followUpSchedule,
   sameAnswers,
   scoreAssessment,
   validateDefinition,
@@ -321,38 +323,56 @@ export class AssessmentService {
     };
   }
 
-  /** Restores server-owned progress and historical results. Returns the next required step, including unavailable state. */
+  /** Restores server-owned progress, the latest result, and the follow-up schedule. Returns the next required step, including unavailable state. */
   async status(memberId: number) {
-    const entry = await this.db
+    const baseline = await this.db
       .getRepository(MemberAssessment)
       .findOneBy({ memberId });
+    const followUps = await this.db
+      .getRepository(MemberAssessmentFollowUp)
+      .find({ where: { memberId }, order: { followUpIndex: 'ASC' } });
     const settings = await this.db
       .getRepository(AssessmentSettings)
       .findOneBy({ id: 1 });
-    const versionId = entry?.versionId ?? settings?.activeVersionId;
+    const completed = Boolean(baseline?.completedAt);
+    // Baseline onboarding uses the active questionnaire; completed members still
+    // need it for the next follow-up. Fall back to the submitted version.
+    const versionId = settings?.activeVersionId ?? baseline?.versionId ?? null;
     const version = versionId
       ? await this.findVersion(this.db.manager, versionId)
       : null;
+    const latestFollowUp = followUps.length
+      ? followUps[followUps.length - 1]
+      : null;
+    const latestResult = latestFollowUp?.result ?? baseline?.result ?? null;
+    const latestCompletedAt =
+      latestFollowUp?.completedAt ?? baseline?.completedAt ?? null;
+
     return {
-      completed: Boolean(entry?.completedAt),
-      nextStep: entry?.completedAt
+      completed,
+      nextStep: completed
         ? 'home'
-        : !entry
+        : !baseline
         ? 'mood'
         : !version
         ? 'unavailable'
         : 'assessment',
-      initialMood: entry
+      initialMood: baseline
         ? {
-            score: entry.initialMoodScore,
-            submittedAt: entry.moodSubmittedAt.toISOString(),
+            score: baseline.initialMoodScore,
+            submittedAt: baseline.moodSubmittedAt.toISOString(),
             feedbackType:
-              entry.initialMoodScore >= 3 ? 'positive' : 'empathetic',
+              baseline.initialMoodScore >= 3 ? 'positive' : 'empathetic',
           }
         : null,
       questionnaire: version ? this.questionnaire(version) : null,
-      result: entry?.result ?? null,
-      completedAt: entry?.completedAt?.toISOString() ?? null,
+      result: latestResult,
+      completedAt: latestCompletedAt ? latestCompletedAt.toISOString() : null,
+      followUp: followUpSchedule(
+        baseline?.completedAt ?? null,
+        followUps.length,
+        new Date(),
+      ),
     };
   }
 
@@ -386,29 +406,11 @@ export class AssessmentService {
     });
   }
 
-  /** Saves one baseline under a member lock. Returns the same result for identical retries; rejects changed replays. */
+  /** Completes the baseline once, then records due 2-week/4-week follow-ups as separate rows. */
   async submit(memberId: number, input: SubmitAssessmentDto) {
     return this.db.transaction(async (manager) => {
       await this.lockMember(manager, memberId);
-      const entry = await manager.findOneBy(MemberAssessment, { memberId });
-      if (!entry) {
-        throw new BadRequestException('Complete the initial mood step first.');
-      }
-      if (entry.completedAt) {
-        if (
-          entry.versionId !== input.versionId ||
-          !sameAnswers(entry.answers, input.answers)
-        ) {
-          throw new ConflictException(
-            'Initial assessment is already complete.',
-          );
-        }
-        return {
-          versionId: entry.versionId,
-          result: entry.result,
-          completedAt: entry.completedAt.toISOString(),
-        };
-      }
+      const baseline = await manager.findOneBy(MemberAssessment, { memberId });
       // Shared lock permits concurrent members; publication waits until accepted submissions commit.
       const settings = await manager.findOne(AssessmentSettings, {
         where: { id: 1 },
@@ -425,18 +427,125 @@ export class AssessmentService {
         );
       }
       const version = await this.findVersion(manager, input.versionId);
-      entry.result = scoreAssessment(version.definition, input.answers);
-      entry.answers = version.definition.questions.map((q) =>
+
+      if (input.followUpIndex !== undefined) {
+        return this.submitFollowUp(
+          manager,
+          memberId,
+          baseline,
+          version,
+          input,
+          new Date(),
+        );
+      }
+
+      // Baseline: requires the onboarding mood and may only complete once.
+      if (!baseline) {
+        throw new BadRequestException('Complete the initial mood step first.');
+      }
+      if (baseline.completedAt) {
+        if (
+          baseline.answers &&
+          baseline.versionId === input.versionId &&
+          sameAnswers(baseline.answers, input.answers)
+        ) {
+          return {
+            versionId: baseline.versionId,
+            result: baseline.result,
+            completedAt: baseline.completedAt.toISOString(),
+          };
+        }
+        throw new ConflictException('Initial assessment is already complete.');
+      }
+      baseline.result = scoreAssessment(version.definition, input.answers);
+      baseline.answers = version.definition.questions.map((q) =>
         input.answers.find((a) => a.questionId === q.id),
       );
-      entry.versionId = version.id;
-      entry.completedAt = new Date();
-      await manager.save(entry);
+      baseline.versionId = version.id;
+      baseline.completedAt = new Date();
+      await manager.save(baseline);
       return {
-        versionId: entry.versionId,
-        result: entry.result,
-        completedAt: entry.completedAt.toISOString(),
+        versionId: baseline.versionId,
+        result: baseline.result,
+        completedAt: baseline.completedAt.toISOString(),
+        followUp: followUpSchedule(baseline.completedAt, 0, new Date()),
       };
     });
+  }
+
+  /** Records one due follow-up assessment; identical retries return the stored result. */
+  private async submitFollowUp(
+    manager: EntityManager,
+    memberId: number,
+    baseline: MemberAssessment | null,
+    version: AssessmentVersion,
+    input: SubmitAssessmentDto,
+    now: Date,
+  ) {
+    if (!baseline?.completedAt) {
+      throw new BadRequestException('Complete the initial assessment first.');
+    }
+    const existing = await manager.find(MemberAssessmentFollowUp, {
+      where: { memberId },
+      order: { followUpIndex: 'ASC' },
+    });
+    const already = existing.find(
+      (row) => row.followUpIndex === input.followUpIndex,
+    );
+    if (already) {
+      if (sameAnswers(already.answers, input.answers)) {
+        return {
+          versionId: already.versionId,
+          result: already.result,
+          completedAt: already.completedAt.toISOString(),
+          followUp: followUpSchedule(
+            baseline.completedAt,
+            existing.length,
+            now,
+          ),
+        };
+      }
+      throw new ConflictException(
+        'This follow-up was already submitted with different answers.',
+      );
+    }
+    const state = followUpSchedule(
+      baseline.completedAt,
+      existing.length,
+      now,
+    );
+    if (state.nextIndex === null) {
+      throw new ConflictException('All follow-up assessments are complete.');
+    }
+    if (input.followUpIndex !== state.nextIndex) {
+      throw new ConflictException('Reload the assessment before submitting.');
+    }
+    if (!state.due) {
+      throw new ConflictException(
+        'The next follow-up assessment is not due yet.',
+      );
+    }
+    const result = scoreAssessment(version.definition, input.answers);
+    const followUp = manager.create(MemberAssessmentFollowUp, {
+      memberId,
+      followUpIndex: state.nextIndex,
+      versionId: version.id,
+      answers: version.definition.questions.map((q) =>
+        input.answers.find((a) => a.questionId === q.id),
+      ),
+      result,
+      completedAt: now,
+    });
+    await manager.save(followUp);
+    return {
+      versionId: followUp.versionId,
+      result: followUp.result,
+      completedAt: now.toISOString(),
+      followUp: followUpSchedule(
+        baseline.completedAt,
+        existing.length + 1,
+        now,
+      ),
+    };
   }
 }

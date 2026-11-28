@@ -11,6 +11,7 @@ export function templatePlaceholders(type: NotificationType): string[] {
     case NotificationType.CommentReply:
       return ['actorName'];
     case NotificationType.MoodReminder:
+    case NotificationType.AssessmentReminder:
       return [];
     default:
       throw new BadRequestException('Unsupported notification type.');

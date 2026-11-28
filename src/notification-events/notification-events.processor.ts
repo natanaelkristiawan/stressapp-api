@@ -1,5 +1,8 @@
 import { moodReminderClock } from './mood-reminder-clock';
 import { Member } from '../entity/user-mimate.entity';
+import { MemberAssessment } from '../entity/member-assessment.entity';
+import { MemberAssessmentFollowUp } from '../entity/member-assessment-followup.entity';
+import { followUpSchedule } from '../assessment/assessment.rules';
 import { MoodEntryEntity } from '../entity/mood-entry.entity';
 import { NotificationType } from '../entity/member-notification.entity';
 import {
@@ -28,6 +31,7 @@ const FANOUT_PAGE_SIZE = 200;
 export class NotificationEventsProcessor {
   private running = false;
   private reminderMinute = -1;
+  private assessmentHour = -1;
   private pushConfigWarned = false;
   private readonly logger = new Logger(NotificationEventsProcessor.name);
 
@@ -49,6 +53,11 @@ export class NotificationEventsProcessor {
       if (this.reminderMinute !== minute) {
         await this.enqueueMoodReminders();
         this.reminderMinute = minute;
+      }
+      const hour = Math.floor(Date.now() / 3600000);
+      if (this.assessmentHour !== hour) {
+        await this.enqueueAssessmentReminders();
+        this.assessmentHour = hour;
       }
       const events = await this.db.getRepository(NotificationEvent).find({
         where: { completedAt: IsNull(), retryAt: LessThanOrEqual(new Date()) },
@@ -162,6 +171,71 @@ export class NotificationEventsProcessor {
     }
   }
 
+  /** Enqueues one assessment reminder per eligible member when a 2-week/4-week follow-up is due; hourly idempotent. */
+  async enqueueAssessmentReminders(now = new Date()): Promise<void> {
+    let cursor = 0;
+    while (true) {
+      const members = await this.db
+        .getRepository(Member)
+        .createQueryBuilder('member')
+        .select(['member.id'])
+        .where(
+          'member.id > :cursor AND member.memberAuthEnabled = :enabled AND member.verifiedAt IS NOT NULL AND member.is_suspended = :suspended AND member.deleted_at IS NULL',
+          { cursor, enabled: true, suspended: false },
+        )
+        .orderBy('member.id', 'ASC')
+        .take(FANOUT_PAGE_SIZE)
+        .getMany();
+      for (const member of members) {
+        const baseline = await this.db
+          .getRepository(MemberAssessment)
+          .findOneBy({ memberId: member.id });
+        if (!baseline?.completedAt) {
+          continue;
+        }
+        const completedCount = await this.db
+          .getRepository(MemberAssessmentFollowUp)
+          .count({ where: { memberId: member.id } });
+        const schedule = followUpSchedule(
+          baseline.completedAt,
+          completedCount,
+          now,
+        );
+        if (!schedule.due || schedule.nextIndex === null) {
+          continue;
+        }
+        const key = `assessment-reminder:${member.id}:${schedule.nextIndex}`;
+        const events = this.db.getRepository(NotificationEvent);
+        if (await events.existsBy({ key })) {
+          continue;
+        }
+        try {
+          await events.insert({
+            key,
+            type: NotificationType.AssessmentReminder,
+            sourceId: member.id,
+            localDate: null,
+            timeZone: null,
+            retryAt: now,
+          });
+        } catch (error) {
+          if (
+            typeof error !== 'object' ||
+            error === null ||
+            !('code' in error) ||
+            error.code !== 'ER_DUP_ENTRY'
+          ) {
+            throw error;
+          }
+        }
+      }
+      if (members.length < FANOUT_PAGE_SIZE) {
+        break;
+      }
+      cursor = members[members.length - 1].id;
+    }
+  }
+
   /** Commits one bounded audience page with a durable cursor and per-recipient uniqueness. */
   async materialize(key: string, now = new Date()): Promise<void> {
     await this.db.transaction(async (manager) => {
@@ -189,7 +263,8 @@ export class NotificationEventsProcessor {
       if (recipients.length && !event.snapshot) {
         const { title, body, templateRevision } = await this.templates.render(
           event.type,
-          event.type === NotificationType.MoodReminder
+          event.type === NotificationType.MoodReminder ||
+            event.type === NotificationType.AssessmentReminder
             ? {}
             : { actorName: source.actorName },
         );

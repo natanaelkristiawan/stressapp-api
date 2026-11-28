@@ -88,6 +88,45 @@ export function scoreAssessment(
   };
 }
 
+export interface FollowUpSchedule {
+  completedCount: number;
+  total: number;
+  due: boolean;
+  nextIndex: number | null;
+  nextDueAt: string | null;
+}
+
+/**
+ * Computes the 2-week/4-week follow-up schedule anchored to the baseline completion.
+ * Follow-up 1 is due at baseline + 14 days and follow-up 2 at baseline + 28 days.
+ */
+export function followUpSchedule(
+  baselineCompletedAt: Date | null,
+  completedCount: number,
+  now: Date,
+): FollowUpSchedule {
+  const total = 2;
+  if (!baselineCompletedAt || completedCount >= total) {
+    return {
+      completedCount,
+      total,
+      due: false,
+      nextIndex: null,
+      nextDueAt: null,
+    };
+  }
+  const nextIndex = completedCount + 1;
+  const nextDueAt = new Date(baselineCompletedAt);
+  nextDueAt.setUTCDate(nextDueAt.getUTCDate() + 14 * nextIndex);
+  return {
+    completedCount,
+    total,
+    due: now.getTime() >= nextDueAt.getTime(),
+    nextIndex,
+    nextDueAt: nextDueAt.toISOString(),
+  };
+}
+
 /** Compares normalized answers for idempotent retries. Returns true only for the same submission. */
 export function sameAnswers(
   firstAnswers: AssessmentAnswerDto[],

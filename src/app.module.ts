@@ -26,6 +26,7 @@ import { AssessmentModule } from './assessment/assessment.module';
 import { AssessmentVersion } from './entity/assessment-version.entity';
 import { AssessmentSettings } from './entity/assessment-settings.entity';
 import { MemberAssessment } from './entity/member-assessment.entity';
+import { MemberAssessmentFollowUp } from './entity/member-assessment-followup.entity';
 import { CmsMoodParticipationModule } from './cms-mood-participation/cms-mood-participation.module';
 import { MoodTrackerModule } from './mood-tracker/mood-tracker.module';
 import { MoodEntryEntity } from './entity/mood-entry.entity';
@@ -137,7 +138,7 @@ import { CronModule } from './cron/cron.module';
       username: process.env.DB_USERNAME,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE_MIMATE,
-      entities: [NotificationEvent, NotificationTemplate, MemberNotification, Interest, InterestCategory, ConversationCard, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
+      entities: [NotificationEvent, NotificationTemplate, MemberNotification, Interest, InterestCategory, ConversationCard, PsychologistLocation, BreathingExercise, BreathingPage, BreathingSession, MemberPushDevice, AssessmentVersion, AssessmentSettings, MemberAssessment, MemberAssessmentFollowUp, MoodEntryEntity, Member, MemberOtp, MemberSession, PostEntity, TagsEntity, PostTagsEntity, AssetsEntity,
         SpaceEntity, ReactionEntity, MemberSpaceEntity, Conversation, Message, UserFollowEntity,
         CommentEntity, PostReport, Activity, CommentReactionEntity, RequestLogEntity, Quest, QuestDetail, QuestPoint, QuestPointDetail, UserAdmin, Highlight, Visitor, VoteEntity, VoteMemberEntity, QuestBackup, QuestBackupLog, SettingEntity, LogLastActiveManual, HofList, CampaignWinner,
         GameLevel, Game, GameStep, MemberGameProgress, MemberGameSubmission], // Your entities

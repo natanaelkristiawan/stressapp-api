@@ -36,7 +36,7 @@ function templateView(
 export class NotificationTemplatesService {
   constructor(@InjectDataSource('mimate') private readonly db: DataSource) {}
 
-  /** Lists all four fixed template slots without seeding or modifying the database. */
+  /** Lists all five fixed template slots without seeding or modifying the database. */
   async list() {
     const rows = await this.db.getRepository(NotificationTemplate).find();
     const items = Object.values(NotificationType).map((type) =>

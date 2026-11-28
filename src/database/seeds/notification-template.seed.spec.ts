@@ -7,13 +7,14 @@ import {
 } from './notification-template.seed';
 
 describe('Notification templates seed', () => {
-  it('defines 4 valid default notification templates', () => {
-    expect(DEFAULT_NOTIFICATION_TEMPLATES).toHaveLength(4);
+  it('defines 5 valid default notification templates', () => {
+    expect(DEFAULT_NOTIFICATION_TEMPLATES).toHaveLength(5);
     const types = DEFAULT_NOTIFICATION_TEMPLATES.map((t) => t.type);
     expect(types).toContain(NotificationType.Message);
     expect(types).toContain(NotificationType.Forum);
     expect(types).toContain(NotificationType.CommentReply);
     expect(types).toContain(NotificationType.MoodReminder);
+    expect(types).toContain(NotificationType.AssessmentReminder);
   });
 
   it('creates templates idempotently when table is empty', async () => {
@@ -31,10 +32,10 @@ describe('Notification templates seed', () => {
     } as unknown as DataSource;
 
     const result = await seedNotificationTemplates(dataSource);
-    expect(result.created).toBe(4);
+    expect(result.created).toBe(5);
     expect(result.updated).toBe(0);
     expect(result.skipped).toBe(0);
-    expect(savedTemplates).toHaveLength(4);
+    expect(savedTemplates).toHaveLength(5);
     expect(savedTemplates.every((t) => t.revision === 1)).toBe(true);
   });
 
@@ -58,7 +59,7 @@ describe('Notification templates seed', () => {
     } as unknown as DataSource;
 
     const result = await seedNotificationTemplates(dataSource);
-    expect(result.created).toBe(3);
+    expect(result.created).toBe(4);
     expect(result.updated).toBe(0);
     expect(result.skipped).toBe(1);
   });
@@ -83,9 +84,8 @@ describe('Notification templates seed', () => {
     } as unknown as DataSource;
 
     const result = await seedNotificationTemplates(dataSource);
-    expect(result.created).toBe(3);
+    expect(result.created).toBe(4);
     expect(result.updated).toBe(1);
     expect(result.skipped).toBe(0);
   });
 });
-

@@ -6,6 +6,9 @@ import { Message } from '../entity/message.entity';
 import { Conversation } from '../entity/convertation.entity';
 import { PostEntity } from '../entity/post.entity';
 import { Member } from '../entity/user-mimate.entity';
+import { MemberAssessment } from '../entity/member-assessment.entity';
+import { MemberAssessmentFollowUp } from '../entity/member-assessment-followup.entity';
+import { followUpSchedule } from '../assessment/assessment.rules';
 import {
   MemberNotification,
   NotificationType,
@@ -98,6 +101,34 @@ export async function notificationSource(
         where: { memberId: member.id, dateString: event.localDate },
       }))
     ) {
+      return null;
+    }
+    return {
+      actor: member,
+      actorName: '',
+      includeActor: true,
+      recipientIds: [member.id],
+      destination: { kind: 'mood-tracker' },
+    };
+  }
+  if (event.type === NotificationType.AssessmentReminder) {
+    const member = await manager.findOneBy(Member, { id: event.sourceId });
+    if (!notificationMemberActive(member)) {
+      return null;
+    }
+    const baseline = await manager.findOneBy(MemberAssessment, {
+      memberId: member.id,
+    });
+    const completedCount = await manager.count(MemberAssessmentFollowUp, {
+      where: { memberId: member.id },
+    });
+    const schedule = followUpSchedule(
+      baseline?.completedAt ?? null,
+      completedCount,
+      now,
+    );
+    const expectedIndex = Number(event.key.split(':').pop());
+    if (!schedule.due || schedule.nextIndex !== expectedIndex) {
       return null;
     }
     return {
